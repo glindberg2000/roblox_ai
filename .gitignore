@@ -1,0 +1,66 @@
+# ============================
+# Python Virtual Environments
+# ============================
+
+# Ignore the entire Roblox virtual environment directory
+roblox/
+
+# Alternatively, if your virtual environment is named differently, adjust accordingly:
+# venv/
+# env/
+# .venv/
+# .env/
+
+# ============================
+# Rojo Tool Directories
+# ============================
+
+.aftman/
+.cargo/
+.local/bin/rojo
+
+# ============================
+# IDE and Editor Configurations
+# ============================
+
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ============================
+# OS-Specific Files
+# ============================
+
+.DS_Store
+Thumbs.db
+
+# ============================
+# Logs and Temporary Files
+# ============================
+
+*.log
+*.tmp
+
+# ============================
+# Node.js Dependencies (If Applicable)
+# ============================
+
+node_modules/
+
+# ============================
+# Compiled Binaries
+# ============================
+
+*.exe
+*.dll
+*.dmg
+*.zip
+*.tar.gz
+
+# ============================
+# Other Unwanted Files
+# ============================
+
+*.bak
+*.swp
