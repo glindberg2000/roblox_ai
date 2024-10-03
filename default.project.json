@@ -1,0 +1,48 @@
+{
+  "name": "EllaAIRobloxGame",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "NPCManager": {
+        "$path": "src/shared/NPCManager.lua"
+      }
+    },
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "MainNPCScript": {
+        "$path": "src/server/MainNPCScript.server.lua"
+      },
+      "NPCConfigurations": {
+        "$path": "src/server/NPCConfigurations.lua"
+      }
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "NPCClientHandler": {
+          "$path": "src/client/NPCClientHandler.client.lua"
+        }
+      }
+    },
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "Eldrin": {
+        "$path": "src/assets/Eldrin.rbxm"
+      },
+      "Luna": {
+        "$path": "src/assets/Luna.rbxm"
+      }
+    },
+    "Workspace": {
+      "$className": "Workspace",
+      "$properties": {
+        "FilteringEnabled": true
+      },
+      "NPCs": {
+        "$className": "Folder"
+      }
+    }
+  }
+}
