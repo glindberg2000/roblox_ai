@@ -8,7 +8,7 @@
         "$path": "src/shared/NPCManager.lua"
       },
       "NPCDatabase": {
-        "$path": "src/data/npc_database.json"
+        "$path": "src/data/NPCDatabase.lua"
       }
     },
     "ServerScriptService": {

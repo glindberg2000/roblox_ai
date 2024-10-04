@@ -1,56 +1,27 @@
--- Script Name: MainNPCScript
+-- Script Name: MainNPCScript (v2.3)
 -- Script Location: ServerScriptService
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 local Players = game:GetService("Players")
 
+print("MainNPCScript starting...")
+
 local NPCManager = require(ReplicatedStorage:WaitForChild("NPCManager"))
-local NPCConfigurations = require(script.Parent:WaitForChild("NPCConfigurations"))
+print("NPCManager loaded")
 
 local NPCFolder = workspace:FindFirstChild("NPCs") or Instance.new("Folder")
 NPCFolder.Name = "NPCs"
 NPCFolder.Parent = workspace
+print("NPCFolder created/found in workspace")
 
-local initializedNPCs = {}
+-- Create an instance of NPCManager
+local npcManager = NPCManager.new()
+print("NPCManager instance created")
 
-local function spawnNPC(config)
-	print("Spawning NPC: " .. config.displayName)
-
-	local model = ServerStorage:FindFirstChild(config.model)
-	if not model then
-		warn("Model not found in ServerStorage for NPC: " .. config.displayName)
-		return
-	end
-
-	local npcModel = model:Clone()
-	npcModel.Parent = NPCFolder
-
-	-- Set the PrimaryPart if it's not already set
-	if not npcModel.PrimaryPart then
-		local part = npcModel:FindFirstChildWhichIsA("BasePart")
-		if part then
-			npcModel.PrimaryPart = part
-		else
-			warn("No suitable part found for PrimaryPart in model: " .. config.displayName)
-			return
-		end
-	end
-
-	-- Now set the CFrame of the model
-	npcModel:SetPrimaryPartCFrame(CFrame.new(config.spawnPosition))
-
-	local npc = NPCManager.new(npcModel, config.npcId, config.displayName, config.responseRadius)
-	npc:start()
-
-	return npc
-end
-
-for _, config in ipairs(NPCConfigurations) do
-	local npc = spawnNPC(config)
-	if npc then
-		table.insert(initializedNPCs, npc)
-	end
+-- Print out the NPCs that were created
+for id, npc in pairs(npcManager.npcs) do
+	print("NPC created: " .. npc.displayName .. " (ID: " .. id .. ")")
 end
 
 local function setupChatConnections()
@@ -63,7 +34,7 @@ local function setupChatConnections()
 		local closestNPC = nil
 		local closestDistance = math.huge
 
-		for _, npc in ipairs(initializedNPCs) do
+		for _, npc in pairs(npcManager.npcs) do
 			if npc.model.PrimaryPart then
 				local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
 				if distance <= npc.responseRadius and distance < closestDistance then
@@ -74,7 +45,7 @@ local function setupChatConnections()
 		end
 
 		if closestNPC then
-			closestNPC:handleNPCInteraction(player, message)
+			npcManager:handleNPCInteraction(closestNPC, player, message)
 		end
 	end
 
@@ -93,16 +64,18 @@ end
 
 setupChatConnections()
 
-print("NPC system initialized with " .. #initializedNPCs .. " NPCs")
+print("NPC system initialized with " .. #npcManager.npcs .. " NPCs")
 
 -- Function to spawn a new NPC at runtime
 local function spawnNewNPC(npcConfig)
-	local npc = spawnNPC(npcConfig)
+	local npc = npcManager:createNPC(npcConfig)
 	if npc then
-		table.insert(initializedNPCs, npc)
+		table.insert(npcManager.npcs, npc)
 		print("New NPC spawned: " .. npc.displayName)
 	end
 end
 
 -- Expose the spawnNewNPC function to other scripts
 _G.spawnNewNPC = spawnNewNPC
+
+print("MainNPCScript setup complete")

@@ -1,10 +1,12 @@
--- Script Name: NPCManager
+-- Script Name: NPCManager (v2.3)
 -- Script Location: ReplicatedStorage
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage = game:GetService("ServerStorage")
 local TextChatService = game:GetService("TextChatService")
+local ChatService = game:GetService("Chat")
 
 local NPCManager = {}
 NPCManager.__index = NPCManager
@@ -22,101 +24,135 @@ local function log(npcName, message)
 	print(string.format("[%s] %s", npcName, message))
 end
 
-function NPCManager.new(model, npcId, displayName, responseRadius)
+function NPCManager.new()
+	print("NPCManager.new() called")
 	local self = setmetatable({}, NPCManager)
-	self.model = model
-	self.npcId = npcId
-	self.displayName = displayName
-	self.responseRadius = responseRadius or RESPONSE_RADIUS
-	self.activeConversations = {}
-	self.lastResponseTime = 0
-
-	log(self.displayName, "NPC created")
-
-	self:setupClickDetector()
+	self.npcs = {}
+	self:loadNPCDatabase()
 	return self
 end
 
-function NPCManager:setupClickDetector()
-	log(self.displayName, "Setting up ClickDetector")
+function NPCManager:loadNPCDatabase()
+	print("Loading NPC Database...")
+	local npcDatabaseModule = ReplicatedStorage:WaitForChild("NPCDatabase")
+	print("NPCDatabase module found in ReplicatedStorage")
+	local npcDatabase = require(npcDatabaseModule)
+	print("NPC Database loaded")
+	print("Number of NPCs in database:", #npcDatabase.npcs)
 
-	local part = self:getInteractionPart()
+	for _, npcData in ipairs(npcDatabase.npcs) do
+		print("Creating NPC:", npcData.displayName)
+		self:createNPC(npcData)
+	end
+end
+
+function NPCManager:createNPC(npcData)
+	print("Creating NPC:", npcData.displayName)
+	local model = ServerStorage.NPCModels:FindFirstChild(npcData.model)
+	if not model then
+		warn("Model not found for NPC: " .. npcData.displayName)
+		return
+	end
+
+	local npcModel = model:Clone()
+	npcModel.Parent = workspace.NPCs
+
+	-- Find a suitable part to set as PrimaryPart
+	local primaryPart = npcModel:FindFirstChild("HumanoidRootPart")
+		or npcModel:FindFirstChild("Torso")
+		or npcModel:FindFirstChild("UpperTorso")
+		or npcModel:FindFirstChildWhichIsA("BasePart")
+
+	if primaryPart then
+		npcModel.PrimaryPart = primaryPart
+		npcModel:SetPrimaryPartCFrame(CFrame.new(unpack(npcData.spawnPosition)))
+		print(npcData.displayName .. " spawned at position: " .. tostring(primaryPart.Position))
+	else
+		warn("No suitable part found to set as PrimaryPart for " .. npcData.displayName)
+		return
+	end
+
+	local npc = {
+		model = npcModel,
+		id = npcData.id,
+		displayName = npcData.displayName,
+		responseRadius = npcData.responseRadius or RESPONSE_RADIUS,
+		backstory = npcData.backstory,
+		traits = npcData.traits,
+		routines = npcData.routines,
+		activeConversations = {},
+		lastResponseTime = 0,
+	}
+
+	self:setupClickDetector(npc)
+	self.npcs[npc.id] = npc
+
+	log(npc.displayName, "NPC created and added to npcs table")
+	return npc
+end
+
+function NPCManager:setupClickDetector(npc)
+	log(npc.displayName, "Setting up ClickDetector")
+
+	local part = self:getInteractionPart(npc.model)
 	if not part then
-		warn(self.displayName .. ": Failed to set up ClickDetector - No suitable part found")
+		warn(npc.displayName .. ": Failed to set up ClickDetector - No suitable part found")
 		return
 	end
 
 	local clickDetector = Instance.new("ClickDetector")
-	clickDetector.MaxActivationDistance = self.responseRadius
+	clickDetector.MaxActivationDistance = npc.responseRadius
 	clickDetector.Parent = part
 
-	log(self.displayName, "ClickDetector parented to " .. part.Name)
+	log(npc.displayName, "ClickDetector parented to " .. part.Name)
 
 	clickDetector.MouseClick:Connect(function(player)
-		log(self.displayName, "Clicked by " .. player.Name)
-		self:handleNPCInteraction(player, "Hello")
+		log(npc.displayName, "Clicked by " .. player.Name)
+		self:handleNPCInteraction(npc, player, "Hello")
 	end)
 end
 
-function NPCManager:getInteractionPart()
-	return self.model.PrimaryPart
-		or self.model:FindFirstChild("HumanoidRootPart")
-		or self.model:FindFirstChild("Torso")
-		or self.model:FindFirstChild("UpperTorso")
+function NPCManager:getInteractionPart(model)
+	return model.PrimaryPart
+		or model:FindFirstChild("HumanoidRootPart")
+		or model:FindFirstChild("Torso")
+		or model:FindFirstChild("UpperTorso")
 end
 
-function NPCManager:handleNPCInteraction(player, message)
-	log(self.displayName, "Handling interaction from " .. player.Name .. ": " .. message)
+function NPCManager:handleNPCInteraction(npc, player, message)
+	log(npc.displayName, "Handling interaction from " .. player.Name .. ": " .. message)
 
 	local currentTime = tick()
-	if currentTime - self.lastResponseTime < RESPONSE_COOLDOWN then
-		log(self.displayName, "Ignoring message due to cooldown")
+	if currentTime - npc.lastResponseTime < RESPONSE_COOLDOWN then
+		log(npc.displayName, "Ignoring message due to cooldown")
 		return
 	end
 
-	local response = self:getResponseFromAI(message, player)
+	local response = self:getResponseFromAI(npc, message, player)
 	if response then
-		self:displayMessage(response, player)
-		self:setActiveConversation(player)
-		self.lastResponseTime = currentTime
+		self:displayMessage(npc, response, player)
+		self:setActiveConversation(npc, player)
+		npc.lastResponseTime = currentTime
 	else
-		log(self.displayName, "No response received from AI")
+		log(npc.displayName, "No response received from AI")
 	end
 end
 
-function NPCManager:isInActiveConversation(player)
-	local conversation = self.activeConversations[player.UserId]
-	if not conversation then
-		return false
-	end
-
-	local isActive = tick() - conversation.lastInteractionTime < CONVERSATION_TIMEOUT
-	log(self.displayName, "Active conversation check for " .. player.Name .. ": " .. tostring(isActive))
-	return isActive
-end
-
-function NPCManager:setActiveConversation(player)
-	self.activeConversations[player.UserId] = {
+function NPCManager:setActiveConversation(npc, player)
+	npc.activeConversations[player.UserId] = {
 		lastInteractionTime = tick(),
 	}
-	log(self.displayName, "Set active conversation with " .. player.Name)
+	log(npc.displayName, "Set active conversation with " .. player.Name)
 end
 
-function NPCManager:isMessageDirected(message)
-	local lowerMessage = message:lower()
-	local isDirected = lowerMessage:find(self.displayName:lower()) or lowerMessage:find(self.npcId:lower())
-	log(self.displayName, "Message directed check: " .. tostring(isDirected))
-	return isDirected
-end
-
-function NPCManager:getResponseFromAI(message, player)
-	log(self.displayName, "Getting AI response for: " .. message)
+function NPCManager:getResponseFromAI(npc, message, player)
+	log(npc.displayName, "Getting AI response for: " .. message)
 
 	local data = {
 		message = message,
 		player_id = tostring(player.UserId),
-		npc_id = self.npcId,
-		npc_name = self.displayName,
+		npc_id = npc.id,
+		npc_name = npc.displayName,
 		limit = 200,
 	}
 
@@ -127,31 +163,32 @@ function NPCManager:getResponseFromAI(message, player)
 	if success then
 		local parsed = HttpService:JSONDecode(response)
 		if parsed and parsed.message then
-			log(self.displayName, "AI response received: " .. parsed.message)
+			log(npc.displayName, "AI response received: " .. parsed.message)
 			return parsed.message
 		else
-			warn(self.displayName .. ": Received invalid response from AI")
+			warn(npc.displayName .. ": Received invalid response from AI")
 			return nil
 		end
 	else
-		warn(self.displayName .. ": Failed to get response from AI: " .. tostring(response))
+		warn(npc.displayName .. ": Failed to get response from AI: " .. tostring(response))
 		return nil
 	end
 end
 
-function NPCManager:displayMessage(message, player)
-	log(self.displayName, "Displaying message to " .. player.Name .. ": " .. message)
+function NPCManager:displayMessage(npc, message, player)
+	log(npc.displayName, "Displaying message to " .. player.Name .. ": " .. message)
 
 	-- Display chat bubble
-	local chatService = game:GetService("Chat")
-	chatService:Chat(self.model.Head, message, Enum.ChatColor.Blue)
+	ChatService:Chat(npc.model.Head, message, Enum.ChatColor.Blue)
 
 	-- Send message to client for chat area display
-	NPCChatEvent:FireClient(player, self.displayName, message)
+	NPCChatEvent:FireClient(player, npc.displayName, message)
 end
 
 function NPCManager:start()
-	log(self.displayName, "Started and ready for interactions")
+	for _, npc in pairs(self.npcs) do
+		log(npc.displayName, "Started and ready for interactions")
+	end
 end
 
 return NPCManager
