@@ -56,7 +56,9 @@ end
 local function setupChatConnections()
 	local function onPlayerChatted(player, message)
 		local playerPosition = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-		if not playerPosition then return end
+		if not playerPosition then
+			return
+		end
 
 		local closestNPC = nil
 		local closestDistance = math.huge

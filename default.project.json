@@ -6,15 +6,15 @@
       "$className": "ReplicatedStorage",
       "NPCManager": {
         "$path": "src/shared/NPCManager.lua"
+      },
+      "NPCDatabase": {
+        "$path": "src/data/npc_database.json"
       }
     },
     "ServerScriptService": {
       "$className": "ServerScriptService",
       "MainNPCScript": {
         "$path": "src/server/MainNPCScript.server.lua"
-      },
-      "NPCConfigurations": {
-        "$path": "src/server/NPCConfigurations.lua"
       }
     },
     "StarterPlayer": {
@@ -28,20 +28,14 @@
     },
     "ServerStorage": {
       "$className": "ServerStorage",
-      "Eldrin": {
-        "$path": "src/assets/Eldrin.rbxm"
-      },
-      "Luna": {
-        "$path": "src/assets/Luna.rbxm"
-      }
-    },
-    "Workspace": {
-      "$className": "Workspace",
-      "$properties": {
-        "FilteringEnabled": true
-      },
-      "NPCs": {
-        "$className": "Folder"
+      "NPCModels": {
+        "$className": "Folder",
+        "Eldrin": {
+          "$path": "src/assets/npcs/eldrin.rbxm"
+        },
+        "Luna": {
+          "$path": "src/assets/npcs/luna.rbxm"
+        }
       }
     }
   }

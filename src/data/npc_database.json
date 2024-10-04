@@ -1,0 +1,87 @@
+{
+    "npcs": [
+        {
+            "id": "eldrin",
+            "displayName": "Eldrin the Wise",
+            "model": "eldrin",
+            "responseRadius": 20,
+            "spawnPosition": [
+                0,
+                5,
+                0
+            ],
+            "backstory": "Eldrin is an ancient wizard with vast knowledge of the arcane arts.",
+            "traits": [
+                "wise",
+                "patient",
+                "magical"
+            ],
+            "routines": [
+                {
+                    "type": "wander",
+                    "area": [
+                        [
+                            -10,
+                            10
+                        ],
+                        [
+                            0,
+                            0
+                        ],
+                        [
+                            -10,
+                            10
+                        ]
+                    ],
+                    "duration": 300
+                },
+                {
+                    "type": "idle",
+                    "duration": 60
+                }
+            ]
+        },
+        {
+            "id": "luna",
+            "displayName": "Luna the Stargazer",
+            "model": "luna",
+            "responseRadius": 15,
+            "spawnPosition": [
+                10,
+                5,
+                10
+            ],
+            "backstory": "Luna is a young astronomer fascinated by the celestial bodies.",
+            "traits": [
+                "curious",
+                "intelligent",
+                "dreamy"
+            ],
+            "routines": [
+                {
+                    "type": "observe",
+                    "target": "sky",
+                    "duration": 180
+                },
+                {
+                    "type": "wander",
+                    "area": [
+                        [
+                            5,
+                            15
+                        ],
+                        [
+                            5,
+                            5
+                        ],
+                        [
+                            5,
+                            15
+                        ]
+                    ],
+                    "duration": 120
+                }
+            ]
+        }
+    ]
+}
