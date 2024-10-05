@@ -64,3 +64,5 @@ node_modules/
 
 *.bak
 *.swp
+
+system_prompt_source.py
