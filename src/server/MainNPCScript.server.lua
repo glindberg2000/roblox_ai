@@ -1,4 +1,4 @@
--- Script Name: MainNPCScript (v2.3)
+-- MainNPCScript (v2.8)
 -- Script Location: ServerScriptService
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -78,4 +78,53 @@ end
 -- Expose the spawnNewNPC function to other scripts
 _G.spawnNewNPC = spawnNewNPC
 
-print("MainNPCScript setup complete")
+-- Periodically check player proximity to NPCs and trigger interactions
+local function checkProximity()
+	while true do
+		for _, player in ipairs(Players:GetPlayers()) do
+			for _, npc in pairs(npcManager.npcs) do
+				local isInProximity = npcManager:checkPlayerProximity(npc, player)
+				if isInProximity then
+					npcManager:handleProximityInteraction(npc, player)
+				else
+					-- End conversation if player moves out of range
+					if npc.greetedPlayers[tostring(player.UserId)] then
+						npcManager:endConversation(npc, player)
+					end
+				end
+			end
+		end
+		wait(1) -- Check every second
+	end
+end
+
+spawn(checkProximity)
+
+-- Periodically update NPC states for random movement
+local function updateNPCStates()
+	while true do
+		print("Updating NPC states")
+		for _, npc in pairs(npcManager.npcs) do
+			npcManager:updateNPCState(npc)
+		end
+		wait(5) -- Update every 5 seconds
+	end
+end
+
+spawn(updateNPCStates)
+
+local function onPlayerChatted(player, message)
+	if message:lower() == "/endchat" then
+		for _, npc in pairs(npcManager.npcs) do
+			npcManager:endConversation(npc, player)
+		end
+	end
+end
+
+Players.PlayerAdded:Connect(function(player)
+	player.Chatted:Connect(function(message)
+		onPlayerChatted(player, message)
+	end)
+end)
+
+print("MainNPCScript fully initialized")

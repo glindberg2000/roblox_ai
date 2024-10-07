@@ -1,5 +1,5 @@
--- Script Name: NPCManager (v2.3)
--- Script Location: ReplicatedStorage
+-- NPCManager (v2.8)
+-- NPC script for managing NPCs with player interaction, proximity detection, and movement
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
@@ -82,7 +82,19 @@ function NPCManager:createNPC(npcData)
 		routines = npcData.routines,
 		activeConversations = {},
 		lastResponseTime = 0,
+		isMoving = false,
+		isInteracting = false,
+		greetedPlayers = {},
+		lastGreetTime = 0,
+		greetCooldown = 30, -- Cooldown in seconds
 	}
+
+	local humanoid = npcModel:FindFirstChild("Humanoid")
+	if not humanoid then
+		warn("Humanoid not found in NPC model: " .. npcData.displayName)
+		humanoid = Instance.new("Humanoid")
+		humanoid.Parent = npcModel
+	end
 
 	self:setupClickDetector(npc)
 	self.npcs[npc.id] = npc
@@ -128,6 +140,9 @@ function NPCManager:handleNPCInteraction(npc, player, message)
 		return
 	end
 
+	self:stopNPCMovement(npc)
+	npc.isInteracting = true
+
 	local response = self:getResponseFromAI(npc, message, player)
 	if response then
 		self:displayMessage(npc, response, player)
@@ -136,6 +151,51 @@ function NPCManager:handleNPCInteraction(npc, player, message)
 	else
 		log(npc.displayName, "No response received from AI")
 	end
+end
+
+function NPCManager:stopNPCMovement(npc)
+	local humanoid = npc.model:FindFirstChild("Humanoid")
+	if humanoid then
+		humanoid.WalkToPoint = npc.model.PrimaryPart.Position
+		log(npc.displayName, "Stopping movement")
+	else
+		log(npc.displayName, "Humanoid not found when trying to stop movement")
+	end
+	npc.isMoving = false
+end
+
+function NPCManager:checkPlayerProximity(npc, player)
+	local playerPosition = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if playerPosition and npc.model.PrimaryPart then
+		local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
+		return distance <= npc.responseRadius
+	end
+	return false
+end
+
+function NPCManager:handleProximityInteraction(npc, player)
+	local currentTime = tick()
+	local playerKey = tostring(player.UserId)
+
+	if self:checkPlayerProximity(npc, player) then
+		if not npc.greetedPlayers[playerKey] and (currentTime - npc.lastGreetTime) > npc.greetCooldown then
+			self:handleNPCInteraction(npc, player, "Hello")
+			npc.greetedPlayers[playerKey] = true
+			npc.lastGreetTime = currentTime
+		end
+	else
+		-- Reset greeting status when player leaves proximity
+		npc.greetedPlayers[playerKey] = nil
+	end
+end
+
+function NPCManager:endConversation(npc, player)
+	local playerKey = tostring(player.UserId)
+	npc.greetedPlayers[playerKey] = nil
+	npc.isInteracting = false
+	npc.isMoving = false -- Reset moving flag to allow movement to resume
+	log(npc.displayName, "Ending conversation with " .. player.Name)
+	self:updateNPCState(npc) -- Immediately update the NPC state to resume movement
 end
 
 function NPCManager:setActiveConversation(npc, player)
@@ -183,6 +243,50 @@ function NPCManager:displayMessage(npc, message, player)
 
 	-- Send message to client for chat area display
 	NPCChatEvent:FireClient(player, npc.displayName, message)
+end
+
+function NPCManager:randomWalk(npc)
+	local humanoid = npc.model:FindFirstChild("Humanoid")
+	if humanoid then
+		local currentPosition = npc.model.PrimaryPart.Position
+		local randomOffset = Vector3.new(math.random(-10, 10), 0, math.random(-10, 10))
+		local targetPosition = currentPosition + randomOffset
+
+		humanoid:MoveTo(targetPosition)
+		npc.isMoving = true
+
+		log(npc.displayName, "Walking to: " .. tostring(targetPosition) .. " from " .. tostring(currentPosition))
+
+		-- Set up a connection to detect when the NPC reaches its destination
+		local connection
+		connection = humanoid.MoveToFinished:Connect(function(reached)
+			if reached then
+				npc.isMoving = false
+				log(npc.displayName, "Reached destination")
+				self:updateNPCState(npc) -- Immediately update the NPC state to continue movement
+			end
+			connection:Disconnect()
+		end)
+	else
+		log(npc.displayName, "Humanoid not found for random walk")
+	end
+end
+
+function NPCManager:updateNPCState(npc)
+	local humanoid = npc.model:FindFirstChild("Humanoid")
+	log(
+		npc.displayName,
+		"Updating state. isInteracting: " .. tostring(npc.isInteracting) .. ", isMoving: " .. tostring(npc.isMoving)
+	)
+	if humanoid then
+		log(npc.displayName, "Humanoid state: " .. tostring(humanoid:GetState()))
+	end
+
+	if not npc.isInteracting and not npc.isMoving then
+		self:randomWalk(npc)
+	elseif npc.isInteracting then
+		self:stopNPCMovement(npc)
+	end
 end
 
 function NPCManager:start()
