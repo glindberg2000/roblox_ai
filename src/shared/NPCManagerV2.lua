@@ -1,37 +1,35 @@
--- NPCManager.lua (v1)
+-- NPCManagerV2.lua
 local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 local ChatService = game:GetService("Chat")
 
-local NPCManager = {}
-NPCManager.__index = NPCManager
+local NPCManagerV2 = {}
+NPCManagerV2.__index = NPCManagerV2
 
-local API_URL = "https://www.ella-ai-care.com/robloxgpt"
+local API_URL = "https://www.ella-ai-care.com/robloxgpt/v2"
 local RESPONSE_COOLDOWN = 1
 
-local NPCChatEvent = Instance.new("RemoteEvent")
-NPCChatEvent.Name = "NPCChatEvent"
-NPCChatEvent.Parent = ReplicatedStorage
+local NPCChatEvent = ReplicatedStorage:WaitForChild("NPCChatEvent")
 
-function NPCManager.new()
-	local self = setmetatable({}, NPCManager)
+function NPCManagerV2.new()
+	local self = setmetatable({}, NPCManagerV2)
 	self.npcs = {}
 	self:loadNPCDatabase()
 	return self
 end
 
-function NPCManager:loadNPCDatabase()
-	local npcDatabase = require(ReplicatedStorage:WaitForChild("NPCDatabase"))
+function NPCManagerV2:loadNPCDatabase()
+	local npcDatabase = require(ReplicatedStorage:WaitForChild("NPCDatabaseV2"))
 	for _, npcData in ipairs(npcDatabase.npcs) do
 		self:createNPC(npcData)
 	end
 end
 
-function NPCManager:createNPC(npcData)
+function NPCManagerV2:createNPC(npcData)
 	local model = ServerStorage.NPCModels:FindFirstChild(npcData.model)
 	if not model then
+		warn("Model not found for NPC: " .. npcData.displayName)
 		return
 	end
 
@@ -43,6 +41,7 @@ function NPCManager:createNPC(npcData)
 		npcModel.PrimaryPart = primaryPart
 		npcModel:SetPrimaryPartCFrame(CFrame.new(unpack(npcData.spawnPosition)))
 	else
+		warn("No suitable part found to set as PrimaryPart for " .. npcData.displayName)
 		return
 	end
 
@@ -51,6 +50,7 @@ function NPCManager:createNPC(npcData)
 		id = npcData.id,
 		displayName = npcData.displayName,
 		responseRadius = npcData.responseRadius,
+		system_prompt = npcData.system_prompt,
 		lastResponseTime = 0,
 		isMoving = false,
 		isInteracting = false,
@@ -59,9 +59,10 @@ function NPCManager:createNPC(npcData)
 
 	self:setupClickDetector(npc)
 	self.npcs[npc.id] = npc
+	print("V2 NPC created: " .. npc.displayName)
 end
 
-function NPCManager:setupClickDetector(npc)
+function NPCManagerV2:setupClickDetector(npc)
 	local clickDetector = Instance.new("ClickDetector")
 	clickDetector.MaxActivationDistance = npc.responseRadius
 	clickDetector.Parent = npc.model.PrimaryPart
@@ -71,12 +72,13 @@ function NPCManager:setupClickDetector(npc)
 	end)
 end
 
-function NPCManager:getResponseFromAI(npc, message, player)
+function NPCManagerV2:getResponseFromAI(npc, player, message)
 	local data = {
 		message = message,
 		player_id = tostring(player.UserId),
 		npc_id = npc.id,
 		npc_name = npc.displayName,
+		system_prompt = npc.system_prompt,
 		limit = 200,
 	}
 
@@ -93,12 +95,12 @@ function NPCManager:getResponseFromAI(npc, message, player)
 	return nil
 end
 
-function NPCManager:displayMessage(npc, message, player)
+function NPCManagerV2:displayMessage(npc, message, player)
 	ChatService:Chat(npc.model.Head, message, Enum.ChatColor.Blue)
-	NPCChatEvent:FireClient(player, npc.displayName, message)
+	NPCChatEvent:FireClient(player, npc.displayName, message) -- Use the same event as v1 NPCs
 end
 
-function NPCManager:stopNPCMovement(npc)
+function NPCManagerV2:stopNPCMovement(npc)
 	local humanoid = npc.model:FindFirstChild("Humanoid")
 	if humanoid then
 		humanoid:MoveTo(npc.model.PrimaryPart.Position)
@@ -106,7 +108,7 @@ function NPCManager:stopNPCMovement(npc)
 	npc.isMoving = false
 end
 
-function NPCManager:handleNPCInteraction(npc, player, message)
+function NPCManagerV2:handleNPCInteraction(npc, player, message)
 	local currentTime = tick()
 	if currentTime - npc.lastResponseTime < RESPONSE_COOLDOWN then
 		return
@@ -116,7 +118,7 @@ function NPCManager:handleNPCInteraction(npc, player, message)
 	npc.interactingPlayer = player
 	self:stopNPCMovement(npc)
 
-	local response = self:getResponseFromAI(npc, message, player)
+	local response = self:getResponseFromAI(npc, player, message)
 	if response then
 		self:displayMessage(npc, response, player)
 		npc.lastResponseTime = currentTime
@@ -125,14 +127,14 @@ function NPCManager:handleNPCInteraction(npc, player, message)
 	-- Don't reset isInteracting here, it will be reset in updateNPCState
 end
 
-function NPCManager:handleProximityInteraction(npc, player)
+function NPCManagerV2:handleProximityInteraction(npc, player)
 	if not npc.greetedPlayers[player.UserId] then
 		self:handleNPCInteraction(npc, player, "Hello")
 		npc.greetedPlayers[player.UserId] = true
 	end
 end
 
-function NPCManager:isPlayerInRange(npc, player)
+function NPCManagerV2:isPlayerInRange(npc, player)
 	local playerPosition = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	if playerPosition and npc.model.PrimaryPart then
 		local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
@@ -141,7 +143,7 @@ function NPCManager:isPlayerInRange(npc, player)
 	return false
 end
 
-function NPCManager:updateNPCState(npc)
+function NPCManagerV2:updateNPCState(npc)
 	if npc.isInteracting then
 		if npc.interactingPlayer and not self:isPlayerInRange(npc, npc.interactingPlayer) then
 			npc.isInteracting = false
@@ -155,7 +157,7 @@ function NPCManager:updateNPCState(npc)
 	end
 end
 
-function NPCManager:randomWalk(npc)
+function NPCManagerV2:randomWalk(npc)
 	if npc.isInteracting then
 		return
 	end -- Don't walk if interacting
@@ -174,4 +176,4 @@ function NPCManager:randomWalk(npc)
 	end
 end
 
-return NPCManager
+return NPCManagerV2

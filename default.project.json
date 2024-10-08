@@ -7,8 +7,14 @@
       "NPCManager": {
         "$path": "src/shared/NPCManager.lua"
       },
+      "NPCManagerV2": {
+        "$path": "src/shared/NPCManagerV2.lua"
+      },
       "NPCDatabase": {
         "$path": "src/data/NPCDatabase.lua"
+      },
+      "NPCDatabaseV2": {
+        "$path": "src/data/NPCDatabaseV2.lua"
       }
     },
     "ServerScriptService": {
@@ -35,6 +41,9 @@
         },
         "Luna": {
           "$path": "src/assets/npcs/luna.rbxm"
+        },
+        "Oz": {
+          "$path": "src/assets/npcs/oz.rbxm"
         }
       }
     }
