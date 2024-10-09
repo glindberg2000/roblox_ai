@@ -1,9 +1,9 @@
--- Script Name: NPCClientHandler
--- Location: StarterPlayer:StarterPlayerScripts
-
+-- NPCClientHandler.client.lua
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local NPCChatEvent = ReplicatedStorage:WaitForChild("NPCChatEvent")
+local Players = game:GetService("Players")
 local TextChatService = game:GetService("TextChatService")
+
+local NPCChatEvent = ReplicatedStorage:WaitForChild("NPCChatEvent")
 
 NPCChatEvent.OnClientEvent:Connect(function(npcName, message)
 	print("Received NPC message on client: " .. npcName .. " - " .. message)

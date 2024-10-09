@@ -1,30 +1,37 @@
--- MainNPCScript.server.lua
+-- MainNPCScript.server.lua (V3)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
-local NPCManager = require(ReplicatedStorage:WaitForChild("NPCManager"))
 local NPCManagerV2 = require(ReplicatedStorage:WaitForChild("NPCManagerV2"))
+local NPCManagerV3 = require(ReplicatedStorage:WaitForChild("NPCManagerV3"))
 
-local npcManager = NPCManager.new()
 local npcManagerV2 = NPCManagerV2.new()
+local npcManagerV3 = NPCManagerV3.new()
+
+local UseV3System = ReplicatedStorage:WaitForChild("UseV3System")
 
 local function checkPlayerProximity()
 	for _, player in ipairs(Players:GetPlayers()) do
 		local playerPosition = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 		if playerPosition then
-			for _, npc in pairs(npcManager.npcs) do
-				if npc.model and npc.model.PrimaryPart then
-					local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
-					if distance <= npc.responseRadius and not npc.isInteracting then
-						npcManager:handleProximityInteraction(npc, player)
+			if UseV3System.Value then
+				for _, npc in pairs(npcManagerV3.npcs) do
+					if npc.model and npc.model.PrimaryPart then
+						local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
+						print(npc.displayName .. " distance to " .. player.Name .. ": " .. distance)
+						if distance <= npc.responseRadius and not npc.isInteracting then
+							print(npc.displayName .. " initiating interaction with " .. player.Name)
+							npcManagerV3:handleNPCInteraction(npc, player, "Hello")
+						end
 					end
 				end
-			end
-			for _, npc in pairs(npcManagerV2.npcs) do
-				if npc.model and npc.model.PrimaryPart then
-					local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
-					if distance <= npc.responseRadius and not npc.isInteracting then
-						npcManagerV2:handleProximityInteraction(npc, player)
+			else
+				for _, npc in pairs(npcManagerV2.npcs) do
+					if npc.model and npc.model.PrimaryPart then
+						local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
+						if distance <= npc.responseRadius and not npc.isInteracting then
+							npcManagerV2:handleProximityInteraction(npc, player)
+						end
 					end
 				end
 			end
@@ -38,31 +45,36 @@ local function onPlayerChatted(player, message)
 		return
 	end
 
-	local closestNPC, closestDistance = nil, math.huge
-	local closestNPCV2, closestDistanceV2 = nil, math.huge
+	if UseV3System.Value then
+		local closestNPC, closestDistance = nil, math.huge
 
-	for _, npc in pairs(npcManager.npcs) do
-		if npc.model and npc.model.PrimaryPart then
-			local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
-			if distance <= npc.responseRadius and distance < closestDistance then
-				closestNPC, closestDistance = npc, distance
+		for _, npc in pairs(npcManagerV3.npcs) do
+			if npc.model and npc.model.PrimaryPart then
+				local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
+				if distance <= npc.responseRadius and distance < closestDistance then
+					closestNPC, closestDistance = npc, distance
+				end
 			end
 		end
-	end
 
-	for _, npc in pairs(npcManagerV2.npcs) do
-		if npc.model and npc.model.PrimaryPart then
-			local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
-			if distance <= npc.responseRadius and distance < closestDistanceV2 then
-				closestNPCV2, closestDistanceV2 = npc, distance
+		if closestNPC then
+			npcManagerV3:handleNPCInteraction(closestNPC, player, message)
+		end
+	else
+		local closestNPC, closestDistance = nil, math.huge
+
+		for _, npc in pairs(npcManagerV2.npcs) do
+			if npc.model and npc.model.PrimaryPart then
+				local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
+				if distance <= npc.responseRadius and distance < closestDistance then
+					closestNPC, closestDistance = npc, distance
+				end
 			end
 		end
-	end
 
-	if closestDistance < closestDistanceV2 and closestNPC then
-		npcManager:handleNPCInteraction(closestNPC, player, message)
-	elseif closestNPCV2 then
-		npcManagerV2:handleNPCInteraction(closestNPCV2, player, message)
+		if closestNPC then
+			npcManagerV2:handleNPCInteraction(closestNPC, player, message)
+		end
 	end
 end
 
@@ -85,11 +97,16 @@ setupChatConnections()
 local function updateNPCs()
 	while true do
 		checkPlayerProximity()
-		for _, npc in pairs(npcManager.npcs) do
-			npcManager:updateNPCState(npc)
-		end
-		for _, npc in pairs(npcManagerV2.npcs) do
-			npcManagerV2:updateNPCState(npc)
+		if UseV3System.Value then
+			print("Updating V3 NPCs, Count: " .. npcManagerV3:getNPCCount())
+			for _, npc in pairs(npcManagerV3.npcs) do
+				npcManagerV3:updateNPCState(npc)
+			end
+		else
+			print("Updating V2 NPCs, Count: " .. #npcManagerV2.npcs)
+			for _, npc in pairs(npcManagerV2.npcs) do
+				npcManagerV2:updateNPCState(npc)
+			end
 		end
 		wait(1) -- Update every second
 	end
@@ -97,5 +114,4 @@ end
 
 spawn(updateNPCs)
 
-print("NPC system v1 initialized with " .. #npcManager.npcs .. " NPCs")
-print("NPC system v2 initialized with " .. #npcManagerV2.npcs .. " NPCs")
+print("NPC system " .. (UseV3System.Value and "V3" or "V2") .. " initialized")

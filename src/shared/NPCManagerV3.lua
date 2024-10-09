@@ -64,7 +64,15 @@ function NPCManagerV3:createNPC(npcData)
 
 	self:setupClickDetector(npc)
 	self.npcs[npc.id] = npc
-	print("V3 NPC created: " .. npc.displayName)
+	print("V3 NPC added to table: " .. npc.displayName .. ", Total NPCs: " .. self:getNPCCount())
+end
+
+function NPCManagerV3:getNPCCount()
+	local count = 0
+	for _ in pairs(self.npcs) do
+		count = count + 1
+	end
+	return count
 end
 
 function NPCManagerV3:setupClickDetector(npc)
@@ -78,6 +86,7 @@ function NPCManagerV3:setupClickDetector(npc)
 end
 
 function NPCManagerV3:updateNPCVision(npc)
+	print("Updating vision for " .. npc.displayName)
 	npc.visibleEntities = {}
 	local npcPosition = npc.model.PrimaryPart.Position
 
@@ -91,35 +100,52 @@ function NPCManagerV3:updateNPCVision(npc)
 					name = player.Name,
 					distance = distance,
 				})
+				print(npc.displayName .. " sees player: " .. player.Name .. " at distance: " .. distance)
 			end
 		end
 	end
 
-	-- Detect objects (you'll need to define what objects are detectable)
-	local detectableObjects = workspace:FindPartsInRegion3(
-		Region3.new(
-			npcPosition - Vector3.new(VISION_RANGE, VISION_RANGE, VISION_RANGE),
-			npcPosition + Vector3.new(VISION_RANGE, VISION_RANGE, VISION_RANGE)
-		),
-		nil,
-		100
-	)
-
-	for _, object in ipairs(detectableObjects) do
-		if object.Parent and object.Parent ~= npc.model and object.Parent:FindFirstChild("Detectable") then
-			local distance = (object.Position - npcPosition).Magnitude
-			table.insert(npc.visibleEntities, {
-				type = "object",
-				name = object.Parent.Name,
-				distance = distance,
-			})
+	-- Detect objects
+	local detectedObjects = {}
+	for _, object in ipairs(workspace:GetChildren()) do
+		if object:IsA("Model") and object ~= npc.model then
+			local primaryPart = object.PrimaryPart or object:FindFirstChildWhichIsA("BasePart")
+			if primaryPart then
+				local distance = (primaryPart.Position - npcPosition).Magnitude
+				if distance <= VISION_RANGE then
+					local objectType = object:GetAttribute("ObjectType") or "Unknown"
+					local key = object.Name .. "_" .. objectType
+					if not detectedObjects[key] then
+						detectedObjects[key] = true
+						table.insert(npc.visibleEntities, {
+							type = "object",
+							name = object.Name,
+							objectType = objectType,
+							distance = distance,
+						})
+						print(
+							npc.displayName
+								.. " sees object: "
+								.. object.Name
+								.. " (Type: "
+								.. objectType
+								.. ") at distance: "
+								.. distance
+						)
+					end
+				end
+			end
 		end
 	end
+
+	print(npc.displayName .. " vision update complete. Visible entities: " .. #npc.visibleEntities)
 end
 
 function NPCManagerV3:handleNPCInteraction(npc, player, message)
+	print(npc.displayName .. " handling interaction with " .. player.Name .. ": " .. message)
 	local currentTime = tick()
 	if currentTime - npc.lastResponseTime < RESPONSE_COOLDOWN then
+		print(npc.displayName .. " interaction cooldown, skipping")
 		return
 	end
 
@@ -129,11 +155,23 @@ function NPCManagerV3:handleNPCInteraction(npc, player, message)
 	local response = self:getResponseFromAI(npc, player, message)
 	if response then
 		npc.lastResponseTime = currentTime
+		print(npc.displayName .. " received AI response, processing")
 		self:processAIResponse(npc, player, response)
+	else
+		print(npc.displayName .. " did not receive AI response")
+		-- Reset interaction state after a short delay
+		delay(5, function()
+			if npc.isInteracting then
+				npc.isInteracting = false
+				npc.interactingPlayer = nil
+				print(npc.displayName .. " interaction timeout, resetting state")
+			end
+		end)
 	end
 end
 
 function NPCManagerV3:getResponseFromAI(npc, player, message)
+	print(npc.displayName .. " requesting AI response for: " .. message)
 	local perceptionData = self:getPerceptionData(npc)
 	local playerContext = self:getPlayerContext(player)
 
@@ -145,17 +183,26 @@ function NPCManagerV3:getResponseFromAI(npc, player, message)
 		system_prompt = npc.system_prompt,
 		perception = perceptionData,
 		context = playerContext,
+		limit = 200,
 	}
-
+	print("Sending data to AI:", HttpService:JSONEncode(data))
 	local success, response = pcall(function()
 		return HttpService:PostAsync(API_URL, HttpService:JSONEncode(data), Enum.HttpContentType.ApplicationJson, false)
 	end)
 
 	if success then
 		local parsed = HttpService:JSONDecode(response)
-		return parsed
+		if parsed and parsed.message then
+			print(npc.displayName .. " received AI response: " .. tostring(parsed.message))
+			return parsed
+		else
+			print(npc.displayName .. " received invalid response format")
+			return nil
+		end
+	else
+		print(npc.displayName .. " failed to get AI response. Error: " .. tostring(response))
+		return nil
 	end
-	return nil
 end
 
 function NPCManagerV3:processAIResponse(npc, player, response)
@@ -227,18 +274,23 @@ function NPCManagerV3:stopFollowing(npc)
 end
 
 function NPCManagerV3:updateNPCState(npc)
+	print("Updating NPC state for: " .. npc.displayName)
 	self:updateNPCVision(npc)
 
 	if npc.isInteracting then
+		print(npc.displayName .. " is interacting")
 		if npc.interactingPlayer and not self:isPlayerInRange(npc, npc.interactingPlayer) then
 			npc.isInteracting = false
 			npc.interactingPlayer = nil
+			print(npc.displayName .. " stopped interacting (player out of range)")
 		end
 	end
 
 	if npc.isFollowing then
+		print(npc.displayName .. " is following")
 		self:updateFollowing(npc)
 	elseif not npc.isInteracting and not npc.isMoving then
+		print(npc.displayName .. " is performing random walk")
 		self:randomWalk(npc)
 	end
 end
@@ -282,6 +334,7 @@ end
 
 function NPCManagerV3:randomWalk(npc)
 	if npc.isInteracting or npc.isMoving then
+		print(npc.displayName .. " cannot perform random walk (interacting or moving)")
 		return
 	end
 
@@ -292,17 +345,32 @@ function NPCManagerV3:randomWalk(npc)
 		local targetPosition = currentPosition + randomOffset
 
 		npc.isMoving = true
+		print(npc.displayName .. " starting random walk to " .. tostring(targetPosition))
 		humanoid:MoveTo(targetPosition)
 
-		humanoid.MoveToFinished:Wait()
-		npc.isMoving = false
+		task.spawn(function()
+			task.wait(5) -- Wait for 5 seconds or adjust as needed
+			npc.isMoving = false
+			print(npc.displayName .. " finished random walk")
+		end)
+	else
+		print(npc.displayName .. " cannot perform random walk (no Humanoid)")
 	end
 end
 
 function NPCManagerV3:getPerceptionData(npc)
+	local visibleObjects = {}
+	local visiblePlayers = {}
+	for _, entity in ipairs(npc.visibleEntities) do
+		if entity.type == "object" then
+			table.insert(visibleObjects, entity.name .. " (" .. entity.objectType .. ")")
+		elseif entity.type == "player" then
+			table.insert(visiblePlayers, entity.name)
+		end
+	end
 	return {
-		visible_objects = self:getVisibleObjects(npc),
-		visible_players = self:getVisiblePlayers(npc),
+		visible_objects = visibleObjects,
+		visible_players = visiblePlayers,
 		memory = self:getRecentMemories(npc),
 	}
 end
