@@ -175,16 +175,36 @@ function NPCManagerV3:getResponseFromAI(npc, player, message)
 	local perceptionData = self:getPerceptionData(npc)
 	local playerContext = self:getPlayerContext(player)
 
+	local systemPromptAddition = [[
+		You can perform the following actions:
+		- follow: Start following the player.
+		- unfollow: Stop following the player.
+		
+		Always respond with a message, and include an action when appropriate.
+		Ensure the response conforms **strictly** to the following JSON schema:
+		{
+			"message": "string",
+			"action": {
+				"type": "string",
+				"enum": ["follow", "unfollow", "none"]
+			},
+			"internal_state": {
+				"type": "object"
+			}
+		}
+	]]
+
 	local data = {
 		message = message,
 		player_id = tostring(player.UserId),
 		npc_id = npc.id,
 		npc_name = npc.displayName,
-		system_prompt = npc.system_prompt,
+		system_prompt = npc.system_prompt .. "\n\n" .. systemPromptAddition,
 		perception = perceptionData,
 		context = playerContext,
 		limit = 200,
 	}
+
 	print("Sending data to AI:", HttpService:JSONEncode(data))
 	local success, response = pcall(function()
 		return HttpService:PostAsync(API_URL, HttpService:JSONEncode(data), Enum.HttpContentType.ApplicationJson, false)
@@ -226,14 +246,21 @@ function NPCManagerV3:displayMessage(npc, message, player)
 end
 
 function NPCManagerV3:executeAction(npc, player, action)
+	print("Executing action: " .. action.type)
 	if action.type == "emote" and action.data and action.data.emote then
+		print("Playing emote: " .. action.data.emote)
 		self:playEmote(npc, action.data.emote)
 	elseif action.type == "move" and action.data and action.data.position then
+		print("Moving to position: " .. tostring(action.data.position))
 		self:moveNPC(npc, Vector3.new(action.data.position.x, action.data.position.y, action.data.position.z))
 	elseif action.type == "follow" then
+		print("Starting to follow player")
 		self:startFollowing(npc, player)
 	elseif action.type == "unfollow" then
+		print("Stopping following player")
 		self:stopFollowing(npc)
+	else
+		print("Unknown action type: " .. action.type)
 	end
 end
 

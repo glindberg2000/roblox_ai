@@ -1,76 +1,97 @@
-### Development Status Report for NPCManager and MainNPCScript (v2.3)
+### Development Status Report for NPCManager and MainNPCScript (v3.0)
 
----
+#### Current State
 
-#### **Current State**
-
-1. **Successful Migration to Rojo**
+1. **Successful Migration to Rojo and V3 Implementation**
    - The project has been successfully migrated to use Rojo, enhancing version control and easing development.
+   - Implemented V3 of the NPC system with improved functionality and AI integration.
 
-2. **NPC Spawning**
-   - NPCs (`Eldrin` and `Luna`) are spawning correctly based on the configuration defined in `NPCDatabase.lua`.
+2. **NPC Spawning and Management**
+   - NPCs (e.g., "Oz the Omniscient") are spawning correctly based on the configuration defined in `NPCDatabaseV3.lua`.
+   - NPCs are managed efficiently using the new `NPCManagerV3` system.
 
-3. **Basic NPC Interaction**
-   - Basic interaction functionality is in place, including click detection and AI-driven responses.
+3. **Enhanced NPC Interaction and Perception**
+   - Implemented an advanced interaction system with AI-driven responses using structured outputs.
+   - NPCs can now perceive their environment, including players and major objects (e.g., Cybertruck).
+   - Basic command system in place, including "follow me" functionality.
 
-#### **Achievements**
+4. **Improved AI Integration**
+   - Utilizing OpenAI's API with structured outputs for more controlled and contextual responses.
+   - NPCs can generate responses based on their perception of the environment and player interactions.
 
-- **Modular and Maintainable Codebase**: The migration has resulted in a more organized and scalable project structure.
-- **Configuration Management**: Simplified configuration via `NPCDatabase.lua`, which now makes NPC updates more manageable.
-- **Enhanced Debugging**: Improved logging for better error tracking and debugging during development.
+5. **Basic Memory System**
+   - Implemented a simple memory system that stores recent conversations per player.
 
----
+#### Achievements
 
-#### **Next Steps and Goals**
+- **Modular and Maintainable Codebase**: The V3 implementation has resulted in a more organized, scalable, and feature-rich project structure.
+- **Enhanced Environment Interaction**: NPCs can now perceive and interact with their surroundings more realistically.
+- **Improved AI Responses**: The use of structured outputs allows for more nuanced and context-aware NPC behaviors.
+- **Efficient Object Detection**: Implemented a system to detect major objects without getting overwhelmed by individual parts.
 
-1. **Implement NPC Movement and Routines**
-   - Develop a system to handle routines (e.g., wandering, idle states) defined in NPC configurations.
-   - Create a pathfinding system for NPCs to navigate the game world autonomously.
+#### Next Steps and Goals
 
-2. **Enhance AI Integration**
-   - Incorporate NPC backstory and traits to provide more contextually rich AI responses.
-   - Implement a memory system allowing NPCs to remember interactions with players.
+1. **Expand Command System**
+   - Implement a robust command parser in the NPC manager.
+   - Add new commands: "stop", "wait", "go to [location]", "describe [object]", etc.
+   - Create a help command to list available commands to players.
 
-3. **Develop Shared Knowledge Base**
-   - Create a system where NPCs can access and share common information about the game world, fostering a more cohesive NPC environment.
+2. **Enhance Movement Logic**
+   - Implement a patrol system for predefined paths.
+   - Add an "explore" mode for random movement between points of interest.
+   - Improve pathfinding to handle obstacles and complex terrain.
+   - Implement different movement speeds (walk, run, sneak).
 
-4. **Improve NPC Behavior**
-   - Implement more complex interaction patterns, including NPC-to-NPC interactions and time-based behaviors.
-   - Introduce emotional states or moods for NPCs to affect their responses and behaviors.
+3. **Improve Interaction System**
+   - Add gestures and emotes for NPCs to use during conversations.
+   - Implement NPC-object interactions.
+   - Create a system for handling group conversations with multiple nearby players.
 
-5. **Create In-Game NPC Management System**
-   - Develop in-game tools for adding, editing, or removing NPCs.
-   - Implement a visual interface to configure NPC properties and routines, enhancing ease of use for developers.
+4. **Enhance Memory System**
+   - Implement short-term and long-term memory structures.
+   - Store important events, player preferences, and key information about the game world.
+   - Create a system to review and consolidate memories periodically.
+   - Implement "forgetting" of less important or old memories.
 
-6. **Optimize Performance**
-   - Implement distance-based updates to reduce processing for NPCs far from players.
-   - Optimize AI call frequency and response caching for better performance.
+5. **Develop Personality and Mood System**
+   - Define personality traits for each NPC to influence their responses and behavior.
+   - Implement a mood system that changes based on interactions and events.
+   - Allow NPCs to form opinions about players based on past interactions.
 
-7. **Expand NPC Capabilities**
-   - Add support for NPC inventories and item interactions.
-   - Implement a quest-giving system and quest progression tracking for NPCs.
+6. **Implement Task and Goal System**
+   - Create a system for NPCs to have their own goals and tasks.
+   - Allow players to assign tasks to NPCs.
+   - Develop a priority system for NPC actions based on current goals and tasks.
 
-8. **Improve Testing and Stability**
-   - Develop unit tests for core NPC functionality to enhance reliability.
-   - Create automated integration tests to maintain system stability as new features are introduced.
+7. **Create Time and Schedule System**
+   - Implement a day/night cycle with scheduled NPC behaviors.
+   - Create different NPC behaviors based on the time of day.
 
-9. **Documentation and Ease of Use**
-   - Develop comprehensive documentation for all aspects of the NPC system.
-   - Create example scenes and tutorials to help developers quickly implement and customize NPCs.
+8. **Improve Environment Interaction**
+   - Enhance object detection to include more details about objects.
+   - Allow NPCs to use or manipulate objects in the environment.
+   - Implement a system for NPCs to remember locations of important objects or areas.
 
-10. **User Interface Enhancements**
+9. **Develop Dynamic Conversation Topics**
+   - Allow NPCs to initiate conversations based on recent events or observations.
+   - Implement a system for NPCs to remember and reference past conversations.
+
+10. **Optimize Performance**
+    - Manage AI call frequency based on the number of active NPCs and players.
+    - Optimize vision and object detection systems for larger environments.
+    - Consider implementing a local cache for recent AI responses.
+
+11. **Improve Testing and Stability**
+    - Develop unit tests for core NPC functionality.
+    - Create automated integration tests to maintain system stability.
+
+12. **Enhance Documentation and Ease of Use**
+    - Develop comprehensive documentation for all aspects of the NPC system.
+    - Create example scenes and tutorials for quick implementation and customization.
+
+13. **User Interface Enhancements**
     - Improve the chat interface for more engaging player-NPC interactions.
-    - Add visual indicators for NPC states and interactivity, making NPC behavior more understandable for players.
+    - Add visual indicators for NPC states and interactivity.
 
-11. **Dashboard for Managing NPCs**
-    - Develop an interactive dashboard to manage NPC properties, interactions, and routines efficiently, offering game developers a centralized tool for making in-game changes.
-
----
-
-#### **Next Priority Focus**
-
-Which of these goals would you like to focus on next? Let’s prioritize what will add the most value to your project at this stage.
-
----
-
-Feel free to use or edit this file for ongoing tracking and planning purposes. Let me know which part you’d like to tackle first, and we can proceed accordingly!
+14. **Develop NPC Management Dashboard**
+    - Create an interactive dashboard for efficient management of NPC properties, interactions, and routines.
