@@ -1,4 +1,5 @@
 -- MainNPCScript.server.lua (V3)
+-- MainNPCScript.server.lua (V3)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
@@ -9,7 +10,7 @@ local NPCManagerV3 = require(ReplicatedStorage:WaitForChild("NPCManagerV3"))
 local npcManagerV3 = NPCManagerV3.new()
 
 -- Log initialization
---Logger:logInfo("NPC system V3 initialized")
+Logger:log("NPC system V3 initialized")
 
 local function checkPlayerProximity()
 	for _, player in ipairs(Players:GetPlayers()) do
@@ -18,9 +19,7 @@ local function checkPlayerProximity()
 			for _, npc in pairs(npcManagerV3.npcs) do
 				if npc.model and npc.model.PrimaryPart then
 					local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
-					print(npc.displayName .. " distance to " .. player.Name .. ": " .. distance)
 					if distance <= npc.responseRadius and not npc.isInteracting then
-						print(npc.displayName .. " initiating interaction with " .. player.Name)
 						npcManagerV3:handleNPCInteraction(npc, player, "Hello")
 					end
 				end
@@ -54,15 +53,19 @@ end
 local function setupChatConnections()
 	Players.PlayerAdded:Connect(function(player)
 		player.Chatted:Connect(function(message)
-			onPlayerChatted(player, message)
+			local playerPosition = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+			if playerPosition then
+				for _, npc in pairs(npcManagerV3.npcs) do
+					if npc.model and npc.model.PrimaryPart then
+						local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
+						if distance <= npc.responseRadius then
+							npcManagerV3:handleNPCInteraction(npc, player, message)
+						end
+					end
+				end
+			end
 		end)
 	end)
-
-	for _, player in ipairs(Players:GetPlayers()) do
-		player.Chatted:Connect(function(message)
-			onPlayerChatted(player, message)
-		end)
-	end
 end
 
 setupChatConnections()
@@ -70,7 +73,6 @@ setupChatConnections()
 local function updateNPCs()
 	while true do
 		checkPlayerProximity()
-		print("Updating V3 NPCs, Count: " .. npcManagerV3:getNPCCount())
 		for _, npc in pairs(npcManagerV3.npcs) do
 			npcManagerV3:updateNPCState(npc)
 		end
@@ -80,4 +82,4 @@ end
 
 spawn(updateNPCs)
 
-print("NPC system V3 initialized")
+Logger:log("NPC system V3 main script running")

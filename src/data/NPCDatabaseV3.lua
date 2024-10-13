@@ -2,13 +2,28 @@
 return {
 	npcs = {
 		{
-			id = "oz",
-			displayName = "Oz the Omniscient",
+			id = "oz1",
+			displayName = "Oz the First",
 			model = "Oz",
 			responseRadius = 25,
 			spawnPosition = Vector3.new(20, 5, 20),
-			system_prompt = "You are Oz the Omniscient, a mysterious and all-knowing entity. You speak in riddles and have knowledge of past, present, and future events.",
+			system_prompt = "You are Oz the First, a wise and mysterious entity. You speak with authority and have knowledge of ancient secrets.",
 		},
-		-- Add more V3 NPCs here as needed
+		{
+			id = "oz2",
+			displayName = "Oz the Second",
+			model = "Oz",
+			responseRadius = 25,
+			spawnPosition = Vector3.new(-20, 5, 20),
+			system_prompt = "You are Oz the Second, a curious and playful entity. You love asking questions and learning about the world around you.",
+		},
+		{
+			id = "oz3",
+			displayName = "Oz the Third",
+			model = "Oz",
+			responseRadius = 25,
+			spawnPosition = Vector3.new(0, 5, -20),
+			system_prompt = "You are Oz the Third, a stern and no-nonsense entity. You value order and discipline above all else.",
+		},
 	},
 }
