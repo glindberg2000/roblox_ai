@@ -8,8 +8,18 @@ roblox/
 # Alternatively, if your virtual environment is named differently, adjust accordingly:
 # venv/
 # env/
-# .venv/
-# .env/
+.venv/
+.env/
+.env
+
+# ============================
+# Python Cache Files
+# ============================
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
 # ============================
 # Rojo Tool Directories
@@ -41,6 +51,8 @@ Thumbs.db
 
 *.log
 *.tmp
+*.pid
+*.bak
 
 # ============================
 # Node.js Dependencies (If Applicable)
@@ -62,7 +74,6 @@ node_modules/
 # Other Unwanted Files
 # ============================
 
-*.bak
 *.swp
-
+*.bak
 system_prompt_source.py

@@ -7,7 +7,7 @@ local Players = game:GetService("Players")
 local NPCManagerV3 = {}
 NPCManagerV3.__index = NPCManagerV3
 
-local API_URL = "https://www.ella-ai-care.com/robloxgpt/v3"
+local API_URL = "https://roblox.ella-ai-care.com/robloxgpt/v3"
 local RESPONSE_COOLDOWN = 1
 local FOLLOW_DURATION = 60 -- Follow for 60 seconds by default
 local MIN_FOLLOW_DISTANCE = 5 -- Minimum distance to keep from the player
@@ -27,6 +27,7 @@ end
 
 function NPCManagerV3:loadNPCDatabase()
 	local npcDatabase = require(ReplicatedStorage:WaitForChild("NPCDatabaseV3"))
+	print("Loading NPCs from database:", #npcDatabase.npcs)
 	for _, npcData in ipairs(npcDatabase.npcs) do
 		self:createNPC(npcData)
 	end

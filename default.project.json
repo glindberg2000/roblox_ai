@@ -4,14 +4,8 @@
     "$className": "DataModel",
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
-      "NPCManagerV2": {
-        "$path": "src/shared/NPCManagerV2.lua"
-      },
       "NPCManagerV3": {
         "$path": "src/shared/NPCManagerV3.lua"
-      },
-      "NPCDatabaseV2": {
-        "$path": "src/data/NPCDatabaseV2.lua"
       },
       "NPCDatabaseV3": {
         "$path": "src/data/NPCDatabaseV3.lua"
@@ -24,6 +18,9 @@
       },
       "MainNPCScript": {
         "$path": "src/server/MainNPCScript.server.lua"
+      },
+      "Logger": {
+        "$path": "src/server/Logger.lua"
       }
     },
     "StarterPlayer": {
