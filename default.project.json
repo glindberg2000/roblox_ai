@@ -21,6 +21,9 @@
       },
       "Logger": {
         "$path": "src/server/Logger.lua"
+      },
+      "InteractionController": {
+        "$path": "src/server/InteractionController.lua"
       }
     },
     "StarterPlayer": {

@@ -4,6 +4,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 local Players = game:GetService("Players")
 
+local ServerScriptService = game:GetService("ServerScriptService")
+local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
+
 local NPCManagerV3 = {}
 NPCManagerV3.__index = NPCManagerV3
 
@@ -14,6 +17,28 @@ local MIN_FOLLOW_DISTANCE = 5 -- Minimum distance to keep from the player
 local MEMORY_EXPIRATION = 3600 -- Remember players for 1 hour (in seconds)
 local VISION_RANGE = 50 -- Range in studs for NPC vision
 
+local NPC_RESPONSE_SCHEMA = {
+	type = "object",
+	properties = {
+		message = { type = "string" },
+		action = {
+			type = "object",
+			properties = {
+				type = {
+					type = "string",
+					enum = { "follow", "unfollow", "stop_interacting", "none" },
+				},
+				data = { type = "object" },
+			},
+			required = { "type" },
+			additionalProperties = false,
+		},
+		internal_state = { type = "object" },
+	},
+	required = { "message", "action" },
+	additionalProperties = false,
+}
+
 local NPCChatEvent = ReplicatedStorage:FindFirstChild("NPCChatEvent") or Instance.new("RemoteEvent")
 NPCChatEvent.Name = "NPCChatEvent"
 NPCChatEvent.Parent = ReplicatedStorage
@@ -21,6 +46,8 @@ NPCChatEvent.Parent = ReplicatedStorage
 function NPCManagerV3.new()
 	local self = setmetatable({}, NPCManagerV3)
 	self.npcs = {}
+	self.responseCache = {}
+	self.interactionController = InteractionController.new()
 	self:loadNPCDatabase()
 	return self
 end
@@ -33,9 +60,8 @@ function NPCManagerV3:loadNPCDatabase()
 	end
 end
 
--- In src/shared/NPCManagerV3.lua
-
 function NPCManagerV3:createNPC(npcData)
+	print("Creating NPC:", npcData.displayName)
 	if not workspace:FindFirstChild("NPCs") then
 		Instance.new("Folder", workspace).Name = "NPCs"
 	end
@@ -77,6 +103,8 @@ function NPCManagerV3:createNPC(npcData)
 		followStartTime = 0,
 		memory = {},
 		visibleEntities = {},
+		interactingPlayer = nil,
+		shortTermMemory = {},
 	}
 
 	-- Position the NPC
@@ -112,6 +140,147 @@ function NPCManagerV3:setupClickDetector(npc)
 	clickDetector.MouseClick:Connect(function(player)
 		self:handleNPCInteraction(npc, player, "Hello")
 	end)
+end
+
+function NPCManagerV3:handleNPCInteraction(npc, player, message)
+	if self.interactionController:isInGroupInteraction(player) then
+		self:handleGroupInteraction(npc, player, message)
+		return
+	end
+
+	if not self.interactionController:canInteract(player) then
+		local interactingNPC = self.interactionController:getInteractingNPC(player)
+		if interactingNPC ~= npc then
+			return -- Player is interacting with another NPC
+		end
+	else
+		if not self.interactionController:startInteraction(player, npc) then
+			return -- Failed to start interaction
+		end
+	end
+
+	local currentTime = tick()
+	if currentTime - npc.lastResponseTime < RESPONSE_COOLDOWN then
+		return
+	end
+
+	npc.isInteracting = true
+	npc.interactingPlayer = player
+
+	local response = self:getResponseFromAI(npc, player, message)
+	if response then
+		npc.lastResponseTime = currentTime
+		self:processAIResponse(npc, player, response)
+	else
+		self:endInteraction(npc, player)
+	end
+end
+
+function NPCManagerV3:handleGroupInteraction(npc, player, message)
+	local group = self.interactionController:getGroupParticipants(player)
+	local messages = {}
+	for _, participant in ipairs(group) do
+		table.insert(messages, { player = participant, message = message })
+	end
+	local response = self:getGroupResponseFromAI(npc, group, messages)
+	self:processGroupAIResponse(npc, group, response)
+end
+
+function NPCManagerV3:getResponseFromAI(npc, player, message)
+	local interactionState = self.interactionController:getInteractionState(player)
+	local playerMemory = npc.shortTermMemory[player.UserId] or {}
+
+	local cacheKey = self:getCacheKey(npc, player, message)
+	if self.responseCache[cacheKey] then
+		return self.responseCache[cacheKey]
+	end
+
+	local data = {
+		message = message,
+		player_id = tostring(player.UserId),
+		npc_id = npc.id,
+		npc_name = npc.displayName,
+		system_prompt = npc.system_prompt,
+		perception = self:getPerceptionData(npc),
+		context = self:getPlayerContext(player),
+		interaction_state = interactionState,
+		memory = playerMemory,
+		limit = 200,
+	}
+
+	local success, response = pcall(function()
+		return HttpService:PostAsync(API_URL, HttpService:JSONEncode(data), Enum.HttpContentType.ApplicationJson, false)
+	end)
+
+	if success then
+		self:log("Raw API response: " .. response)
+		local parsed = HttpService:JSONDecode(response)
+		self:log("Parsed API response: " .. HttpService:JSONEncode(parsed))
+		if parsed and parsed.message then
+			self:log("Parsed API response: " .. HttpService:JSONEncode(parsed))
+			self.responseCache[cacheKey] = parsed
+			npc.shortTermMemory[player.UserId] = {
+				lastInteractionTime = tick(),
+				recentTopics = parsed.topics_discussed or {},
+			}
+			return parsed
+		else
+			self:log("Invalid response format received from API")
+		end
+	else
+		self:log("Failed to get AI response: " .. tostring(response))
+	end
+
+	return nil
+end
+
+function NPCManagerV3:log(message)
+	print("[NPCManagerV3] " .. os.date("%Y-%m-%d %H:%M:%S") .. ": " .. message)
+end
+
+function NPCManagerV3:processAIResponse(npc, player, response)
+	print("Processing AI response for " .. npc.displayName .. ":")
+	print(HttpService:JSONEncode(response))
+
+	if response.action and response.action.type == "stop_interacting" then
+		print("Stopping interaction as per AI response")
+		self:endInteraction(npc, player)
+		return
+	end
+
+	if response.message then
+		print("Displaying message: " .. response.message)
+		self:displayMessage(npc, response.message, player)
+	end
+
+	if response.action then
+		print("Executing action: " .. HttpService:JSONEncode(response.action))
+		self:executeAction(npc, player, response.action)
+	end
+
+	if response.internal_state then
+		print("Updating internal state: " .. HttpService:JSONEncode(response.internal_state))
+		self:updateInternalState(npc, response.internal_state)
+	end
+end
+
+function NPCManagerV3:endInteraction(npc, player)
+	npc.isInteracting = false
+	npc.interactingPlayer = nil
+	self.interactionController:endInteraction(player)
+	-- Remove this line to prevent the message from appearing in the chat
+	-- NPCChatEvent:FireClient(player, npc.displayName, "The interaction has ended.")
+	self:log("Interaction ended between " .. npc.displayName .. " and " .. player.Name)
+end
+
+function NPCManagerV3:getCacheKey(npc, player, message)
+	local context = {
+		npcId = npc.id,
+		playerId = player.UserId,
+		message = message,
+		memory = npc.shortTermMemory[player.UserId],
+	}
+	return HttpService:JSONEncode(context)
 end
 
 function NPCManagerV3:updateNPCVision(npc)
@@ -170,104 +339,6 @@ function NPCManagerV3:updateNPCVision(npc)
 	print(npc.displayName .. " vision update complete. Visible entities: " .. #npc.visibleEntities)
 end
 
-function NPCManagerV3:handleNPCInteraction(npc, player, message)
-	print(npc.displayName .. " handling interaction with " .. player.Name .. ": " .. message)
-	local currentTime = tick()
-	if currentTime - npc.lastResponseTime < RESPONSE_COOLDOWN then
-		print(npc.displayName .. " interaction cooldown, skipping")
-		return
-	end
-
-	npc.isInteracting = true
-	npc.interactingPlayer = player
-
-	local response = self:getResponseFromAI(npc, player, message)
-	if response then
-		npc.lastResponseTime = currentTime
-		print(npc.displayName .. " received AI response, processing")
-		self:processAIResponse(npc, player, response)
-	else
-		print(npc.displayName .. " did not receive AI response")
-		-- Reset interaction state after a short delay
-		delay(5, function()
-			if npc.isInteracting then
-				npc.isInteracting = false
-				npc.interactingPlayer = nil
-				print(npc.displayName .. " interaction timeout, resetting state")
-			end
-		end)
-	end
-end
-
-function NPCManagerV3:getResponseFromAI(npc, player, message)
-	print(npc.displayName .. " requesting AI response for: " .. message)
-	local perceptionData = self:getPerceptionData(npc)
-	local playerContext = self:getPlayerContext(player)
-
-	local systemPromptAddition = [[
-		You can perform the following actions:
-		- follow: Start following the player.
-		- unfollow: Stop following the player.
-		
-		Always respond with a message, and include an action when appropriate.
-		Ensure the response conforms **strictly** to the following JSON schema:
-		{
-			"message": "string",
-			"action": {
-				"type": "string",
-				"enum": ["follow", "unfollow", "none"]
-			},
-			"internal_state": {
-				"type": "object"
-			}
-		}
-	]]
-
-	local data = {
-		message = message,
-		player_id = tostring(player.UserId),
-		npc_id = npc.id,
-		npc_name = npc.displayName,
-		system_prompt = npc.system_prompt .. "\n\n" .. systemPromptAddition,
-		perception = perceptionData,
-		context = playerContext,
-		limit = 200,
-	}
-
-	print("Sending data to AI:", HttpService:JSONEncode(data))
-	local success, response = pcall(function()
-		return HttpService:PostAsync(API_URL, HttpService:JSONEncode(data), Enum.HttpContentType.ApplicationJson, false)
-	end)
-
-	if success then
-		local parsed = HttpService:JSONDecode(response)
-		if parsed and parsed.message then
-			print(npc.displayName .. " received AI response: " .. tostring(parsed.message))
-			return parsed
-		else
-			print(npc.displayName .. " received invalid response format")
-			return nil
-		end
-	else
-		print(npc.displayName .. " failed to get AI response. Error: " .. tostring(response))
-		return nil
-	end
-end
-
-function NPCManagerV3:processAIResponse(npc, player, response)
-	if response.message then
-		self:displayMessage(npc, response.message, player)
-	end
-
-	if response.action then
-		self:executeAction(npc, player, response.action)
-	end
-
-	if response.internal_state then
-		self:updateInternalState(npc, response.internal_state)
-	end
-end
-
 function NPCManagerV3:displayMessage(npc, message, player)
 	local ChatService = game:GetService("Chat")
 	ChatService:Chat(npc.model.Head, message, Enum.ChatColor.Blue)
@@ -275,22 +346,37 @@ function NPCManagerV3:displayMessage(npc, message, player)
 end
 
 function NPCManagerV3:executeAction(npc, player, action)
-	print("Executing action: " .. action.type)
-	if action.type == "emote" and action.data and action.data.emote then
-		print("Playing emote: " .. action.data.emote)
-		self:playEmote(npc, action.data.emote)
-	elseif action.type == "move" and action.data and action.data.position then
-		print("Moving to position: " .. tostring(action.data.position))
-		self:moveNPC(npc, Vector3.new(action.data.position.x, action.data.position.y, action.data.position.z))
-	elseif action.type == "follow" then
-		print("Starting to follow player")
+	self:log("Executing action: " .. action.type .. " for " .. npc.displayName)
+	if action.type == "follow" then
+		self:log("Starting to follow player: " .. player.Name)
 		self:startFollowing(npc, player)
 	elseif action.type == "unfollow" then
-		print("Stopping following player")
+		self:log("Stopping following player: " .. player.Name)
 		self:stopFollowing(npc)
+	elseif action.type == "emote" and action.data and action.data.emote then
+		self:log("Playing emote: " .. action.data.emote)
+		self:playEmote(npc, action.data.emote)
+	elseif action.type == "move" and action.data and action.data.position then
+		self:log("Moving to position: " .. tostring(action.data.position))
+		self:moveNPC(npc, Vector3.new(action.data.position.x, action.data.position.y, action.data.position.z))
 	else
-		print("Unknown action type: " .. action.type)
+		self:log("Unknown action type: " .. action.type)
 	end
+end
+
+function NPCManagerV3:startFollowing(npc, player)
+	self:log(npc.displayName .. " starting to follow " .. player.Name)
+	npc.isFollowing = true
+	npc.followTarget = player
+	npc.followStartTime = tick()
+	self:log(
+		"Follow state set for "
+			.. npc.displayName
+			.. ": isFollowing="
+			.. tostring(npc.isFollowing)
+			.. ", followTarget="
+			.. player.Name
+	)
 end
 
 function NPCManagerV3:updateInternalState(npc, internalState)
@@ -318,36 +404,21 @@ function NPCManagerV3:moveNPC(npc, targetPosition)
 	end
 end
 
-function NPCManagerV3:startFollowing(npc, player)
-	npc.isFollowing = true
-	npc.followTarget = player
-	npc.followStartTime = tick()
-end
-
 function NPCManagerV3:stopFollowing(npc)
 	npc.isFollowing = false
 	npc.followTarget = nil
 end
 
 function NPCManagerV3:updateNPCState(npc)
-	if not npc.model or not npc.model.Parent then
-		warn("NPC " .. npc.displayName .. " model is missing or destroyed. Removing from NPCs table.")
-		self.npcs[npc.id] = nil
-		return
-	end
-
 	self:updateNPCVision(npc)
-
-	if npc.isInteracting then
-		if npc.interactingPlayer and not self:isPlayerInRange(npc, npc.interactingPlayer) then
-			npc.isInteracting = false
-			npc.interactingPlayer = nil
-		end
-	end
 
 	if npc.isFollowing then
 		self:updateFollowing(npc)
-	elseif not npc.isInteracting and not npc.isMoving then
+	elseif npc.isInteracting then
+		if npc.interactingPlayer and not self:isPlayerInRange(npc, npc.interactingPlayer) then
+			self:endInteraction(npc, npc.interactingPlayer)
+		end
+	elseif not npc.isMoving then
 		self:randomWalk(npc)
 	end
 end
@@ -365,29 +436,35 @@ end
 
 function NPCManagerV3:updateFollowing(npc)
 	if not npc.followTarget or not npc.followTarget.Character then
+		self:log(npc.displayName .. ": Follow target lost, stopping follow")
 		self:stopFollowing(npc)
 		return
 	end
 
-	local currentTime = tick()
-	if currentTime - npc.followStartTime > FOLLOW_DURATION then
+	local targetPosition = npc.followTarget.Character:FindFirstChild("HumanoidRootPart")
+	if not targetPosition then
+		self:log(npc.displayName .. ": Cannot find target position, stopping follow")
 		self:stopFollowing(npc)
 		return
 	end
 
-	local humanoid = npc.model:FindFirstChild("Humanoid")
-	if humanoid then
-		local targetPosition = npc.followTarget.Character.HumanoidRootPart.Position
-		local npcPosition = npc.model.PrimaryPart.Position
-		local direction = (targetPosition - npcPosition).Unit
-		local distanceToTarget = (targetPosition - npcPosition).Magnitude
+	local npcPosition = npc.model.PrimaryPart.Position
+	local direction = (targetPosition.Position - npcPosition).Unit
+	local distance = (targetPosition.Position - npcPosition).Magnitude
 
-		if distanceToTarget > MIN_FOLLOW_DISTANCE + 1 then
-			local newPosition = npcPosition + direction * (distanceToTarget - MIN_FOLLOW_DISTANCE)
-			humanoid:MoveTo(newPosition)
-		else
-			humanoid:Move(Vector3.new(0, 0, 0)) -- Stop moving if close enough
-		end
+	if distance > MIN_FOLLOW_DISTANCE + 1 then
+		local newPosition = npcPosition + direction * (distance - MIN_FOLLOW_DISTANCE)
+		self:log(npc.displayName .. " moving to " .. tostring(newPosition))
+		npc.model.Humanoid:MoveTo(newPosition)
+	else
+		self:log(npc.displayName .. " is close enough to target")
+		npc.model.Humanoid:Move(Vector3.new(0, 0, 0)) -- Stop moving
+	end
+
+	-- Check if follow duration has expired
+	if tick() - npc.followStartTime > FOLLOW_DURATION then
+		self:log(npc.displayName .. ": Follow duration expired, stopping follow")
+		self:stopFollowing(npc)
 	end
 end
 
@@ -482,6 +559,33 @@ end
 function NPCManagerV3:getNPCLocation(player)
 	-- Implementation depends on how you represent locations in your game
 	return "Unknown"
+end
+
+function NPCManagerV3:testFollowFunctionality(npcId, playerId)
+	local npc = self.npcs[npcId]
+	local player = Players:GetPlayerByUserId(playerId)
+	if npc and player then
+		self:log("Testing follow functionality for NPC: " .. npc.displayName)
+		self:startFollowing(npc, player)
+		wait(5) -- Wait for 5 seconds
+		self:updateFollowing(npc)
+		wait(5) -- Wait another 5 seconds
+		self:stopFollowing(npc)
+		self:log("Follow test completed for NPC: " .. npc.displayName)
+	else
+		self:log("Failed to find NPC or player for follow test")
+	end
+end
+
+function NPCManagerV3:testFollowCommand(npcId, playerId)
+	local npc = self.npcs[npcId]
+	local player = game.Players:GetPlayerByUserId(playerId)
+	if npc and player then
+		self:log("Testing follow command for " .. npc.displayName)
+		self:startFollowing(npc, player)
+	else
+		self:log("Failed to find NPC or player for follow test")
+	end
 end
 
 return NPCManagerV3

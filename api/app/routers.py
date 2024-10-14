@@ -29,12 +29,12 @@ class EnhancedChatMessageV3(BaseModel):
     limit: int = 200
 
 class NPCAction(BaseModel):
-    type: Literal["follow", "unfollow", "none"]
+    type: Literal["follow", "unfollow", "stop_talking", "none"]
     data: Optional[Dict[str, Any]] = None
 
 class NPCResponseV3(BaseModel):
     message: str
-    action: Optional[NPCAction] = None
+    action: NPCAction
     internal_state: Optional[Dict[str, Any]] = None
 
 NPC_RESPONSE_SCHEMA = {
@@ -46,7 +46,7 @@ NPC_RESPONSE_SCHEMA = {
             "properties": {
                 "type": {
                     "type": "string",
-                    "enum": ["follow", "unfollow", "none"]
+                    "enum": ["follow", "unfollow", "stop_talking", "none"]
                 }
             },
             "required": ["type"],
