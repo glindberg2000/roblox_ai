@@ -33,6 +33,8 @@ function NPCManagerV3:loadNPCDatabase()
 	end
 end
 
+-- In src/shared/NPCManagerV3.lua
+
 function NPCManagerV3:createNPC(npcData)
 	if not workspace:FindFirstChild("NPCs") then
 		Instance.new("Folder", workspace).Name = "NPCs"
@@ -46,6 +48,20 @@ function NPCManagerV3:createNPC(npcData)
 
 	local npcModel = model:Clone()
 	npcModel.Parent = workspace.NPCs
+
+	-- Check for necessary parts
+	local humanoidRootPart = npcModel:FindFirstChild("HumanoidRootPart")
+	local humanoid = npcModel:FindFirstChildOfClass("Humanoid")
+	local head = npcModel:FindFirstChild("Head")
+
+	if not humanoidRootPart or not humanoid or not head then
+		warn("NPC model " .. npcData.displayName .. " is missing essential parts. Skipping creation.")
+		npcModel:Destroy()
+		return
+	end
+
+	-- Ensure the model has a PrimaryPart
+	npcModel.PrimaryPart = humanoidRootPart
 
 	local npc = {
 		model = npcModel,
@@ -63,9 +79,12 @@ function NPCManagerV3:createNPC(npcData)
 		visibleEntities = {},
 	}
 
+	-- Position the NPC
+	humanoidRootPart.CFrame = CFrame.new(npcData.spawnPosition)
+
 	self:setupClickDetector(npc)
 	self.npcs[npc.id] = npc
-	print("V3 NPC added to table: " .. npc.displayName .. ", Total NPCs: " .. self:getNPCCount())
+	print("V3 NPC added: " .. npc.displayName .. ", Total NPCs: " .. self:getNPCCount())
 end
 
 function NPCManagerV3:getNPCCount()
@@ -79,7 +98,16 @@ end
 function NPCManagerV3:setupClickDetector(npc)
 	local clickDetector = Instance.new("ClickDetector")
 	clickDetector.MaxActivationDistance = npc.responseRadius
-	clickDetector.Parent = npc.model.PrimaryPart
+
+	-- Try to parent to HumanoidRootPart, if not available, use any BasePart
+	local parent = npc.model:FindFirstChild("HumanoidRootPart") or npc.model:FindFirstChildWhichIsA("BasePart")
+
+	if parent then
+		clickDetector.Parent = parent
+	else
+		warn("Could not find suitable part for ClickDetector on " .. npc.displayName)
+		return
+	end
 
 	clickDetector.MouseClick:Connect(function(player)
 		self:handleNPCInteraction(npc, player, "Hello")
@@ -302,31 +330,34 @@ function NPCManagerV3:stopFollowing(npc)
 end
 
 function NPCManagerV3:updateNPCState(npc)
-	print("Updating NPC state for: " .. npc.displayName)
+	if not npc.model or not npc.model.Parent then
+		warn("NPC " .. npc.displayName .. " model is missing or destroyed. Removing from NPCs table.")
+		self.npcs[npc.id] = nil
+		return
+	end
+
 	self:updateNPCVision(npc)
 
 	if npc.isInteracting then
-		print(npc.displayName .. " is interacting")
 		if npc.interactingPlayer and not self:isPlayerInRange(npc, npc.interactingPlayer) then
 			npc.isInteracting = false
 			npc.interactingPlayer = nil
-			print(npc.displayName .. " stopped interacting (player out of range)")
 		end
 	end
 
 	if npc.isFollowing then
-		print(npc.displayName .. " is following")
 		self:updateFollowing(npc)
 	elseif not npc.isInteracting and not npc.isMoving then
-		print(npc.displayName .. " is performing random walk")
 		self:randomWalk(npc)
 	end
 end
 
 function NPCManagerV3:isPlayerInRange(npc, player)
 	local playerPosition = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if playerPosition and npc.model.PrimaryPart then
-		local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
+	local npcPosition = npc.model and npc.model.PrimaryPart
+
+	if playerPosition and npcPosition then
+		local distance = (playerPosition.Position - npcPosition.Position).Magnitude
 		return distance <= npc.responseRadius
 	end
 	return false
