@@ -340,8 +340,10 @@ function NPCManagerV3:updateNPCVision(npc)
 end
 
 function NPCManagerV3:displayMessage(npc, message, player)
-	local ChatService = game:GetService("Chat")
-	ChatService:Chat(npc.model.Head, message, Enum.ChatColor.Blue)
+	-- Remove the ChatService call, as it's likely causing the duplicate message
+	-- ChatService:Chat(npc.model.Head, message, Enum.ChatColor.Blue)
+
+	-- Only fire the event to the specific player
 	NPCChatEvent:FireClient(player, npc.displayName, message)
 end
 
