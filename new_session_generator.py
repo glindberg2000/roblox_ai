@@ -8,7 +8,7 @@ DOCUMENTATION_FILES = ['README.md', 'DEV.md']
 OUTPUT_FILE = 'system_prompt_source.py'
 EXCLUDE_FILE_EXTENSIONS = ['.pyc', '.log', '.tmp', '.bak', '.toml']
 EXCLUDE_DIRECTORIES = ['.git', '.venv', 'venv', 'env', 'roblox']
-EXCLUDE_FILES = ['new_session_generator.py', 'system_prompt_source.py']
+EXCLUDE_FILES = ['new_session_generator.py', 'system_prompt_source.py', 'setup_roblox_project.py','sourcemap.json']
 API_FILE = '../ella_www/robloxgpt.py'  # Relative path to the API file
 
 # Function to determine if a directory is a virtual environment

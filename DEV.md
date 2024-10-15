@@ -95,3 +95,65 @@
 
 14. **Develop NPC Management Dashboard**
     - Create an interactive dashboard for efficient management of NPC properties, interactions, and routines.
+
+
+    ### Development Status Report for NPCManager and MainNPCScript (v3.1)
+
+#### Current State
+
+1. **Successful Migration to Rojo and V3 Implementation**
+   - Project successfully migrated to use Rojo, enhancing version control and easing development.
+   - V3 of the NPC system implemented with improved functionality and AI integration.
+
+2. **NPC Spawning and Management**
+   - NPCs spawning correctly based on the configuration in `NPCDatabaseV3.lua`.
+   - NPCs efficiently managed using the `NPCManagerV3` system.
+
+3. **Enhanced NPC Interaction and Perception**
+   - Advanced interaction system implemented with AI-driven responses using structured outputs.
+   - NPCs can perceive their environment, including players and major objects.
+   - Basic command system in place, with functioning "follow me" command.
+
+4. **Improved AI Integration**
+   - Utilizing OpenAI's API with structured outputs for controlled and contextual responses.
+   - NPCs generate responses based on their perception of the environment and player interactions.
+
+5. **Basic Memory System**
+   - Simple memory system implemented, storing recent conversations per player.
+
+#### Achievements
+
+- **Modular and Maintainable Codebase**: V3 implementation resulted in a more organized, scalable, and feature-rich project structure.
+- **Enhanced Environment Interaction**: NPCs can perceive and interact with surroundings more realistically.
+- **Improved AI Responses**: Structured outputs allow for more nuanced and context-aware NPC behaviors.
+- **Efficient Object Detection**: System implemented to detect major objects without getting overwhelmed by individual parts.
+
+#### Current Issues and Next Steps
+
+1. **Fix Unfollow Command**
+   - Debug and fix the unfollow command to ensure it works correctly.
+
+2. **Redesign Clustering System**
+   - Rethink and redesign the clustering system for NPC interactions.
+   - Develop a more efficient and context-aware approach to manage multiple NPCs in proximity.
+
+3. **Implement New Clustering System**
+   - After finalizing the pseudocode for the new clustering system, implement and integrate it into the existing codebase.
+
+4. **Expand Command System**
+   - Implement a robust command parser in the NPC manager.
+   - Add new commands: "stop", "wait", "go to [location]", "describe [object]", etc.
+   - Create a help command to list available commands to players.
+
+5. **Enhance Movement Logic**
+   - Implement a patrol system for predefined paths.
+   - Add an "explore" mode for random movement between points of interest.
+   - Improve pathfinding to handle obstacles and complex terrain.
+   - Implement different movement speeds (walk, run, sneak).
+
+6. **Improve Interaction System**
+   - Add gestures and emotes for NPCs to use during conversations.
+   - Implement NPC-object interactions.
+   - Create a system for handling group conversations with multiple nearby players.
+
+[... rest of the goals remain the same as in the previous version ...]

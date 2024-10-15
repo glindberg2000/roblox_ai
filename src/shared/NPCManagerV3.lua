@@ -352,7 +352,7 @@ function NPCManagerV3:executeAction(npc, player, action)
 	if action.type == "follow" then
 		self:log("Starting to follow player: " .. player.Name)
 		self:startFollowing(npc, player)
-	elseif action.type == "unfollow" then
+	elseif action.type == "unfollow" or (action.type == "none" and npc.isFollowing) then
 		self:log("Stopping following player: " .. player.Name)
 		self:stopFollowing(npc)
 	elseif action.type == "emote" and action.data and action.data.emote then
@@ -409,6 +409,18 @@ end
 function NPCManagerV3:stopFollowing(npc)
 	npc.isFollowing = false
 	npc.followTarget = nil
+	npc.followStartTime = nil
+
+	-- Actively stop the NPC's movement
+	local humanoid = npc.model:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid:MoveTo(npc.model.PrimaryPart.Position)
+		humanoid.WalkSpeed = 0 -- Temporarily set walk speed to 0
+		wait(0.5) -- Wait a short time
+		humanoid.WalkSpeed = 16 -- Reset to default walk speed
+	end
+
+	self:log(npc.displayName .. " stopped following and movement halted")
 end
 
 function NPCManagerV3:updateNPCState(npc)
@@ -437,6 +449,9 @@ function NPCManagerV3:isPlayerInRange(npc, player)
 end
 
 function NPCManagerV3:updateFollowing(npc)
+	if not npc.isFollowing then
+		return -- Exit early if not following
+	end
 	if not npc.followTarget or not npc.followTarget.Character then
 		self:log(npc.displayName .. ": Follow target lost, stopping follow")
 		self:stopFollowing(npc)
@@ -588,6 +603,32 @@ function NPCManagerV3:testFollowCommand(npcId, playerId)
 	else
 		self:log("Failed to find NPC or player for follow test")
 	end
+end
+
+function NPCManagerV3:getInteractionClusters(player)
+	local clusters = {}
+	local playerPosition = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not playerPosition then
+		return clusters
+	end
+
+	for _, npc in pairs(self.npcs) do
+		local distance = (npc.model.PrimaryPart.Position - playerPosition.Position).Magnitude
+		if distance <= npc.responseRadius then
+			local addedToCluster = false
+			for _, cluster in ipairs(clusters) do
+				if (cluster.center - npc.model.PrimaryPart.Position).Magnitude < 10 then -- Adjust this threshold as needed
+					table.insert(cluster.npcs, npc)
+					addedToCluster = true
+					break
+				end
+			end
+			if not addedToCluster then
+				table.insert(clusters, { center = npc.model.PrimaryPart.Position, npcs = { npc } })
+			end
+		end
+	end
+	return clusters
 end
 
 return NPCManagerV3

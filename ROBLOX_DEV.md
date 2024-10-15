@@ -170,3 +170,84 @@ Before we start coding, we should:
 4. Create templates for personalized greetings
 5. Design the new logging system
 
+# AI-Driven NPC System Development Status (v3.1)
+
+## Current State
+
+1. **Successful Implementation of Structured Outputs**
+   - Utilizing OpenAI's beta.chat.completions.parse for structured NPC responses.
+   - Implemented NPCResponseV3 Pydantic model for consistent response structure.
+
+2. **Enhanced Error Handling and Logging**
+   - Specific handling for OpenAI API errors and model refusals.
+   - Improved logging for better debugging and monitoring.
+
+3. **Robust Conversation Management**
+   - Implemented ConversationManager for maintaining chat history.
+   - Context-aware responses including environment perception and recent memories.
+
+4. **Improved NPC Interaction and Perception**
+   - NPCs can perceive their environment, including visible objects and players.
+   - Implemented basic memory system for recent interactions.
+
+5. **Integrated FastAPI Backend**
+   - Successfully connected Roblox game with FastAPI backend for NPC interactions.
+   - Implemented /robloxgpt/v3 endpoint for handling NPC requests.
+
+## Achievements
+
+- **Modular and Maintainable Codebase**: Improved code structure with clear separation of concerns.
+- **Enhanced AI Responses**: Utilizing Structured Outputs for more controlled and contextual NPC behaviors.
+- **Improved Error Resilience**: Better handling of API errors and edge cases.
+
+## Next Steps and Goals
+
+1. **Refine Greeting Behavior**
+   - Implement more sophisticated initial interaction logic.
+   - Develop personalized greeting system based on player history.
+
+2. **Enhance Contextual Awareness**
+   - Expand the context object to include more game state information.
+   - Implement a more robust "mental model" for NPCs.
+
+3. **Optimize Performance**
+   - Implement caching mechanisms to reduce API calls.
+   - Fine-tune update intervals for smoother NPC behavior.
+
+4. **Expand NPC Capabilities**
+   - Implement more complex behavior patterns.
+   - Add support for NPC-to-NPC interactions.
+
+5. **Improve Conversation Flow**
+   - Implement topic tracking and context-based conversation steering.
+   - Develop mechanism for NPCs to remember and reference past interactions.
+
+6. **Enhance Decision-Making Process**
+   - Develop a more sophisticated system for NPC action choices.
+   - Implement priority-based interaction system for multiple nearby players.
+
+7. **Implement Advanced Logging System**
+   - Create tiered logging with separation of technical logs and NPC "thoughts".
+   - Develop a system for analyzing NPC behavior patterns over time.
+
+8. **Expand Testing and Quality Assurance**
+   - Develop comprehensive unit and integration tests.
+   - Implement automated testing for NPC behaviors and interactions.
+
+9. **Enhance Security and Rate Limiting**
+   - Implement more robust API key management.
+   - Develop rate limiting system to prevent abuse and manage costs.
+
+10. **Improve Documentation and Onboarding**
+    - Create comprehensive documentation for the NPC system.
+    - Develop tutorials and examples for extending NPC capabilities.
+
+## Current Challenges
+
+- Ensuring consistent and contextually appropriate initial NPC interactions.
+- Balancing API call frequency with responsiveness of NPC behaviors.
+- Managing the complexity of NPC decision-making while maintaining performance.
+
+## Conclusion
+
+The AI-driven NPC system has made significant progress, particularly in implementing Structured Outputs and improving error handling. The focus now shifts to enhancing the NPCs' contextual awareness, refining their behavior patterns, and optimizing the system's performance and scalability.
