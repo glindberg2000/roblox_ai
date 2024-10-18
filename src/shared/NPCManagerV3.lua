@@ -186,6 +186,19 @@ function NPCManagerV3:handleGroupInteraction(npc, player, message)
 	self:processGroupAIResponse(npc, group, response)
 end
 
+-- Function to get the player's description
+local function getPlayerDescription(player)
+	local playerDescFolder = ReplicatedStorage:FindFirstChild("PlayerDescriptions")
+	if playerDescFolder then
+		local description = playerDescFolder:FindFirstChild(player.Name)
+		if description then
+			return description.Value
+		end
+	end
+	return "No description available."
+end
+
+-- Modified getResponseFromAI to include player description
 function NPCManagerV3:getResponseFromAI(npc, player, message)
 	local interactionState = self.interactionController:getInteractionState(player)
 	local playerMemory = npc.shortTermMemory[player.UserId] or {}
@@ -195,12 +208,16 @@ function NPCManagerV3:getResponseFromAI(npc, player, message)
 		return self.responseCache[cacheKey]
 	end
 
+	-- Get the player's avatar description
+	local playerDescription = getPlayerDescription(player)
+
+	-- Update the prompt to include the player's description
 	local data = {
 		message = message,
 		player_id = tostring(player.UserId),
 		npc_id = npc.id,
 		npc_name = npc.displayName,
-		system_prompt = npc.system_prompt,
+		system_prompt = npc.system_prompt .. "\n\nPlayer Description: " .. playerDescription,
 		perception = self:getPerceptionData(npc),
 		context = self:getPlayerContext(player),
 		interaction_state = interactionState,
@@ -208,6 +225,7 @@ function NPCManagerV3:getResponseFromAI(npc, player, message)
 		limit = 200,
 	}
 
+	-- Make the API call
 	local success, response = pcall(function()
 		return HttpService:PostAsync(API_URL, HttpService:JSONEncode(data), Enum.HttpContentType.ApplicationJson, false)
 	end)
