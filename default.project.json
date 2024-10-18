@@ -19,6 +19,9 @@
       "MainNPCScript": {
         "$path": "src/server/MainNPCScript.server.lua"
       },
+      "PlayerJoinHandler": {
+        "$path": "src/server/PlayerJoinHandler.server.lua"
+      },
       "Logger": {
         "$path": "src/server/Logger.lua"
       },
