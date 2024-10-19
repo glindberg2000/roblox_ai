@@ -301,6 +301,19 @@ function NPCManagerV3:getCacheKey(npc, player, message)
 	return HttpService:JSONEncode(context)
 end
 
+-- Require the Asset Database
+local AssetDatabase = require(game.ServerScriptService.AssetDatabase)
+
+-- Function to lookup asset data by name
+local function getAssetData(assetName)
+	for _, asset in ipairs(AssetDatabase.assets) do
+		if asset.name == assetName then
+			return asset
+		end
+	end
+	return nil -- Return nil if the asset is not found
+end
+
 function NPCManagerV3:updateNPCVision(npc)
 	print("Updating vision for " .. npc.displayName)
 	npc.visibleEntities = {}
@@ -321,7 +334,8 @@ function NPCManagerV3:updateNPCVision(npc)
 		end
 	end
 
-	-- Detect objects
+	-- Detect objects and fetch descriptions from AssetDatabase
+	-- Detect objects and fetch descriptions from AssetDatabase
 	local detectedObjects = {}
 	for _, object in ipairs(workspace:GetChildren()) do
 		if object:IsA("Model") and object ~= npc.model then
@@ -329,25 +343,48 @@ function NPCManagerV3:updateNPCVision(npc)
 			if primaryPart then
 				local distance = (primaryPart.Position - npcPosition).Magnitude
 				if distance <= VISION_RANGE then
-					local objectType = object:GetAttribute("ObjectType") or "Unknown"
-					local key = object.Name .. "_" .. objectType
-					if not detectedObjects[key] then
-						detectedObjects[key] = true
-						table.insert(npc.visibleEntities, {
-							type = "object",
-							name = object.Name,
-							objectType = objectType,
-							distance = distance,
-						})
-						print(
-							npc.displayName
-								.. " sees object: "
-								.. object.Name
-								.. " (Type: "
-								.. objectType
-								.. ") at distance: "
-								.. distance
-						)
+					-- Fetch asset data from the AssetDatabase
+					local assetData = getAssetData(object.Name)
+					if assetData then
+						local key = object.Name .. "_" .. assetData.assetId
+						if not detectedObjects[key] then
+							detectedObjects[key] = true
+							table.insert(npc.visibleEntities, {
+								type = "object",
+								name = assetData.name,
+								objectType = assetData.description, -- Use description as the object type
+								distance = distance,
+								imageUrl = assetData.imageUrl, -- Optionally include the image URL
+							})
+							print(
+								npc.displayName
+									.. " sees object: "
+									.. assetData.name
+									.. " (Description: "
+									.. assetData.description
+									.. ") at distance: "
+									.. distance
+							)
+						end
+					else
+						-- If asset data is not found, fall back to default behavior
+						local key = object.Name .. "_Unknown"
+						if not detectedObjects[key] then
+							detectedObjects[key] = true
+							table.insert(npc.visibleEntities, {
+								type = "object",
+								name = object.Name,
+								objectType = "Unknown",
+								distance = distance,
+							})
+							print(
+								npc.displayName
+									.. " sees object: "
+									.. object.Name
+									.. " (Type: Unknown) at distance: "
+									.. distance
+							)
+						end
 					end
 				end
 			end

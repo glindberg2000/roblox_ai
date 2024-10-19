@@ -9,6 +9,9 @@
       },
       "NPCDatabaseV3": {
         "$path": "src/data/NPCDatabaseV3.lua"
+      },
+      "LocalDB": {
+        "$className": "Folder"
       }
     },
     "ServerScriptService": {
@@ -27,6 +30,12 @@
       },
       "InteractionController": {
         "$path": "src/server/InteractionController.lua"
+      },
+      "AssetInitializer": {
+        "$path": "src/server/AssetInitializer.server.lua"
+      },
+      "AssetDatabase": {
+        "$path": "src/data/AssetDatabase.lua"
       }
     },
     "StarterPlayer": {

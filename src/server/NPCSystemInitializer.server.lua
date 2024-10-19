@@ -1,6 +1,6 @@
--- In NPCSystemInitializer.server.lua
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+-- Initialize events for NPC chat and interaction
 if not ReplicatedStorage:FindFirstChild("NPCChatEvent") then
 	local NPCChatEvent = Instance.new("RemoteEvent")
 	NPCChatEvent.Name = "NPCChatEvent"
