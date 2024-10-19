@@ -394,12 +394,15 @@ function NPCManagerV3:updateNPCVision(npc)
 	print(npc.displayName .. " vision update complete. Visible entities: " .. #npc.visibleEntities)
 end
 
-function NPCManagerV3:displayMessage(npc, message, player)
-	-- Remove the ChatService call, as it's likely causing the duplicate message
-	-- ChatService:Chat(npc.model.Head, message, Enum.ChatColor.Blue)
+local ChatService = game:GetService("Chat")
 
-	-- Only fire the event to the specific player
-	NPCChatEvent:FireClient(player, npc.displayName, message)
+-- In the displayMessage function:
+function NPCManagerV3:displayMessage(npc, message, player)
+    -- Display chat bubble
+    ChatService:Chat(npc.model.Head, message, Enum.ChatColor.Blue)
+
+    -- Fire event to display in chat box
+    NPCChatEvent:FireClient(player, npc.displayName, message)
 end
 
 function NPCManagerV3:executeAction(npc, player, action)

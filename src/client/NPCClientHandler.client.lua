@@ -10,6 +10,7 @@ NPCChatEvent.OnClientEvent:Connect(function(npcName, message)
 	if message ~= "The interaction has ended." then
 		print("Received NPC message on client: " .. npcName .. " - " .. message)
 
+		-- Display in chat box
 		local textChannel = TextChatService.TextChannels.RBXGeneral
 		if textChannel then
 			textChannel:DisplaySystemMessage(npcName .. ": " .. message)
