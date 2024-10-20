@@ -12,6 +12,9 @@
       },
       "LocalDB": {
         "$className": "Folder"
+      },
+      "AssetModule": {
+        "$path": "src/shared/AssetModule.lua"
       }
     },
     "ServerScriptService": {

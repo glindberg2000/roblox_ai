@@ -14,14 +14,26 @@ def save_json_database(file_path: str, data: Dict):
         json.dump(data, f, indent=2)
 
 def save_lua_database(file_path: str, data: Dict):
+    def escape_lua_string(s):
+        # Replace newlines with \n and escape any existing backslashes
+        s = s.replace('\\', '\\\\').replace('\n', '\\n')
+        # Replace double quotes with single quotes
+        s = s.replace('"', "'")
+        return s
+
     content = "return {\n  assets = {\n"
     for asset in data['assets']:
         content += "    {\n"
         for key, value in asset.items():
             if key == 'assetId':
                 content += f'      assetId = "{value}", -- {asset["name"]}\n'
+            elif key == 'description':
+                # Use [[ ]] for description to avoid issues with quotes and special characters
+                escaped_value = escape_lua_string(value)
+                content += f'      {key} = [[{escaped_value}]],\n'
             else:
-                content += f'      {key} = "{value}",\n'
+                escaped_value = escape_lua_string(value)
+                content += f'      {key} = "{escaped_value}",\n'
         content += "    },\n"
     content += "  }\n}"
     
