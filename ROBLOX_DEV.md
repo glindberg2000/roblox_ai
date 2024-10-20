@@ -251,3 +251,112 @@ Before we start coding, we should:
 ## Conclusion
 
 The AI-driven NPC system has made significant progress, particularly in implementing Structured Outputs and improving error handling. The focus now shifts to enhancing the NPCs' contextual awareness, refining their behavior patterns, and optimizing the system's performance and scalability.
+
+
+# AI-Driven NPC System Development Status (v3.2)
+
+## Current State
+
+1. **Successful Implementation of Structured Outputs**
+   - Utilizing OpenAI's beta.chat.completions.parse for structured NPC responses.
+   - Implemented NPCResponseV3 Pydantic model for consistent response structure.
+
+2. **Enhanced Error Handling and Logging**
+   - Specific handling for OpenAI API errors and model refusals.
+   - Improved logging for better debugging and monitoring.
+
+3. **Robust Conversation Management**
+   - Implemented ConversationManager for maintaining chat history.
+   - Context-aware responses including environment perception and recent memories.
+
+4. **Improved NPC Interaction and Perception**
+   - NPCs can perceive their environment, including visible objects and players.
+   - Implemented basic memory system for recent interactions.
+
+5. **Integrated FastAPI Backend**
+   - Successfully connected Roblox game with FastAPI backend for NPC interactions.
+   - Implemented /robloxgpt/v3 endpoint for handling NPC requests.
+
+6. **AssetDB API and Local DB Implementation**
+   - Developed AssetDatabase for storing asset information.
+   - Created AssetInitializer for populating LocalDB in ReplicatedStorage.
+   - Implemented AssetModule for accessing asset data from scripts.
+
+7. **Console Tools for Asset Management**
+   - Created update_asset_descriptions.py for managing asset descriptions.
+   - Implemented functionality to update JSON and Lua databases.
+
+## Achievements
+
+- **Modular and Maintainable Codebase**: Improved code structure with clear separation of concerns.
+- **Enhanced AI Responses**: Utilizing Structured Outputs for more controlled and contextual NPC behaviors.
+- **Improved Error Resilience**: Better handling of API errors and edge cases.
+- **Efficient Asset Management**: Streamlined process for updating and accessing asset information.
+
+## Next Steps and Goals
+
+1. **Fix Asset Search Glitches**
+   - Investigate and resolve issues with certain assets not being detected in-game.
+   - Ensure consistent asset visibility across all game environments.
+
+2. **Enhance NPC Vision and Perception**
+   - Prioritize newly visible items in NPC perception.
+   - Implement immediate, natural reactions to new objects entering NPC's vision.
+   - Develop system for NPCs to comment on obvious new elements without player prompting.
+
+3. **Improve Conversation Switching and Locking**
+   - Implement clear conversation locking mechanism for multiple nearby NPCs.
+   - Enable conversation switching when player calls NPC by name.
+   - Refine conversation locking to only activate after player responds to NPC.
+
+4. **Refine Greeting Behavior**
+   - Implement more sophisticated initial interaction logic.
+   - Develop personalized greeting system based on player history.
+
+5. **Enhance Contextual Awareness**
+   - Expand the context object to include more game state information.
+   - Implement a more robust "mental model" for NPCs.
+
+6. **Optimize Performance**
+   - Implement caching mechanisms to reduce API calls.
+   - Fine-tune update intervals for smoother NPC behavior.
+
+7. **Expand NPC Capabilities**
+   - Implement more complex behavior patterns.
+   - Add support for NPC-to-NPC interactions.
+
+8. **Improve Conversation Flow**
+   - Implement topic tracking and context-based conversation steering.
+   - Develop mechanism for NPCs to remember and reference past interactions.
+
+9. **Enhance Decision-Making Process**
+   - Develop a more sophisticated system for NPC action choices.
+   - Implement priority-based interaction system for multiple nearby players.
+
+10. **Implement Advanced Logging System**
+    - Create tiered logging with separation of technical logs and NPC "thoughts".
+    - Develop a system for analyzing NPC behavior patterns over time.
+
+11. **Expand Testing and Quality Assurance**
+    - Develop comprehensive unit and integration tests.
+    - Implement automated testing for NPC behaviors and interactions.
+
+12. **Enhance Security and Rate Limiting**
+    - Implement more robust API key management.
+    - Develop rate limiting system to prevent abuse and manage costs.
+
+13. **Improve Documentation and Onboarding**
+    - Create comprehensive documentation for the NPC system.
+    - Develop tutorials and examples for extending NPC capabilities.
+
+## Current Challenges
+
+- Ensuring consistent asset detection and visibility in-game.
+- Balancing NPC responsiveness to new stimuli with natural conversation flow.
+- Managing complex conversation dynamics with multiple NPCs in proximity.
+- Optimizing API call frequency while maintaining responsive NPC behaviors.
+- Handling the increasing complexity of NPC decision-making while maintaining performance.
+
+## Conclusion
+
+The AI-driven NPC system continues to evolve, with significant improvements in asset management and structured AI responses. The focus for the next development phase is on enhancing the NPCs' perceptual abilities, refining conversation dynamics, and resolving asset visibility issues. These improvements aim to create more natural and engaging NPC interactions, further enhancing the player experience in the game world.
