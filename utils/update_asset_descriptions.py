@@ -3,7 +3,7 @@ import argparse
 import requests
 from typing import Dict
 
-API_URL = "https://roblox.ella-ai-care.com/get_asset_description"
+API_URL = "http://localhost:8000/get_asset_description"  # Update this URL if your API is hosted elsewhere
 
 def load_json_database(file_path: str) -> Dict:
     with open(file_path, 'r') as f:
@@ -40,12 +40,17 @@ def save_lua_database(file_path: str, data: Dict):
     with open(file_path, 'w') as f:
         f.write(content)
 
-def get_asset_description(asset_id: str) -> Dict[str, str]:
-    response = requests.post(API_URL, json={"asset_id": asset_id})
-    if response.status_code == 200:
-        return response.json()
-    else:
-        print(f"Error getting description for asset {asset_id}: {response.text}")
+def get_asset_description(asset_id: str, asset_name: str) -> Dict[str, str]:
+    try:
+        response = requests.post(API_URL, json={"asset_id": asset_id, "name": asset_name})
+        response.raise_for_status()
+        data = response.json()
+        return {
+            "description": data.get("description", ""),
+            "imageUrl": data.get("imageUrl", "")
+        }
+    except requests.RequestException as e:
+        print(f"Error getting description for asset {asset_id}: {str(e)}")
         return {"description": "", "imageUrl": ""}
 
 def update_asset_descriptions(
@@ -66,7 +71,7 @@ def update_asset_descriptions(
         if not overwrite and asset.get('description'):
             continue
         
-        new_data = get_asset_description(asset['assetId'])
+        new_data = get_asset_description(asset['assetId'], asset['name'])
         if new_data["description"]:
             asset['description'] = new_data["description"]
             asset['imageUrl'] = new_data["imageUrl"]

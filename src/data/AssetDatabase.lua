@@ -7,12 +7,6 @@ return {
       imageUrl = "https://tr.rbxcdn.com/180DAY-e30fdf43661440a435b6e64373fb3850/420/420/Model/Png/noFilter",
     },
     {
-      assetId = "2958312667", -- Jeep
-      name = "Jeep",
-      description = [[The Roblox asset features a minimalist white jeep with a simple boxy design. It has a flat front with large, black, diamond-shaped headlights. The vehicle has two seats and an open top, with a basic roll bar. Its wheels are round and blue, enhancing the playful aesthetic of the overall design.]],
-      imageUrl = "https://tr.rbxcdn.com/180DAY-bcf240f1e2246a2d0e6edc3f80dc37a6/420/420/Model/Png/noFilter",
-    },
-    {
       assetId = "13292405039", -- Road Sign Stop
       name = "Road Sign Stop",
       description = [[The Roblox asset features a classic stop sign, characterized by an octagonal red sign mounted on a simple gray pole. The word STOP is prominently displayed in bold, white capital letters across the center. The design is minimalistic, reflecting typical traffic signage, suitable for various game environments.]],
@@ -41,6 +35,18 @@ return {
       name = "2021 Koenigsegg Jesko",
       description = [[This Roblox asset features a sleek, futuristic sports car design, predominantly white with striking yellow accents and a distinct black lower trim. It showcases large, intricate wheels with a blue trim, enhancing its sporty appearance. The cockpit design reflects advanced technology, with a streamlined, aerodynamic profile.]],
       imageUrl = "https://tr.rbxcdn.com/180DAY-81147d53d894d53b12c354d5ad84f934/420/420/Model/Png/noFilter",
+    },
+    {
+      assetId = "2958312667", -- Jeep
+      name = "Jeep",
+      description = [[The Roblox asset features a simple, low-poly white jeep design. It has rounded edges, a flat front, and distinctive diamond-shaped black headlights. The open-top design includes two upright bars as a roll cage. It sits on large blue-tinted wheels, enhancing its playful, cartoonish look, suitable for various in-game environments.]],
+      imageUrl = "https://tr.rbxcdn.com/180DAY-bcf240f1e2246a2d0e6edc3f80dc37a6/420/420/Model/Png/noFilter",
+    },
+    {
+      assetId = "10800319010", -- Seek Killer
+      name = "Seek Killer",
+      description = [[The asset features a slender, humanoid figure primarily in black, evoking a shadowy appearance. It has an exaggerated, large white eye on its head, contrasting sharply with the dark body. The figure stands still, with a slightly angular aesthetic, giving it a mysterious, eerie vibe typical of horror-themed Roblox assets.]],
+      imageUrl = "https://tr.rbxcdn.com/180DAY-2abe0a46275383b4ad40cc0737d7a351/420/420/Model/Png/noFilter",
     },
   }
 }

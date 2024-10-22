@@ -1,4 +1,7 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 import os
 
@@ -19,12 +22,28 @@ logging.basicConfig(
 logger = logging.getLogger("roblox_app")
 logger.setLevel(logging.DEBUG)  # Ensure that this logger captures DEBUG-level logs
 
-
 # Create FastAPI app
 app = FastAPI()
 
+# Set up CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
 # Include router
 app.include_router(router)
+
+# Mount the static files directory
+app.mount("/static", StaticFiles(directory="."), name="static")
+
+# Serve the dashboard.html file
+@app.get("/")
+async def serve_dashboard():
+    return FileResponse("dashboard.html")
 
 # Optionally add startup and shutdown events
 @app.on_event("startup")
