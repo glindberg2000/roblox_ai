@@ -45,8 +45,20 @@ return {
     {
       assetId = "10800319010", -- Seek Killer
       name = "Seek Killer",
-      description = [[The asset features a slender, humanoid figure primarily in black, evoking a shadowy appearance. It has an exaggerated, large white eye on its head, contrasting sharply with the dark body. The figure stands still, with a slightly angular aesthetic, giving it a mysterious, eerie vibe typical of horror-themed Roblox assets.]],
+      description = [[The asset features a slender, humanoid figure primarily in black, evoking a shadowy appearance. It has an exaggerated, large white eye on its head, contrasting sharply with the dark body. The figure stands still, with a slightly angular aesthetic, giving it a mysterious, eerie vibe typical of horror-themed Roblox assets. This is a potentially dangerous NPC.]],
       imageUrl = "https://tr.rbxcdn.com/180DAY-2abe0a46275383b4ad40cc0737d7a351/420/420/Model/Png/noFilter",
+    },
+    {
+      assetId = "14768974964", -- Wizard
+      name = "Wizard",
+      description = [[The image features a Roblox character dressed as a wizard. He wears a blue robe adorned with moon and star patterns, complemented by a tall, pointed hat that matches the robe’s design. His yellow face has a cheerful expression and a long, grey beard. He holds a wand, adding to the magical theme of the attire.]],
+      imageUrl = "https://tr.rbxcdn.com/180DAY-f4f52167be26db9f9c2fd4dc24ec3e2d/420/420/Model/Png/noFilter",
+    },
+    {
+      assetId = "17733882513", -- Caseoh Backpack
+      name = "Caseoh Backpack",
+      description = [[The Roblox asset features a stylized character with an orange head and limbs, wearing a black outfit that displays the word 'CASEOH.' The character is seated while holding a hamburger in one hand. Notable is the unusual backpack-like structure extending behind, enhancing the playful design typical to Roblox assets.]],
+      imageUrl = "https://tr.rbxcdn.com/180DAY-bed39e70b9f5dd5b995f099cc0eb67d1/420/420/Hat/Png/noFilter",
     },
   }
 }

@@ -1,3 +1,5 @@
+#update_asset_descriptions.py
+
 import json
 import argparse
 import requests

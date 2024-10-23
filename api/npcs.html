@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roblox Asset Management Dashboard</title>
+    <title>NPC Management Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -70,10 +70,10 @@
                 <div class="items-center justify-between hidden w-full md:flex md:w-auto md:order-1" id="navbar-cta">
                     <ul class="flex flex-col font-medium p-4 md:p-0 mt-4 border border-gray-100 rounded-lg bg-gray-50 md:flex-row md:space-x-8 md:mt-0 md:border-0 md:bg-white dark:bg-gray-800 md:dark:bg-gray-800 dark:border-gray-700">
                         <li>
-                            <a href="/" class="block py-2 pl-3 pr-4 text-white bg-blue-700 rounded md:bg-transparent md:text-blue-700 md:p-0 md:dark:text-blue-500" aria-current="page">Assets</a>
+                            <a href="/" class="block py-2 pl-3 pr-4 text-gray-900 rounded hover:bg-gray-100 md:hover:bg-transparent md:hover:text-blue-700 md:p-0 md:dark:hover:text-blue-500 dark:text-white dark:hover:bg-gray-700 dark:hover:text-white md:dark:hover:bg-transparent dark:border-gray-700">Assets</a>
                         </li>
                         <li>
-                            <a href="/npcs" class="block py-2 pl-3 pr-4 text-gray-900 rounded hover:bg-gray-100 md:hover:bg-transparent md:hover:text-blue-700 md:p-0 md:dark:hover:text-blue-500 dark:text-white dark:hover:bg-gray-700 dark:hover:text-white md:dark:hover:bg-transparent dark:border-gray-700">NPCs</a>
+                            <a href="/npcs" class="block py-2 pl-3 pr-4 text-white bg-blue-700 rounded md:bg-transparent md:text-blue-700 md:p-0 md:dark:text-blue-500" aria-current="page">NPCs</a>
                         </li>
                         <li>
                             <a href="/players" class="block py-2 pl-3 pr-4 text-gray-900 rounded hover:bg-gray-100 md:hover:bg-transparent md:hover:text-blue-700 md:p-0 md:dark:hover:text-blue-500 dark:text-white dark:hover:bg-gray-700 dark:hover:text-white md:dark:hover:bg-transparent dark:border-gray-700">Players</a>
@@ -84,26 +84,22 @@
         </nav>
 
         <main class="flex-grow container mx-auto mt-8 px-4">
-            <section id="assets" class="mb-12">
-                <h2 class="text-2xl font-bold mb-4 dark:text-white">Assets</h2>
-                <div class="mb-4">
-                    <button onclick="showAddAssetModal()" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-                        Add New Asset
-                    </button>
-                </div>
+            <section id="npcs" class="mb-12">
+                <h2 class="text-2xl font-bold mb-4 dark:text-white">NPCs</h2>
                 <div class="overflow-x-auto relative shadow-md sm:rounded-lg">
                     <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
                         <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
                             <tr>
-                                <th scope="col" class="py-3 px-6">Asset ID</th>
+                                <th scope="col" class="py-3 px-6">ID</th>
                                 <th scope="col" class="py-3 px-6">Name</th>
                                 <th scope="col" class="py-3 px-6">Description</th>
-                                <th scope="col" class="py-3 px-6">Image</th>
+                                <th scope="col" class="py-3 px-6">Asset ID</th>
+                                <th scope="col" class="py-3 px-6">Additional Assets</th>
                                 <th scope="col" class="py-3 px-6">Actions</th>
                             </tr>
                         </thead>
-                        <tbody id="assetTableBody">
-                            <!-- Asset rows will be inserted here -->
+                        <tbody id="npcTableBody">
+                            <!-- NPC rows will be inserted here -->
                         </tbody>
                     </table>
                 </div>
@@ -111,70 +107,43 @@
         </main>
     </div>
 
-    <!-- Add Asset Modal -->
-    <div id="addAssetModal" class="fixed z-10 inset-0 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <!-- Edit NPC Modal -->
+    <div id="editNPCModal" class="fixed z-10 inset-0 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
         <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
             <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
             <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
                 <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                     <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
-                        Add New Asset
+                        Edit NPC
                     </h3>
                     <div class="mt-2">
-                        <form id="addAssetForm">
+                        <form id="editNPCForm">
+                            <input type="hidden" id="editNPCId">
                             <div class="mb-4">
-                                <label for="assetId" class="block text-gray-700 text-sm font-bold mb-2">Asset ID:</label>
-                                <input type="text" id="assetId" name="assetId" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+                                <label for="editNPCName" class="block text-gray-700 text-sm font-bold mb-2">Name:</label>
+                                <input type="text" id="editNPCName" name="editNPCName" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
                             </div>
                             <div class="mb-4">
-                                <label for="assetName" class="block text-gray-700 text-sm font-bold mb-2">Asset Name:</label>
-                                <input type="text" id="assetName" name="assetName" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+                                <label for="editNPCDescription" class="block text-gray-700 text-sm font-bold mb-2">Description:</label>
+                                <textarea id="editNPCDescription" name="editNPCDescription" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" rows="4" required></textarea>
+                            </div>
+                            <div class="mb-4">
+                                <label for="editNPCAssetID" class="block text-gray-700 text-sm font-bold mb-2">Asset ID:</label>
+                                <input type="text" id="editNPCAssetID" name="editNPCAssetID" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+                            </div>
+                            <div class="mb-4">
+                                <label for="editNPCAdditionalAssets" class="block text-gray-700 text-sm font-bold mb-2">Additional Assets:</label>
+                                <input type="text" id="editNPCAdditionalAssets" name="editNPCAdditionalAssets" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="Comma-separated list of asset IDs">
                             </div>
                         </form>
                     </div>
                 </div>
                 <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                    <button type="button" onclick="addAsset()" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm">
-                        Add Asset
-                    </button>
-                    <button type="button" onclick="hideAddAssetModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-                        Cancel
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Edit Asset Modal -->
-    <div id="editAssetModal" class="fixed z-10 inset-0 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
-            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                    <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
-                        Edit Asset
-                    </h3>
-                    <div class="mt-2">
-                        <form id="editAssetForm">
-                            <input type="hidden" id="editAssetId">
-                            <div class="mb-4">
-                                <label for="editAssetName" class="block text-gray-700 text-sm font-bold mb-2">Asset Name:</label>
-                                <input type="text" id="editAssetName" name="editAssetName" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
-                            </div>
-                            <div class="mb-4">
-                                <label for="editAssetDescription" class="block text-gray-700 text-sm font-bold mb-2">Description:</label>
-                                <textarea id="editAssetDescription" name="editAssetDescription" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" rows="4" required></textarea>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                    <button type="button" onclick="saveEditedAsset()" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm">
+                    <button type="button" onclick="saveEditedNPC()" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm">
                         Save Changes
                     </button>
-                    <button type="button" onclick="hideEditAssetModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                    <button type="button" onclick="hideEditNPCModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
                         Cancel
                     </button>
                 </div>
@@ -183,39 +152,40 @@
     </div>
 
     <script>
-        // Fetch asset data
-        fetch('/assets')
+        // Fetch NPC data
+        fetch('/npcs')
             .then(response => response.json())
             .then(data => {
-                displayAssets(data.assets);
+                displayNPCs(data.npcs);
             })
             .catch(error => console.error('Error:', error));
 
-        // Display assets in the table
-        function displayAssets(assets) {
-            const tableBody = document.getElementById('assetTableBody');
+        // Display NPCs in the table
+        function displayNPCs(npcs) {
+            const tableBody = document.getElementById('npcTableBody');
             tableBody.innerHTML = ''; // Clear existing content
-            assets.forEach(asset => {
+            npcs.forEach(npc => {
                 const row = document.createElement('tr');
                 row.className = 'bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600';
                 row.innerHTML = `
-                    <td class="py-4 px-6">${asset.id}</td>
-                    <td class="py-4 px-6">${asset.name}</td>
-                    <td class="py-4 px-6">${asset.description}</td>
-                    <td class="py-4 px-6"><img src="${asset.image_url}" alt="${asset.name}" class="w-16 h-16 object-cover"></td>
+                    <td class="py-4 px-6">${npc.id}</td>
+                    <td class="py-4 px-6">${npc.name}</td>
+                    <td class="py-4 px-6">${npc.description}</td>
+                    <td class="py-4 px-6">${npc.assetID}</td>
+                    <td class="py-4 px-6">${npc.additionalAssets.join(', ')}</td>
                     <td class="py-4 px-6">
-                        <button onclick="showEditAssetModal('${asset.id}', '${asset.name}', '${asset.description}')" class="font-medium text-blue-600 dark:text-blue-500 hover:underline">Edit</button>
-                        <button onclick="deleteAsset('${asset.id}')" class="font-medium text-red-600 dark:text-red-500 hover:underline ml-2">Delete</button>
+                        <button onclick="showEditNPCModal('${npc.id}', '${npc.name}', '${npc.description}', '${npc.assetID}', '${npc.additionalAssets.join(',')}')" class="font-medium text-blue-600 dark:text-blue-500 hover:underline">Edit</button>
+                        <button onclick="deleteNPC('${npc.id}')" class="font-medium text-red-600 dark:text-red-500 hover:underline ml-2">Delete</button>
                     </td>
                 `;
                 tableBody.appendChild(row);
             });
         }
 
-        // Delete asset function
-        function deleteAsset(id) {
-            if (confirm('Are you sure you want to delete this asset?')) {
-                fetch(`/delete_asset/${id}`, { method: 'DELETE' })
+        // Delete NPC function
+        function deleteNPC(id) {
+            if (confirm('Are you sure you want to delete this NPC?')) {
+                fetch(`/delete_npc/${id}`, { method: 'DELETE' })
                     .then(response => response.json())
                     .then(data => {
                         alert(data.message);
@@ -225,75 +195,45 @@
             }
         }
 
-        // Show Add Asset Modal
-        function showAddAssetModal() {
-            document.getElementById('addAssetModal').classList.remove('hidden');
+        // Show Edit NPC Modal
+        function showEditNPCModal(id, name, description, assetID, additionalAssets) {
+            document.getElementById('editNPCId').value = id;
+            document.getElementById('editNPCName').value = name;
+            document.getElementById('editNPCDescription').value = description;
+            document.getElementById('editNPCAssetID').value = assetID;
+            document.getElementById('editNPCAdditionalAssets').value = additionalAssets;
+            document.getElementById('editNPCModal').classList.remove('hidden');
         }
 
-        // Hide Add Asset Modal
-        function hideAddAssetModal() {
-            document.getElementById('addAssetModal').classList.add('hidden');
+        // Hide Edit NPC Modal
+        function hideEditNPCModal() {
+            document.getElementById('editNPCModal').classList.add('hidden');
         }
 
-        // Add Asset function
-        function addAsset() {
-            const assetId = document.getElementById('assetId').value;
-            const assetName = document.getElementById('assetName').value;
+        // Save Edited NPC
+        function saveEditedNPC() {
+            const id = document.getElementById('editNPCId').value;
+            const name = document.getElementById('editNPCName').value;
+            const description = document.getElementById('editNPCDescription').value;
+            const assetID = document.getElementById('editNPCAssetID').value;
+            const additionalAssets = document.getElementById('editNPCAdditionalAssets').value.split(',').map(s => s.trim());
 
-            fetch('/add_asset', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ asset_id: assetId, name: assetName }),
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert('Asset added successfully');
-                hideAddAssetModal();
-                location.reload(); // Reload the page to reflect changes
-            })
-            .catch((error) => {
-                console.error('Error:', error);
-                alert('Failed to add asset');
-            });
-        }
-
-        // Show Edit Asset Modal
-        function showEditAssetModal(id, name, description) {
-            document.getElementById('editAssetId').value = id;
-            document.getElementById('editAssetName').value = name;
-            document.getElementById('editAssetDescription').value = description;
-            document.getElementById('editAssetModal').classList.remove('hidden');
-        }
-
-        // Hide Edit Asset Modal
-        function hideEditAssetModal() {
-            document.getElementById('editAssetModal').classList.add('hidden');
-        }
-
-        // Save Edited Asset
-        function saveEditedAsset() {
-            const id = document.getElementById('editAssetId').value;
-            const name = document.getElementById('editAssetName').value;
-            const description = document.getElementById('editAssetDescription').value;
-
-            fetch(`/edit_asset/${id}`, {
+            fetch(`/edit_npc/${id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ id, name, description }),
+                body: JSON.stringify({ id, name, description, assetID, additionalAssets }),
             })
             .then(response => response.json())
             .then(data => {
                 alert(data.message);
-                hideEditAssetModal();
+                hideEditNPCModal();
                 location.reload(); // Reload the page to reflect changes
             })
             .catch((error) => {
                 console.error('Error:', error);
-                alert('Failed to edit asset');
+                alert('Failed to edit NPC');
             });
         }
 

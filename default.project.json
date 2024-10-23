@@ -8,7 +8,7 @@
         "$path": "src/shared/NPCManagerV3.lua"
       },
       "NPCDatabaseV3": {
-        "$path": "src/data/NPCDatabaseV3.lua"
+        "$path": "src/data/NPCDatabase.lua"
       },
       "LocalDB": {
         "$className": "Folder"

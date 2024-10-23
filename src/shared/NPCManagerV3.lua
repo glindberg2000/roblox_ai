@@ -398,11 +398,11 @@ local ChatService = game:GetService("Chat")
 
 -- In the displayMessage function:
 function NPCManagerV3:displayMessage(npc, message, player)
-    -- Display chat bubble
-    ChatService:Chat(npc.model.Head, message, Enum.ChatColor.Blue)
+	-- Display chat bubble
+	ChatService:Chat(npc.model.Head, message, Enum.ChatColor.Blue)
 
-    -- Fire event to display in chat box
-    NPCChatEvent:FireClient(player, npc.displayName, message)
+	-- Fire event to display in chat box
+	NPCChatEvent:FireClient(player, npc.displayName, message)
 end
 
 function NPCManagerV3:executeAction(npc, player, action)
