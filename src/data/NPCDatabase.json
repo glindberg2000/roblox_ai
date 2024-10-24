@@ -10,29 +10,31 @@
                 "y": 5,
                 "z": 20
             },
-            "system_prompt": "You are Oz the First, a wise and mysterious entity. You speak with authority and have knowledge of ancient secrets.",
+            "system_prompt": "You are a very wise and mysterious ancient old entity. You speak with authority and have knowledge of ancient secrets.",
             "shortTermMemory": [],
-            "assetID": "asset_oz1"
+            "assetID": "14768974964",
+            "thumbnailUrl": "https://tr.rbxcdn.com/180DAY-f4f52167be26db9f9c2fd4dc24ec3e2d/420/420/Model/Png/noFilter"
         },
         {
             "id": "luna",
             "displayName": "Luna the Stargazer",
             "model": "Luna",
-            "responseRadius": 25,
+            "responseRadius": 26,
             "spawnPosition": {
                 "x": 0,
                 "y": 5,
                 "z": -20
             },
-            "system_prompt": "You are Luna the Stargazer, a celestial being with deep knowledge of the cosmos. You speak in poetic verses and often relate things to celestial bodies.",
+            "system_prompt": "You are Luna the Stargazer, a celestial entity with deep knowledge of the cosmos. You speak in poetic verses and often relate things to celestial bodies.",
             "shortTermMemory": [],
-            "assetID": "14768974964"
+            "assetID": "14768974964",
+            "thumbnailUrl": "https://tr.rbxcdn.com/180DAY-f4f52167be26db9f9c2fd4dc24ec3e2d/420/420/Model/Png/noFilter"
         },
         {
             "id": "pete",
             "displayName": "Pete the Kid",
             "model": "Pete",
-            "responseRadius": 20,
+            "responseRadius": 10,
             "spawnPosition": {
                 "x": -15,
                 "y": 5,
@@ -40,7 +42,8 @@
             },
             "system_prompt": "You are Pete, a typical 10-year-old kid who loves baseball. You're energetic, curious, and sometimes use kid-friendly slang. You're always excited to talk about sports, especially baseball, and you're proud of your glasses because they help you see the ball better.",
             "shortTermMemory": [],
-            "assetID": "asset_pete"
+            "assetID": "asset_pete",
+            "thumbnailUrl": null
         },
         {
             "id": "cyclops",

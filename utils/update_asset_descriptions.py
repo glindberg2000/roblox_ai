@@ -3,7 +3,9 @@
 import json
 import argparse
 import requests
-from typing import Dict
+from typing import Dict, Any
+import logging
+logger = logging.getLogger("roblox_app")
 
 API_URL = "http://localhost:8000/get_asset_description"  # Update this URL if your API is hosted elsewhere
 
@@ -15,33 +17,71 @@ def save_json_database(file_path: str, data: Dict):
     with open(file_path, 'w') as f:
         json.dump(data, f, indent=2)
 
-def save_lua_database(file_path: str, data: Dict):
-    def escape_lua_string(s):
-        # Replace newlines with \n and escape any existing backslashes
-        s = s.replace('\\', '\\\\').replace('\n', '\\n')
-        # Replace double quotes with single quotes
-        s = s.replace('"', "'")
-        return s
-
-    content = "return {\n  assets = {\n"
-    for asset in data['assets']:
-        content += "    {\n"
-        for key, value in asset.items():
-            if key == 'assetId':
-                content += f'      assetId = "{value}", -- {asset["name"]}\n'
-            elif key == 'description':
-                # Use [[ ]] for description to avoid issues with quotes and special characters
-                escaped_value = escape_lua_string(value)
-                content += f'      {key} = [[{escaped_value}]],\n'
-            else:
-                escaped_value = escape_lua_string(value)
-                content += f'      {key} = "{escaped_value}",\n'
-        content += "    },\n"
-    content += "  }\n}"
-    
-    with open(file_path, 'w') as f:
-        f.write(content)
-
+def save_lua_database(path: str, data: Dict[str, Any]) -> None:
+    """Save data to a Lua database file with proper Roblox formatting."""
+    try:
+        with open(path, 'w') as f:
+            f.write("return {\n")
+            
+            # Handle assets table
+            if "assets" in data:
+                f.write("    assets = {\n")
+                for asset in data["assets"]:
+                    f.write("        {\n")
+                    f.write(f'            assetId = "{asset["assetId"]}",\n')
+                    f.write(f'            name = "{asset["name"]}",\n')
+                    # Escape any quotes in the description
+                    description = asset["description"].replace('"', '\\"')
+                    f.write(f'            description = "{description}",\n')
+                    f.write(f'            imageUrl = "{asset["imageUrl"]}",\n')
+                    f.write("        },\n")
+                f.write("    },\n")
+            
+            # Handle NPCs table with proper Roblox formatting
+            if "npcs" in data:
+                f.write("    npcs = {\n")
+                for npc in data["npcs"]:
+                    f.write("        {\n")
+                    # Required fields
+                    f.write(f'            id = "{npc["id"]}",\n')
+                    f.write(f'            displayName = "{npc["displayName"]}",\n')
+                    f.write(f'            model = "{npc["model"]}",\n')
+                    f.write(f'            responseRadius = {npc["responseRadius"]},\n')
+                    
+                    # Convert spawn position to Vector3
+                    spawn_pos = npc["spawnPosition"]
+                    f.write(f'            spawnPosition = Vector3.new({spawn_pos["x"]}, {spawn_pos["y"]}, {spawn_pos["z"]}),\n')
+                    
+                    # System prompt with escaped quotes
+                    system_prompt = npc["system_prompt"].replace('"', '\\"')
+                    f.write(f'            system_prompt = "{system_prompt}",\n')
+                    
+                    # Optional fields with defaults
+                    f.write(f'            shortTermMemory = {{}},\n')
+                    f.write(f'            assetID = "{npc.get("assetID", "")}", -- For asset linking\n')
+                    
+                    f.write("        },\n")
+                f.write("    },\n")
+            
+            # Handle players table
+            if "players" in data:
+                f.write("    players = {\n")
+                for player in data["players"]:
+                    f.write("        {\n")
+                    f.write(f'            playerID = "{player["playerID"]}",\n')
+                    f.write(f'            displayName = "{player["displayName"]}",\n')
+                    if "description" in player:
+                        description = player["description"].replace('"', '\\"')
+                        f.write(f'            description = "{description}",\n')
+                    f.write("        },\n")
+                f.write("    },\n")
+            
+            f.write("}\n")
+            
+        logger.info(f"Successfully saved Lua database to {path}")
+    except Exception as e:
+        logger.error(f"Error saving Lua database to {path}: {e}")
+        raise
 def get_asset_description(asset_id: str, asset_name: str) -> Dict[str, str]:
     try:
         response = requests.post(API_URL, json={"asset_id": asset_id, "name": asset_name})

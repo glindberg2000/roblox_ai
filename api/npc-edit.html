@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit NPC</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+</head>
+
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h1 class="text-2xl font-bold mb-6">Edit NPC</h1>
+            <form id="npcEditForm" class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Basic Info -->
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">ID</label>
+                            <input type="text" id="id" name="id" class="mt-1 block w-full border rounded-md shadow-sm"
+                                readonly>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Display Name</label>
+                            <input type="text" id="displayName" name="displayName"
+                                class="mt-1 block w-full border rounded-md shadow-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Model Name</label>
+                            <input type="text" id="model" name="model"
+                                class="mt-1 block w-full border rounded-md shadow-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Asset ID</label>
+                            <input type="text" id="assetID" name="assetID"
+                                class="mt-1 block w-full border rounded-md shadow-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Response Radius</label>
+                            <input type="number" id="responseRadius" name="responseRadius"
+                                class="mt-1 block w-full border rounded-md shadow-sm">
+                        </div>
+                    </div>
+
+                    <!-- Spawn Position and System Prompt -->
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Spawn Position X</label>
+                            <input type="number" id="spawnPosition.x" name="spawnPosition.x"
+                                class="mt-1 block w-full border rounded-md shadow-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Spawn Position Y</label>
+                            <input type="number" id="spawnPosition.y" name="spawnPosition.y"
+                                class="mt-1 block w-full border rounded-md shadow-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Spawn Position Z</label>
+                            <input type="number" id="spawnPosition.z" name="spawnPosition.z"
+                                class="mt-1 block w-full border rounded-md shadow-sm">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Prompt - Full Width -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">System Prompt</label>
+                    <textarea id="system_prompt" name="system_prompt" rows="6"
+                        class="mt-1 block w-full border rounded-md shadow-sm"></textarea>
+                </div>
+
+                <!-- Thumbnail Preview -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">NPC Thumbnail</label>
+                    <img id="npcThumbnail" src="" alt="NPC Thumbnail" class="mt-2 max-w-xs border rounded-md">
+                </div>
+
+                <div class="flex justify-end space-x-4">
+                    <button type="button" onclick="window.location.href='/dashboard'"
+                        class="px-4 py-2 border rounded-md text-gray-600">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Save
+                        Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        async function loadNPCData() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const npcId = urlParams.get('id');
+            if (!npcId) return;
+
+            try {
+                const response = await fetch(`/api/npcs/${npcId}`);
+                const data = await response.json();
+
+                // Populate form fields
+                document.getElementById('id').value = data.id;
+                document.getElementById('displayName').value = data.displayName;
+                document.getElementById('model').value = data.model;
+                document.getElementById('assetID').value = data.assetID;
+                document.getElementById('responseRadius').value = data.responseRadius;
+                document.getElementById('system_prompt').value = data.system_prompt;
+
+                // Spawn position
+                document.getElementById('spawnPosition.x').value = data.spawnPosition.x;
+                document.getElementById('spawnPosition.y').value = data.spawnPosition.y;
+                document.getElementById('spawnPosition.z').value = data.spawnPosition.z;
+
+                // Load thumbnail
+                if (data.assetID) {
+                    const thumbnailResponse = await fetch(`/api/asset-thumbnail/${data.assetID}`);
+                    const thumbnailData = await thumbnailResponse.json();
+                    document.getElementById('npcThumbnail').src = thumbnailData.imageUrl;
+                }
+            } catch (error) {
+                console.error('Error loading NPC data:', error);
+                alert('Failed to load NPC data');
+            }
+        }
+
+        document.getElementById('npcEditForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = {
+                id: document.getElementById('id').value,
+                displayName: document.getElementById('displayName').value,
+                model: document.getElementById('model').value,
+                assetID: document.getElementById('assetID').value,
+                responseRadius: parseInt(document.getElementById('responseRadius').value),
+                system_prompt: document.getElementById('system_prompt').value,
+                spawnPosition: {
+                    x: parseFloat(document.getElementById('spawnPosition.x').value),
+                    y: parseFloat(document.getElementById('spawnPosition.y').value),
+                    z: parseFloat(document.getElementById('spawnPosition.z').value)
+                }
+            };
+
+            try {
+                const response = await fetch(`/api/npcs/${formData.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (!response.ok) throw new Error('Failed to update NPC');
+
+                window.location.href = '/dashboard';
+            } catch (error) {
+                console.error('Error saving NPC data:', error);
+                alert('Failed to save NPC data');
+            }
+        });
+
+        // Load NPC data when page loads
+        loadNPCData();
+    </script>
+</body>
+
+</html>

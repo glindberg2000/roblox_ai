@@ -1,58 +1,48 @@
-import os
-import logging
+import argparse
 import json
-from typing import Any, Dict
+from typing import Dict, Any
+import logging
 
-logger = logging.getLogger("roblox_app")
+# Initialize logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger("sync")
 
-def load_json_database(path: str) -> Dict[str, Any]:
-    """Load a JSON database file."""
-    try:
-        with open(path, 'r') as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Error loading JSON database from {path}: {e}")
-        raise
 
-def save_json_database(path: str, data: Dict[str, Any]) -> None:
-    """Save data to a JSON database file."""
-    try:
-        with open(path, 'w') as f:
-            json.dump(data, f, indent=4)
-    except Exception as e:
-        logger.error(f"Error saving JSON database to {path}: {e}")
-        raise
+def convert_spawn_positions(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert any table-style spawn positions to proper format."""
+    if "npcs" in data:
+        for npc in data["npcs"]:
+            # Ensure spawn position is in correct format
+            if "spawnPosition" in npc:
+                pos = npc["spawnPosition"]
+                if isinstance(pos, dict) and all(k in pos for k in ["x", "y", "z"]):
+                    continue  # Already in correct format
+                elif isinstance(pos, str):
+                    # Handle potential string format like "0, 5, 0"
+                    try:
+                        x, y, z = map(float, pos.split(","))
+                        npc["spawnPosition"] = {"x": x, "y": y, "z": z}
+                    except:
+                        npc["spawnPosition"] = {"x": 0, "y": 5, "z": 0}  # Default
+                else:
+                    # Set default spawn position if invalid
+                    npc["spawnPosition"] = {"x": 0, "y": 5, "z": 0}
+            else:
+                # Add spawn position if missing
+                npc["spawnPosition"] = {"x": 0, "y": 5, "z": 0}
 
-def _value_to_lua(value: Any, indent_level: int = 0) -> str:
-    """Convert a Python value to its Lua representation."""
-    indent = "    " * indent_level
-    
-    if isinstance(value, str):
-        # Escape quotes and newlines in strings
-        escaped = value.replace('"', '\\"').replace("\n", "\\n")
-        return f'"{escaped}"'
-    elif isinstance(value, bool):
-        return str(value).lower()
-    elif isinstance(value, (int, float)):
-        return str(value)
-    elif isinstance(value, list):
-        if not value:  # Empty list
-            return "{}"
-        items = [_value_to_lua(item, indent_level + 1) for item in value]
-        return "{\n" + indent + "    " + ",\n    ".join(items) + "\n" + indent + "}"
-    elif isinstance(value, dict):
-        if not value:  # Empty dict
-            return "{}"
-        items = []
-        for k, v in value.items():
-            lua_value = _value_to_lua(v, indent_level + 1)
-            items.append(f"{k} = {lua_value}")
-        return "{\n" + indent + "    " + ",\n    ".join(items) + "\n" + indent + "}"
-    elif value is None:
-        return "nil"
-    else:
-        raise ValueError(f"Unsupported type for Lua conversion: {type(value)}")
+            # Ensure other required fields
+            if "model" not in npc:
+                npc["model"] = npc["displayName"].replace(" ", "")
+            if "responseRadius" not in npc:
+                npc["responseRadius"] = 25
+            if "shortTermMemory" not in npc:
+                npc["shortTermMemory"] = []
 
+    return data
 def save_lua_database(path: str, data: Dict[str, Any]) -> None:
     """Save data to a Lua database file with proper Roblox formatting."""
     try:
@@ -118,20 +108,34 @@ def save_lua_database(path: str, data: Dict[str, Any]) -> None:
     except Exception as e:
         logger.error(f"Error saving Lua database to {path}: {e}")
         raise
+
+def sync_databases():
+    parser = argparse.ArgumentParser(description="Sync and fix database formats")
+    parser.add_argument("--json-file", required=True, help="Path to JSON database")
+    parser.add_argument("--lua-file", required=True, help="Path to Lua database")
+    parser.add_argument("--backup", action="store_true", help="Create backup of original files")
     
-def get_database_paths():
-    base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'src', 'data'))
-    return {
-        'asset': {
-            'json': os.path.join(base_path, 'AssetDatabase.json'),
-            'lua': os.path.join(base_path, 'AssetDatabase.lua')
-        },
-        'npc': {
-            'json': os.path.join(base_path, 'NPCDatabase.json'),
-            'lua': os.path.join(base_path, 'NPCDatabase.lua')
-        },
-        'player': {
-            'json': os.path.join(base_path, 'PlayerDatabase.json'),
-            'lua': os.path.join(base_path, 'PlayerDatabase.lua')
-        }
-    }
+    args = parser.parse_args()
+
+    # Load and convert JSON data
+    with open(args.json_file, 'r') as f:
+        data = json.load(f)
+    
+    # Fix data format
+    fixed_data = convert_spawn_positions(data)
+    
+    # Save back to JSON
+    if args.backup:
+        with open(args.json_file + '.backup', 'w') as f:
+            json.dump(data, f, indent=2)
+            
+    with open(args.json_file, 'w') as f:
+        json.dump(fixed_data, f, indent=2)
+        
+    # Save to Lua
+    save_lua_database(args.lua_file, fixed_data)
+    
+    print("Database sync completed successfully!")
+
+if __name__ == "__main__":
+    sync_databases()
