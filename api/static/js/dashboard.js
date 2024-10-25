@@ -1,572 +1,472 @@
-// First, ensure we're using the React hooks from the global React object
-const { useState, useEffect } = React;
+// Dashboard state
+let currentTab = 'assets';
 
-// Constants for API endpoints
-const API_ENDPOINTS = {
-    ASSETS: '/api/assets',
-    NPCS: '/api/npcs',
-    PLAYERS: '/api/players',
-    ASSET_THUMBNAIL: (id) => `/api/asset-thumbnail/${id}`,
-    NPC: (id) => `/api/npcs/${id}`,
-};
+// Initial state and utilities
+document.addEventListener('DOMContentLoaded', () => {
+    loadAssets();
+    loadNPCs();
+    loadPlayers();
+    populateAssetSelect();
+});
 
-// NPCs Tab Component
-const NPCsTab = ({ npcs, onEdit, onDelete }) => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {npcs.map(npc => (
-            <div key={npc.id} className="bg-white rounded-lg shadow p-4">
-                <div className="flex items-start space-x-4">
-                    {npc.thumbnailUrl ? (
-                        <img
-                            src={npc.thumbnailUrl}
-                            alt={npc.displayName}
-                            className="w-24 h-24 object-cover rounded"
-                        />
-                    ) : (
-                        <div className="w-24 h-24 bg-gray-200 rounded flex items-center justify-center">
-                            <span className="text-gray-400">No Image</span>
-                        </div>
-                    )}
-                    <div className="flex-1">
-                        <h3 className="font-bold">{npc.displayName}</h3>
-                        <p className="text-sm text-gray-600 mb-2">ID: {npc.id}</p>
-                        <p className="text-sm mb-4">{npc.system_prompt?.substring(0, 100)}...</p>
-                        <div className="flex justify-end space-x-2">
-                            <button
-                                onClick={() => onEdit(npc)}
-                                className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                            >
-                                Edit
-                            </button>
-                            <button
-                                onClick={() => onDelete(npc.id)}
-                                className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
-                            >
-                                Delete
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        ))}
-    </div>
-);
+// Show/hide tabs
+function showTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
+    document.getElementById(`${tabName}Tab`).classList.remove('hidden');
+    currentTab = tabName;
 
-// Assets Tab Component
-const AssetsTab = ({ assets, onEdit, onDelete }) => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {assets.map(asset => (
-            <div key={asset.assetId} className="bg-white rounded-lg shadow p-4">
-                <div className="flex items-start space-x-4">
-                    {asset.imageUrl ? (
-                        <img
-                            src={asset.imageUrl}
-                            alt={asset.name}
-                            className="w-24 h-24 object-cover rounded"
-                        />
-                    ) : (
-                        <div className="w-24 h-24 bg-gray-200 rounded flex items-center justify-center">
-                            <span className="text-gray-400">No Image</span>
-                        </div>
-                    )}
-                    <div className="flex-1">
-                        <h3 className="font-bold">{asset.name}</h3>
-                        <p className="text-sm text-gray-600 mb-2">ID: {asset.assetId}</p>
-                        <p className="text-sm mb-4">{asset.description?.substring(0, 100)}...</p>
-                        <div className="flex justify-end space-x-2">
-                            <button
-                                onClick={() => onEdit(asset)}
-                                className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                            >
-                                Edit
-                            </button>
-                            <button
-                                onClick={() => onDelete(asset.assetId)}
-                                className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
-                            >
-                                Delete
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        ))}
-    </div>
-);
-
-// Players Tab Component
-const PlayersTab = ({ players, onEdit, onDelete }) => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {players.map(player => (
-            <div key={player.playerID} className="bg-white rounded-lg shadow p-4">
-                <div className="flex items-start space-x-4">
-                    {player.imageURL ? (
-                        <img
-                            src={player.imageURL}
-                            alt={player.displayName}
-                            className="w-24 h-24 object-cover rounded"
-                        />
-                    ) : (
-                        <div className="w-24 h-24 bg-gray-200 rounded flex items-center justify-center">
-                            <span className="text-gray-400">No Image</span>
-                        </div>
-                    )}
-                    <div className="flex-1">
-                        <h3 className="font-bold">{player.displayName}</h3>
-                        <p className="text-sm text-gray-600 mb-2">ID: {player.playerID}</p>
-                        <p className="text-sm mb-4">{player.description?.substring(0, 100)}...</p>
-                        <div className="flex justify-end space-x-2">
-                            <button
-                                onClick={() => onEdit(player)}
-                                className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                            >
-                                Edit
-                            </button>
-                            <button
-                                onClick={() => onDelete(player.playerID)}
-                                className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
-                            >
-                                Delete
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        ))}
-    </div>
-);
-
-// Asset Edit Modal Component
-const AssetEditModal = ({ asset, onClose, onSave }) => {
-    const [formData, setFormData] = useState(asset);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            const response = await fetch(`/api/assets/${asset.assetId}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(formData)
-            });
-
-            if (!response.ok) throw new Error('Failed to update asset');
-            onSave();
-            onClose();
-        } catch (e) {
-            console.error('Error updating asset:', e);
-            alert('Failed to update asset: ' + e.message);
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-90vh overflow-y-auto">
-                <h2 className="text-2xl font-bold mb-4">Edit Asset: {asset.name}</h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium mb-1">Name</label>
-                        <input
-                            type="text"
-                            value={formData.name}
-                            onChange={e => setFormData({ ...formData, name: e.target.value })}
-                            className="w-full border rounded p-2"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium mb-1">Description</label>
-                        <textarea
-                            value={formData.description}
-                            onChange={e => setFormData({ ...formData, description: e.target.value })}
-                            rows="6"
-                            className="w-full border rounded p-2"
-                        />
-                    </div>
-                    {formData.imageUrl && (
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Current Image</label>
-                            <img src={formData.imageUrl} alt={formData.name} className="h-32 w-32 object-cover rounded" />
-                        </div>
-                    )}
-                    <div className="flex justify-end space-x-2">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-50"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                        >
-                            Save Changes
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
-
-// Modified NPC Edit Modal with Asset Selection
-const NPCEditModal = ({ npc, assets, onClose, onSave }) => {
-    const [formData, setFormData] = useState(npc);
-    const [selectedAsset, setSelectedAsset] = useState(assets.find(a => a.assetId === npc.assetID) || null);
-
-    const handleAssetChange = (assetId) => {
-        const asset = assets.find(a => a.assetId === assetId);
-        setSelectedAsset(asset);
-        setFormData({
-            ...formData,
-            assetID: assetId,
-            thumbnailUrl: asset?.imageUrl || null
-        });
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            const response = await fetch(API_ENDPOINTS.NPC(npc.id), {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(formData)
-            });
-
-            if (!response.ok) throw new Error('Failed to update NPC');
-            onSave();
-            onClose();
-        } catch (e) {
-            console.error('Error updating NPC:', e);
-            alert('Failed to update NPC: ' + e.message);
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-90vh overflow-y-auto">
-                <h2 className="text-2xl font-bold mb-4">Edit NPC: {npc.displayName}</h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Basic Info */}
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Display Name</label>
-                            <input
-                                type="text"
-                                value={formData.displayName}
-                                onChange={e => setFormData({ ...formData, displayName: e.target.value })}
-                                className="w-full border rounded p-2"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Model Name</label>
-                            <input
-                                type="text"
-                                value={formData.model}
-                                onChange={e => setFormData({ ...formData, model: e.target.value })}
-                                className="w-full border rounded p-2"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Asset</label>
-                            <select
-                                value={formData.assetID || ''}
-                                onChange={e => handleAssetChange(e.target.value)}
-                                className="w-full border rounded p-2"
-                            >
-                                <option value="">Select an asset</option>
-                                {assets.map(asset => (
-                                    <option key={asset.assetId} value={asset.assetId}>
-                                        {asset.name} ({asset.assetId})
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Response Radius</label>
-                            <input
-                                type="number"
-                                value={formData.responseRadius}
-                                onChange={e => setFormData({ ...formData, responseRadius: parseInt(e.target.value) })}
-                                className="w-full border rounded p-2"
-                            />
-                        </div>
-
-                        {/* Spawn Position */}
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Spawn Position X</label>
-                            <input
-                                type="number"
-                                value={formData.spawnPosition.x}
-                                onChange={e => setFormData({
-                                    ...formData,
-                                    spawnPosition: { ...formData.spawnPosition, x: parseFloat(e.target.value) }
-                                })}
-                                className="w-full border rounded p-2"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Spawn Position Y</label>
-                            <input
-                                type="number"
-                                value={formData.spawnPosition.y}
-                                onChange={e => setFormData({
-                                    ...formData,
-                                    spawnPosition: { ...formData.spawnPosition, y: parseFloat(e.target.value) }
-                                })}
-                                className="w-full border rounded p-2"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Spawn Position Z</label>
-                            <input
-                                type="number"
-                                value={formData.spawnPosition.z}
-                                onChange={e => setFormData({
-                                    ...formData,
-                                    spawnPosition: { ...formData.spawnPosition, z: parseFloat(e.target.value) }
-                                })}
-                                className="w-full border rounded p-2"
-                            />
-                        </div>
-                    </div>
-
-                    {/* System Prompt - Full Width */}
-                    <div>
-                        <label className="block text-sm font-medium mb-1">System Prompt</label>
-                        <textarea
-                            value={formData.system_prompt}
-                            onChange={e => setFormData({ ...formData, system_prompt: e.target.value })}
-                            rows="6"
-                            className="w-full border rounded p-2"
-                        />
-                    </div>
-
-                    {/* Thumbnail Preview */}
-                    {selectedAsset && (
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Asset Preview</label>
-                            <img
-                                src={selectedAsset.imageUrl}
-                                alt={selectedAsset.name}
-                                className="h-32 w-32 object-cover rounded"
-                            />
-                        </div>
-                    )}
-
-                    <div className="flex justify-end space-x-2">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-50"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                        >
-                            Save Changes
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
-
-// Main Dashboard Component
-window.Dashboard = function Dashboard() {
-    const [activeTab, setActiveTab] = useState('npcs');
-    const [assets, setAssets] = useState([]);
-    const [npcs, setNpcs] = useState([]);
-    const [players, setPlayers] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [editingNpc, setEditingNpc] = useState(null);
-    const [editingAsset, setEditingAsset] = useState(null);
-
-    useEffect(() => {
-        fetchData();
-    }, []);
-
-    const fetchData = async () => {
-        setLoading(true);
-        try {
-            console.log('Fetching data...');
-            const [assetsRes, npcsRes, playersRes] = await Promise.all([
-                fetch(API_ENDPOINTS.ASSETS),
-                fetch(API_ENDPOINTS.NPCS),
-                fetch(API_ENDPOINTS.PLAYERS)
-            ]);
-
-            console.log('Responses received:', {
-                assets: assetsRes.status,
-                npcs: npcsRes.status,
-                players: playersRes.status
-            });
-
-            const [assetsData, npcsData, playersData] = await Promise.all([
-                assetsRes.json(),
-                npcsRes.json(),
-                playersRes.json()
-            ]);
-
-            console.log('Data parsed:', {
-                assets: assetsData?.assets?.length || 0,
-                npcs: npcsData?.npcs?.length || 0,
-                players: playersData?.players?.length || 0
-            });
-
-            setAssets(assetsData.assets || []);
-
-            // In the fetchData function, modify the NPCs processing:
-            const npcsWithThumbnails = await Promise.all(
-                npcsData.npcs.map(async (npc) => {
-                    if (npc.assetID) {
-                        // Find the corresponding asset
-                        const matchingAsset = assetsData.assets.find(asset => asset.assetId === npc.assetID);
-                        if (matchingAsset) {
-                            return { ...npc, thumbnailUrl: matchingAsset.imageUrl };
-                        }
-                    }
-                    return { ...npc, thumbnailUrl: null };
-                })
-            );
-            setNpcs(npcsWithThumbnails);
-            setPlayers(playersData.players || []);
-
-            console.log('State updated with:', {
-                assets: assetsData.assets?.length || 0,
-                npcs: npcsWithThumbnails.length,
-                players: playersData.players?.length || 0
-            });
-        } catch (e) {
-            console.error('Error fetching data:', e);
-            setError(e.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const deleteItem = async (type, id) => {
-        if (!confirm(`Are you sure you want to delete this ${type}?`)) return;
-
-        try {
-            const response = await fetch(`/api/${type}/${id}`, {
-                method: 'DELETE'
-            });
-            if (!response.ok) throw new Error(`Failed to delete ${type}`);
-            fetchData();
-        } catch (e) {
-            setError(e.message);
-        }
-    };
-
-    return (
-        <div className="container mx-auto px-4 py-8">
-            <h1 className="text-3xl font-bold mb-8">Game Management Dashboard</h1>
-
-            {error && (
-                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                    Error: {error}
-                    <button
-                        onClick={() => setError(null)}
-                        className="ml-2 text-red-600 hover:text-red-800"
-                    >
-                        Dismiss
-                    </button>
-                </div>
-            )}
-
-            {/* Navigation Tabs */}
-            <div className="mb-6">
-                <nav className="flex space-x-4">
-                    <button
-                        onClick={() => setActiveTab('npcs')}
-                        className={`px-4 py-2 rounded-lg ${activeTab === 'npcs'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                    >
-                        NPCs
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('assets')}
-                        className={`px-4 py-2 rounded-lg ${activeTab === 'assets'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                    >
-                        Assets
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('players')}
-                        className={`px-4 py-2 rounded-lg ${activeTab === 'players'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                    >
-                        Players
-                    </button>
-                </nav>
-            </div>
-
-            {/* Content Area */}
-            <div className="mb-8">
-                {loading ? (
-                    <div className="text-center py-8">
-                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent"></div>
-                    </div>
-                ) : (
-                    <>
-                        {activeTab === 'npcs' && (
-                            <NPCsTab
-                                npcs={npcs}
-                                onEdit={setEditingNpc}
-                                onDelete={id => deleteItem('npcs', id)}
-                            />
-                        )}
-                        {activeTab === 'assets' && (
-                            <AssetsTab
-                                assets={assets}
-                                onEdit={setEditingAsset}
-                                onDelete={id => deleteItem('assets', id)}
-                            />
-                        )}
-                        {activeTab === 'players' && (
-                            <PlayersTab
-                                players={players}
-                                onEdit={(player) => { }} // TODO: Implement player editing
-                                onDelete={id => deleteItem('players', id)}
-                            />
-                        )}
-                    </>
-                )}
-            </div>
-
-            {/* Edit Modal */}
-            {editingNpc && (
-                <NPCEditModal
-                    npc={editingNpc}
-                    assets={assets}
-                    onClose={() => setEditingNpc(null)}
-                    onSave={fetchData}
-                />
-            )}
-            {editingAsset && (
-                <AssetEditModal
-                    asset={editingAsset}
-                    onClose={() => setEditingAsset(null)}
-                    onSave={fetchData}
-                />
-            )}
-        </div>
-    );
+    if (tabName === 'assets') loadAssets();
+    else if (tabName === 'npcs') {
+        loadNPCs();
+        populateAssetSelect();
+    }
+    else if (tabName === 'players') loadPlayers();
 }
 
-// Export to window
-window.Dashboard = Dashboard;
+// Notification system
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `notification fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${type === 'error' ? 'bg-red-600' : type === 'success' ? 'bg-green-600' : 'bg-blue-600'
+        } text-white`;
+    notification.textContent = message;
+
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// Debug logging
+function debugLog(title, data) {
+    console.log(`=== ${title} ===`);
+    console.log(JSON.stringify(data, null, 2));
+    console.log('=================');
+}
+
+// Asset Management
+async function populateAssetSelect(selectElement = document.getElementById('assetSelect')) {
+    try {
+        const response = await fetch('/api/assets');
+        const data = await response.json();
+        debugLog('Asset Select Options', data.assets);
+        
+        selectElement.innerHTML = '<option value="">Select an asset...</option>';
+        data.assets.forEach(asset => {
+            const option = document.createElement('option');
+            option.value = asset.assetId;
+            option.textContent = `${asset.name} (${asset.assetId})`;
+            selectElement.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading assets for select:', error);
+        showNotification('Failed to load assets for selection', 'error');
+    }
+}
+
+async function createAsset(event) {
+    event.preventDefault();
+
+    const form = event.target;
+    const formData = new FormData(form);
+    const fileInput = form.querySelector('input[type="file"]');
+
+    try {
+        if (fileInput.files.length > 0) {
+            const file = fileInput.files[0];
+            if (file.name.endsWith('.rbxmx') || file.name.endsWith('.rbxm')) {
+                const parseFormData = new FormData();
+                parseFormData.append('file', file);
+
+                const parseResponse = await fetch('/api/parse-rbxmx', {
+                    method: 'POST',
+                    body: parseFormData
+                });
+
+                if (parseResponse.ok) {
+                    const parseData = await parseResponse.json();
+                    if (parseData.sourceAssetId) {
+                        form.querySelector('[name="assetId"]').value = parseData.sourceAssetId;
+                    }
+                    if (parseData.name) {
+                        form.querySelector('[name="name"]').value = parseData.name;
+                    }
+                }
+            }
+        }
+
+        const assetData = {
+            assetId: form.querySelector('[name="assetId"]').value,
+            name: form.querySelector('[name="name"]').value
+        };
+
+        debugLog('Creating Asset', assetData);
+
+        const submitFormData = new FormData();
+        submitFormData.append('data', JSON.stringify(assetData));
+        if (fileInput.files.length > 0) {
+            submitFormData.append('file', fileInput.files[0]);
+        }
+
+        const response = await fetch('/api/assets', {
+            method: 'POST',
+            body: submitFormData
+        });
+
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+        showNotification('Asset created successfully!', 'success');
+        await loadAssets();
+        form.reset();
+
+    } catch (error) {
+        console.error('Error creating asset:', error);
+        showNotification('Failed to create asset: ' + error.message, 'error');
+    }
+}
+
+async function loadAssets() {
+    try {
+        const response = await fetch('/api/assets');
+        const data = await response.json();
+        debugLog('Loaded Assets', data.assets);
+
+        const assetList = document.getElementById('assetList');
+        assetList.innerHTML = '';
+
+        data.assets.forEach(asset => {
+            const assetCard = document.createElement('div');
+            assetCard.className = 'bg-dark-800 p-6 rounded-xl shadow-xl border border-dark-700 hover:border-blue-500 transition-colors duration-200';
+            assetCard.innerHTML = `
+                <div class="aspect-w-16 aspect-h-9 mb-4">
+                    <img src="${asset.imageUrl || ''}" 
+                         alt="${asset.name}" 
+                         class="w-full h-32 object-contain rounded-lg bg-dark-700 p-2">
+                </div>
+                <h3 class="font-bold text-lg truncate text-gray-100">${asset.name}</h3>
+                <p class="text-sm text-gray-400 mb-2">ID: ${asset.assetId}</p>
+                <p class="text-sm mb-4 h-20 overflow-y-auto text-gray-300">${asset.description || ''}</p>
+                <div class="flex space-x-2">
+                    <button onclick="handleAssetEdit(${JSON.stringify(asset)})" 
+                            class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200">
+                        Edit
+                    </button>
+                    <button onclick="deleteItem('asset', '${asset.assetId}')" 
+                            class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200">
+                        Delete
+                    </button>
+                </div>`;
+            assetList.appendChild(assetCard);
+        });
+    } catch (error) {
+        console.error('Error loading assets:', error);
+        showNotification('Failed to load assets', 'error');
+    }
+}
+
+// NPC Management
+async function createNPC(event) {
+    event.preventDefault();
+
+    try {
+        const form = event.target;
+        const npcData = {
+            displayName: form.displayName.value,
+            model: form.displayName.value.replace(/\s+/g, ''),
+            responseRadius: parseInt(form.responseRadius.value),
+            assetID: form.assetID.value || null,
+            system_prompt: form.system_prompt.value,
+            spawnPosition: {
+                x: parseFloat(form.spawnX.value),
+                y: parseFloat(form.spawnY.value),
+                z: parseFloat(form.spawnZ.value)
+            },
+            shortTermMemory: []
+        };
+
+        debugLog('Creating NPC', npcData);
+
+        const response = await fetch('/api/npcs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(npcData)
+        });
+
+        if (!response.ok) throw new Error('Failed to create NPC');
+
+        showNotification('NPC created successfully!', 'success');
+        form.reset();
+        loadNPCs();
+    } catch (error) {
+        console.error('Error creating NPC:', error);
+        showNotification('Failed to create NPC: ' + error.message, 'error');
+    }
+}
+
+async function loadNPCs() {
+    try {
+        const response = await fetch('/api/npcs');
+        const data = await response.json();
+        debugLog('Loaded NPCs', data.npcs);
+
+        const assetsResponse = await fetch('/api/assets');
+        const assetsData = await assetsResponse.json();
+        debugLog('Available Assets', assetsData.assets);
+        const assetsMap = new Map(assetsData.assets.map(asset => [asset.assetId, asset]));
+
+        const npcList = document.getElementById('npcList');
+        npcList.innerHTML = '';
+
+        data.npcs.forEach(npc => {
+            const associatedAsset = npc.assetID ? assetsMap.get(npc.assetID) : null;
+            debugLog(`NPC ${npc.id} Associated Asset`, associatedAsset);
+            
+            const npcCard = document.createElement('div');
+            npcCard.className = 'bg-dark-800 p-6 rounded-xl shadow-xl border border-dark-700 hover:border-blue-500 transition-colors duration-200';
+            
+            // Store the complete NPC data as a data attribute
+            const npcData = {
+                id: npc.id,
+                displayName: npc.displayName || '',
+                assetID: npc.assetID || '',
+                responseRadius: npc.responseRadius || 20,
+                system_prompt: npc.system_prompt || '',
+                spawnPosition: npc.spawnPosition || { x: 0, y: 5, z: 0 }
+            };
+            
+            npcCard.dataset.npc = JSON.stringify(npcData);
+            
+            npcCard.innerHTML = `
+                <div class="aspect-w-16 aspect-h-9 mb-4">
+                    ${associatedAsset?.imageUrl ?
+                    `<img src="${associatedAsset.imageUrl}" 
+                              alt="${npc.displayName}" 
+                              class="w-full h-32 object-contain rounded-lg bg-dark-700 p-2">` :
+                    '<div class="w-full h-32 bg-dark-700 rounded-lg flex items-center justify-center text-gray-400">No Image</div>'}
+                </div>
+                <h3 class="font-bold text-lg text-gray-100">${npc.displayName || 'Unnamed NPC'}</h3>
+                <p class="text-sm text-gray-400 mb-1">Asset: ${associatedAsset?.name || 'None'}</p>
+                <p class="text-sm text-gray-400 mb-2">Asset ID: ${npc.assetID || 'None'}</p>
+                <p class="text-sm mb-2 text-gray-300">Radius: ${npc.responseRadius || 20}m</p>
+                <div class="text-sm mb-4 h-20 overflow-y-auto">
+                    <p class="font-medium text-gray-300">Personality:</p>
+                    <p class="text-gray-400">${npc.system_prompt || 'No personality defined'}</p>
+                </div>
+                <div class="flex space-x-2">
+                    <button onclick="handleNPCEdit(this)" 
+                            class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200">
+                        Edit
+                    </button>
+                    <button onclick="deleteItem('npc', '${npc.id}')" 
+                            class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200">
+                        Delete
+                    </button>
+                </div>
+            `;
+            npcList.appendChild(npcCard);
+        });
+    } catch (error) {
+        console.error('Error loading NPCs:', error);
+        showNotification('Failed to load NPCs', 'error');
+    }
+}
+
+function handleNPCEdit(button) {
+    try {
+        // Visual feedback
+        button.classList.add('opacity-75');
+        setTimeout(() => button.classList.remove('opacity-75'), 200);
+
+        const npcCard = button.closest('div[data-npc]');
+        if (!npcCard) {
+            throw new Error('Could not find NPC data container');
+        }
+
+        const npcDataStr = npcCard.dataset.npc;
+        debugLog('Raw NPC Data', npcDataStr);
+
+        const npcData = JSON.parse(npcDataStr);
+        debugLog('Parsed NPC Data', npcData);
+
+        showNPCEditModal(npcData);
+    } catch (error) {
+        console.error('Error handling NPC edit:', error);
+        showNotification('Failed to open edit modal: ' + error.message, 'error');
+    }
+}
+
+function handleAssetEdit(asset) {
+    try {
+        debugLog('Editing Asset', asset);
+        const modal = document.getElementById('assetEditModal');
+        
+        document.getElementById('editAssetId').value = asset.assetId;
+        document.getElementById('editAssetName').value = asset.name || '';
+        document.getElementById('editAssetDescription').value = asset.description || '';
+        document.getElementById('editAssetImage').src = asset.imageUrl || '';
+        document.getElementById('editAssetId_display').textContent = `(ID: ${asset.assetId})`;
+
+        modal.style.display = 'block';
+    } catch (error) {
+        console.error('Error showing asset edit modal:', error);
+        showNotification('Failed to open asset edit modal', 'error');
+    }
+}
+
+function showNPCEditModal(npcData) {
+    try {
+        debugLog('Opening NPC Edit Modal', npcData);
+        const modal = document.getElementById('npcEditModal');
+        if (!modal) throw new Error('Modal element not found');
+
+        // Populate form fields
+        document.getElementById('editNpcId').value = npcData.id;
+        document.getElementById('editNpcDisplayName').value = npcData.displayName || '';
+        document.getElementById('editNpcRadius').value = npcData.responseRadius || 20;
+        document.getElementById('editNpcPrompt').value = npcData.system_prompt || '';
+        
+        const spawnPos = npcData.spawnPosition || { x: 0, y: 5, z: 0 };
+        document.getElementById('editNpcSpawnX').value = spawnPos.x || 0;
+        document.getElementById('editNpcSpawnY').value = spawnPos.y || 5;
+        document.getElementById('editNpcSpawnZ').value = spawnPos.z || 0;
+
+        // Make assetID optional
+        const assetSelect = document.getElementById('editNpcAssetId');
+        assetSelect.removeAttribute('required');
+
+        // Populate asset select
+        populateAssetSelect(assetSelect)
+            .then(() => {
+                assetSelect.value = npcData.assetID || '';
+                debugLog('Asset Select Value Set', { value: assetSelect.value });
+            });
+
+        modal.style.display = 'block';
+    } catch (error) {
+        console.error('Error showing NPC edit modal:', error);
+        showNotification('Failed to open edit modal: ' + error.message, 'error');
+    }
+}
+
+function closeNPCEditModal() {
+    document.getElementById('npcEditModal').style.display = 'none';
+}
+
+function closeAssetEditModal() {
+    document.getElementById('assetEditModal').style.display = 'none';
+}
+
+async function saveNPCEdit(event) {
+    event.preventDefault();
+
+    try {
+        const npcData = {
+            displayName: document.getElementById('editNpcDisplayName').value,
+            model: document.getElementById('editNpcDisplayName').value.replace(/\s+/g, ''),
+            assetID: document.getElementById('editNpcAssetId').value || null,
+            responseRadius: parseInt(document.getElementById('editNpcRadius').value) || 20,
+            spawnPosition: {
+                x: parseFloat(document.getElementById('editNpcSpawnX').value) || 0,
+                y: parseFloat(document.getElementById('editNpcSpawnY').value) || 5,
+                z: parseFloat(document.getElementById('editNpcSpawnZ').value) || 0
+            },
+            system_prompt: document.getElementById('editNpcPrompt').value || ''
+        };
+
+        const npcId = document.getElementById('editNpcId').value;
+        debugLog('Saving NPC Edit', { id: npcId, data: npcData });
+
+        const response = await fetch(`/api/npcs/${npcId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(npcData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to update NPC');
+        }
+
+        showNotification('NPC updated successfully', 'success');
+        closeNPCEditModal();
+        loadNPCs();
+    } catch (error) {
+        console.error('Error updating NPC:', error);
+        showNotification('Failed to update NPC: ' + error.message, 'error');
+    }
+}
+
+async function saveAssetEdit(event) {
+    event.preventDefault();
+
+    try {
+        const assetData = {
+            name: document.getElementById('editAssetName').value,
+            description: document.getElementById('editAssetDescription').value || ''
+        };
+
+        const assetId = document.getElementById('editAssetId').value;
+        debugLog('Saving Asset Edit', { id: assetId, data: assetData });
+
+        const response = await fetch(`/api/assets/${assetId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(assetData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to update asset');
+        }
+
+        showNotification('Asset updated successfully', 'success');
+        closeAssetEditModal();
+        loadAssets();
+    } catch (error) {
+        console.error('Error updating asset:', error);
+        showNotification('Failed to update asset: ' + error.message, 'error');
+    }
+}
+
+async function deleteItem(type, id) {
+    if (!confirm(`Are you sure you want to delete this ${type}?`)) return;
+
+    try {
+        debugLog('Deleting Item', { type, id });
+        const response = await fetch(`/api/${type}s/${id}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) throw new Error('Failed to delete item');
+
+        showNotification(`${type} deleted successfully`, 'success');
+
+        if (type === 'asset') await loadAssets();
+        else if (type === 'npc') await loadNPCs();
+        else if (type === 'player') await loadPlayers();
+
+    } catch (error) {
+        console.error('Error deleting item:', error);
+        showNotification('Failed to delete item', 'error');
+    }
+}
+
+// Modal click-outside handlers
+window.onclick = function (event) {
+    const editModal = document.getElementById('editModal');
+    const npcEditModal = document.getElementById('npcEditModal');
+    const assetEditModal = document.getElementById('assetEditModal');
+
+    if (event.target === editModal) {
+        closeEditModal();
+    } else if (event.target === npcEditModal) {
+        closeNPCEditModal();
+    } else if (event.target === assetEditModal) {
+        closeAssetEditModal();
+    }
+};

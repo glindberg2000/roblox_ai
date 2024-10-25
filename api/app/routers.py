@@ -1,32 +1,34 @@
 import os
 import logging
 import json
-import base64
-import requests
-from io import BytesIO
-from PIL import Image
 from typing import Literal, Optional, Dict, Any, List
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from openai import OpenAI, OpenAIError
 from app.conversation_manager import ConversationManager
-from app.config import NPC_SYSTEM_PROMPT_ADDITION
-from .utils import load_json_database, save_json_database, save_lua_database, get_database_paths
-import sys
-import subprocess
+from app.config import (
+    NPC_SYSTEM_PROMPT_ADDITION,
+    STORAGE_DIR, 
+    ASSETS_DIR, 
+    THUMBNAILS_DIR, 
+    AVATARS_DIR
+)
+from .utils import (
+    load_json_database, 
+    save_json_database, 
+    save_lua_database, 
+    get_database_paths
+)
+from .image_utils import (
+    download_avatar_image,
+    download_asset_image,
+    generate_image_description,
+    get_asset_description
+)
 
-# Add the utils directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'utils')))
-
-# OpenAI Client initialization
+# Initialize OpenAI client
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-# Paths to store images locally
-AVATAR_SAVE_PATH = "stored_images"
-ASSET_IMAGE_SAVE_PATH = "stored_asset_images"
-os.makedirs(AVATAR_SAVE_PATH, exist_ok=True)
-os.makedirs(ASSET_IMAGE_SAVE_PATH, exist_ok=True)
 
 # Get database paths
 DB_PATHS = get_database_paths()
@@ -88,139 +90,162 @@ class EditItemRequest(BaseModel):
 # Initialize conversation manager
 conversation_manager = ConversationManager()
 
-# Helper Functions
-def encode_image(image_path: str) -> str:
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode('utf-8')
 
-def download_image(url: str, save_path: str) -> str:
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        image = Image.open(BytesIO(response.content))
-        image.save(save_path)
-        return save_path
-    except Exception as e:
-        logger.error(f"Error downloading image: {e}")
-        raise HTTPException(status_code=500, detail="Failed to download image.")
-
-def generate_avatar_description_from_image(image_path: str, max_length: int = 300) -> str:
-    base64_image = encode_image(image_path)
+# def generate_avatar_description_from_image(image_path: str, max_length: int = 300) -> str:
+#     base64_image = encode_image(image_path)
     
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": (
-                                f"Please provide a detailed description of this Roblox avatar within {max_length} characters. "
-                                "Include details about the avatar's clothing, accessories, colors, any unique features, and its overall style or theme."
-                            ),
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
-                            },
-                        }
-                    ],
-                }
-            ]
-        )
-        description = response.choices[0].message.content
-        return description
-    except OpenAIError as e:
-        logger.error(f"OpenAI API error: {e}")
-        return "No description available."
+#     try:
+#         response = client.chat.completions.create(
+#             model="gpt-4o-mini",
+#             messages=[
+#                 {
+#                     "role": "user",
+#                     "content": [
+#                         {
+#                             "type": "text",
+#                             "text": (
+#                                 f"Please provide a detailed description of this Roblox avatar within {max_length} characters. "
+#                                 "Include details about the avatar's clothing, accessories, colors, any unique features, and its overall style or theme."
+#                             ),
+#                         },
+#                         {
+#                             "type": "image_url",
+#                             "image_url": {
+#                                 "url": f"data:image/jpeg;base64,{base64_image}"
+#                             },
+#                         }
+#                     ],
+#                 }
+#             ]
+#         )
+#         description = response.choices[0].message.content
+#         return description
+#     except OpenAIError as e:
+#         logger.error(f"OpenAI API error: {e}")
+#         return "No description available."
 
-def download_avatar_image(user_id: str) -> str:
-    avatar_api_url = f"https://thumbnails.roblox.com/v1/users/avatar?userIds={user_id}&size=420x420&format=Png"
-    try:
-        response = requests.get(avatar_api_url)
-        response.raise_for_status()
-        image_url = response.json()['data'][0]['imageUrl']
-        return download_image(image_url, os.path.join(AVATAR_SAVE_PATH, f"{user_id}.png"))
-    except Exception as e:
-        logger.error(f"Error fetching avatar image: {e}")
-        raise HTTPException(status_code=500, detail="Failed to download avatar image.")
+# def download_avatar_image(user_id: str) -> str:
+#     avatar_api_url = f"https://thumbnails.roblox.com/v1/users/avatar?userIds={user_id}&size=420x420&format=Png"
+#     try:
+#         response = requests.get(avatar_api_url)
+#         response.raise_for_status()
+#         image_url = response.json()['data'][0]['imageUrl']
+#         return download_image(image_url, os.path.join(AVATAR_SAVE_PATH, f"{user_id}.png"))
+#     except Exception as e:
+#         logger.error(f"Error fetching avatar image: {e}")
+#         raise HTTPException(status_code=500, detail="Failed to download avatar image.")
 
-def download_asset_image(asset_id: str) -> tuple[str, str]:
-    asset_api_url = f"https://thumbnails.roblox.com/v1/assets?assetIds={asset_id}&size=420x420&format=Png&isCircular=false"
-    try:
-        response = requests.get(asset_api_url)
-        response.raise_for_status()
-        image_url = response.json()['data'][0]['imageUrl']
-        local_path = os.path.join(ASSET_IMAGE_SAVE_PATH, f"{asset_id}.png")
-        download_image(image_url, local_path)
-        return local_path, image_url
-    except Exception as e:
-        logger.error(f"Error fetching asset image: {e}")
-        raise HTTPException(status_code=500, detail="Failed to download asset image.")
+# def download_asset_image(asset_id: str) -> tuple[str, str]:
+#     asset_api_url = f"https://thumbnails.roblox.com/v1/assets?assetIds={asset_id}&size=420x420&format=Png&isCircular=false"
+#     try:
+#         response = requests.get(asset_api_url)
+#         response.raise_for_status()
+#         image_url = response.json()['data'][0]['imageUrl']
+#         local_path = os.path.join(ASSET_IMAGE_SAVE_PATH, f"{asset_id}.png")
+#         download_image(image_url, local_path)
+#         return local_path, image_url
+#     except Exception as e:
+#         logger.error(f"Error fetching asset image: {e}")
+#         raise HTTPException(status_code=500, detail="Failed to download asset image.")
 
-def generate_description_from_image(image_path: str, prompt: str, max_length: int = 300) -> str:
-    base64_image = encode_image(image_path)
+# def generate_description_from_image(image_path: str, prompt: str, max_length: int = 300) -> str:
+#     base64_image = encode_image(image_path)
     
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": f"{prompt} Limit the description to {max_length} characters."
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
-                            },
-                        }
-                    ],
-                }
-            ]
-        )
-        description = response.choices[0].message.content
-        return description
-    except OpenAIError as e:
-        logger.error(f"OpenAI API error: {e}")
-        return "No description available."
+#     try:
+#         response = client.chat.completions.create(
+#             model="gpt-4o-mini",
+#             messages=[
+#                 {
+#                     "role": "user",
+#                     "content": [
+#                         {
+#                             "type": "text",
+#                             "text": f"{prompt} Limit the description to {max_length} characters."
+#                         },
+#                         {
+#                             "type": "image_url",
+#                             "image_url": {
+#                                 "url": f"data:image/jpeg;base64,{base64_image}"
+#                             },
+#                         }
+#                     ],
+#                 }
+#             ]
+#         )
+#         description = response.choices[0].message.content
+#         return description
+#     except OpenAIError as e:
+#         logger.error(f"OpenAI API error: {e}")
+#         return "No description available."
+
+# @router.post("/get_asset_description")
+# async def get_asset_description(data: AssetData):
+#     try:
+#         image_path, image_url = download_asset_image(data.asset_id)
+#         prompt = (
+#             "Please provide a detailed description of this Roblox asset image. "
+#             "Include details about its appearance, features, and any notable characteristics."
+#         )
+#         ai_description = generate_description_from_image(image_path, prompt)
+#         return {
+#             "description": ai_description,
+#             "imageUrl": image_url
+#         }
+#     except HTTPException as e:
+#         raise e
+#     except Exception as e:
+#         logger.error(f"Error processing asset description request: {e}")
+#         return {"error": f"Failed to process request: {str(e)}"}
+
+# @router.post("/get_player_description")
+# async def get_player_description(data: PlayerDescriptionRequest):
+#     try:
+#         image_path = download_avatar_image(data.user_id)
+#         ai_description = generate_avatar_description_from_image(image_path)
+#         return {"description": ai_description}
+#     except HTTPException as e:
+#         raise e
+#     except Exception as e:
+#         logger.error(f"Error processing player description request: {e}")
+#         return {"error": f"Failed to process request: {str(e)}"}
+
 
 @router.post("/get_asset_description")
-async def get_asset_description(data: AssetData):
+async def get_asset_description_endpoint(data: AssetData):
+    """Endpoint to get asset description using AI."""
     try:
-        image_path, image_url = download_asset_image(data.asset_id)
-        prompt = (
-            "Please provide a detailed description of this Roblox asset image. "
-            "Include details about its appearance, features, and any notable characteristics."
-        )
-        ai_description = generate_description_from_image(image_path, prompt)
-        return {
-            "description": ai_description,
-            "imageUrl": image_url
-        }
+        result = await get_asset_description(data.asset_id, data.name)
+        if "error" in result:
+            raise HTTPException(status_code=500, detail=result["error"])
+        return result
     except HTTPException as e:
         raise e
     except Exception as e:
         logger.error(f"Error processing asset description request: {e}")
-        return {"error": f"Failed to process request: {str(e)}"}
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/get_player_description")
-async def get_player_description(data: PlayerDescriptionRequest):
+async def get_player_description_endpoint(data: PlayerDescriptionRequest):
+    """Endpoint to get player avatar description using AI."""
     try:
-        image_path = download_avatar_image(data.user_id)
-        ai_description = generate_avatar_description_from_image(image_path)
-        return {"description": ai_description}
+        # Download image and get its path
+        image_path = await download_avatar_image(data.user_id)
+        
+        # Generate description using the generic description function
+        prompt = (
+            "Please provide a detailed description of this Roblox avatar. "
+            "Include details about the avatar's clothing, accessories, colors, "
+            "unique features, and overall style or theme."
+        )
+        description = await generate_image_description(image_path, prompt)
+        
+        return {"description": description}
     except HTTPException as e:
         raise e
     except Exception as e:
         logger.error(f"Error processing player description request: {e}")
-        return {"error": f"Failed to process request: {str(e)}"}
+        raise HTTPException(status_code=500, detail=str(e))
+    
 
 @router.post("/robloxgpt/v3")
 async def enhanced_chatgpt_endpoint_v3(request: Request):

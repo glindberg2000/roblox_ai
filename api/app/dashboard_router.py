@@ -1,9 +1,14 @@
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
+import json
+import xml.etree.ElementTree as ET
 from .utils import load_json_database, save_json_database, save_lua_database, get_database_paths
+from .storage import FileStorageManager
+from .image_utils import get_asset_description
+from .config import STORAGE_DIR, ASSETS_DIR, THUMBNAILS_DIR, AVATARS_DIR
 
 # Initialize logging
 logger = logging.getLogger("roblox_app")
@@ -12,7 +17,10 @@ router = APIRouter()
 # Get database paths
 DB_PATHS = get_database_paths()
 
-# Pydantic Models for Dashboard
+# Initialize file storage manager
+file_manager = FileStorageManager()
+
+# Pydantic Models
 class AssetData(BaseModel):
     assetId: str
     name: str
@@ -41,7 +49,96 @@ class NPCData(BaseModel):
     shortTermMemory: List[str] = []
     assetID: str
 
+# RBXMX parsing
+async def parse_rbxmx(file: UploadFile) -> Dict:
+    """Parse RBXMX file to extract relevant metadata."""
+    try:
+        content = await file.read()
+        root = ET.fromstring(content)
+        
+        # Find source asset ID
+        source_asset_id = None
+        for item in root.findall(".//SourceAssetId"):
+            if item.text and item.text.strip() != "0":
+                source_asset_id = item.text.strip()
+                break
+
+        # Get name from the model
+        name = None
+        for item in root.findall(".//Properties/string[@name='Name']"):
+            name = item.text
+            break
+
+        # Find components/parts
+        components = []
+        for item in root.findall(".//Item"):
+            class_name = item.get('class')
+            if class_name and class_name not in components:
+                components.append(class_name)
+
+        return {
+            "sourceAssetId": source_asset_id,
+            "name": name,
+            "components": components
+        }
+    except Exception as e:
+        logger.error(f"Failed to parse RBXMX: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to parse RBXMX: {str(e)}")
+
 # Asset Routes
+@router.post("/api/parse-rbxmx")
+async def upload_rbxmx(file: UploadFile = File(...)):
+    if not file.filename.endswith('.rbxmx'):
+        raise HTTPException(status_code=400, detail="File must be RBXMX format")
+    
+    result = await parse_rbxmx(file)
+    return result
+
+@router.post("/api/assets")
+async def create_asset(data: str = Form(...), file: Optional[UploadFile] = None):
+    try:
+        logger.info("Processing asset creation request")
+        asset_data = json.loads(data)
+        
+        # Validate required fields
+        if not asset_data.get("assetId") or not asset_data.get("name"):
+            raise HTTPException(status_code=400, detail="Asset ID and name are required")
+
+        # Get asset description and store thumbnail
+        description_response = await get_asset_description(
+            asset_data["assetId"],
+            asset_data["name"]
+        )
+
+        # Store file if provided
+        file_info = None
+        if file:
+            logger.info(f"Processing file upload: {file.filename}")
+            file_info = await file_manager.store_asset_file(file, asset_data["assetId"])
+
+        # Create asset entry
+        new_asset = {
+            "assetId": asset_data["assetId"],
+            "name": asset_data["name"],
+            "description": description_response["description"],
+            "imageUrl": description_response["imageUrl"]
+        }
+
+        if file_info:
+            new_asset["sourceFile"] = file_info
+
+        # Update database
+        asset_database = load_json_database(DB_PATHS['asset']['json'])
+        asset_database["assets"].append(new_asset)
+        save_json_database(DB_PATHS['asset']['json'], asset_database)
+        save_lua_database(DB_PATHS['asset']['lua'], asset_database)
+        
+        return JSONResponse(new_asset)
+
+    except Exception as e:
+        logger.error(f"Error creating asset: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create asset: {str(e)}")
+
 @router.get("/api/assets")
 async def get_assets():
     try:
@@ -50,29 +147,11 @@ async def get_assets():
     except Exception as e:
         logger.error(f"Error fetching asset data: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch asset data")
-    
-@router.delete("/api/assets/{asset_id}")
-async def delete_asset(asset_id: str):
-    try:
-        asset_database = load_json_database(DB_PATHS['asset']['json'])
-        original_length = len(asset_database["assets"])
-        asset_database["assets"] = [a for a in asset_database["assets"] if a["assetId"] != asset_id]
-        
-        if len(asset_database["assets"]) == original_length:
-            raise HTTPException(status_code=404, detail="Asset not found")
-            
-        save_json_database(DB_PATHS['asset']['json'], asset_database)
-        save_lua_database(DB_PATHS['asset']['lua'], asset_database)
-        
-        return JSONResponse({"message": f"Asset {asset_id} deleted successfully"})
-    except Exception as e:
-        logger.error(f"Error deleting asset: {e}")
-        raise HTTPException(status_code=500, detail="Failed to delete asset")
 
 @router.put("/api/assets/{asset_id}")
 async def update_asset(asset_id: str, item: EditItemRequest):
     try:
-        logger.info(f"Attempting to update asset {asset_id} with data: {item}")
+        logger.info(f"Attempting to update asset {asset_id}")
         if not asset_id:
             raise HTTPException(status_code=400, detail="Asset ID is required")
             
@@ -89,13 +168,36 @@ async def update_asset(asset_id: str, item: EditItemRequest):
                 return JSONResponse(asset)
                 
         if not asset_found:
-            logger.error(f"Asset not found: {asset_id}")
             raise HTTPException(status_code=404, detail="Asset not found")
             
     except Exception as e:
         logger.error(f"Error updating asset: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.delete("/api/assets/{asset_id}")
+async def delete_asset(asset_id: str):
+    try:
+        # Delete from database
+        asset_database = load_json_database(DB_PATHS['asset']['json'])
+        original_length = len(asset_database["assets"])
+        asset_database["assets"] = [a for a in asset_database["assets"] if a["assetId"] != asset_id]
+        
+        if len(asset_database["assets"]) == original_length:
+            raise HTTPException(status_code=404, detail="Asset not found")
+        
+        # Delete associated files
+        await file_manager.delete_asset_files(asset_id)
+            
+        # Save updated database
+        save_json_database(DB_PATHS['asset']['json'], asset_database)
+        save_lua_database(DB_PATHS['asset']['lua'], asset_database)
+        
+        return JSONResponse({"message": f"Asset {asset_id} deleted successfully"})
+    except Exception as e:
+        logger.error(f"Error deleting asset: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete asset")
+
+      
 # NPC Routes
 @router.get("/api/npcs")
 async def get_npcs():
@@ -229,7 +331,7 @@ async def edit_npc(npc_id: str, npc_data: Dict[str, Any]):
         logger.error(f"Error updating NPC: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     
-    
+
 # Player Routes
 @router.get("/api/players")
 async def get_players():
