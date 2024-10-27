@@ -26,6 +26,7 @@ class AssetData(BaseModel):
     name: str
 
 class EditItemRequest(BaseModel):
+    name: str
     description: str
 
 class UpdateAssetsRequest(BaseModel):
@@ -161,6 +162,7 @@ async def update_asset(asset_id: str, item: EditItemRequest):
         for asset in asset_database["assets"]:
             if asset["assetId"] == asset_id:
                 asset_found = True
+                asset["name"] = item.name
                 asset["description"] = item.description
                 save_json_database(DB_PATHS['asset']['json'], asset_database)
                 save_lua_database(DB_PATHS['asset']['lua'], asset_database)
@@ -387,4 +389,7 @@ async def delete_player(player_id: str):
         logger.error(f"Error deleting player: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete player")
     
+
+
+
 

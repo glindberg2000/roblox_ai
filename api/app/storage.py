@@ -115,3 +115,22 @@ class FileStorageManager:
         """Clean up unused files and return count of deleted files."""
         # Implementation of cleanup logic
         pass
+
+    async def delete_asset_files(self, asset_id: str) -> None:
+        """Delete all files associated with an asset."""
+        try:
+            # Delete thumbnail
+            thumbnail_path = self.thumbnails_dir / f"{asset_id}.png"
+            if thumbnail_path.exists():
+                thumbnail_path.unlink()
+
+            # Delete asset file (try both .rbxmx and .rbxm extensions)
+            for ext in ['.rbxmx', '.rbxm']:
+                asset_path = self.assets_dir / f"{asset_id}{ext}"
+                if asset_path.exists():
+                    asset_path.unlink()
+
+            logger.info(f"Successfully deleted files for asset {asset_id}")
+        except Exception as e:
+            logger.error(f"Error deleting asset files: {e}")
+            raise

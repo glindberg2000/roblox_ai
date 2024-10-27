@@ -51,7 +51,7 @@ async function populateAssetSelect(selectElement = document.getElementById('asse
         const response = await fetch('/api/assets');
         const data = await response.json();
         debugLog('Asset Select Options', data.assets);
-        
+
         selectElement.innerHTML = '<option value="">Select an asset...</option>';
         data.assets.forEach(asset => {
             const option = document.createElement('option');
@@ -148,7 +148,7 @@ async function loadAssets() {
                 <p class="text-sm text-gray-400 mb-2">ID: ${asset.assetId}</p>
                 <p class="text-sm mb-4 h-20 overflow-y-auto text-gray-300">${asset.description || ''}</p>
                 <div class="flex space-x-2">
-                    <button onclick="handleAssetEdit(${JSON.stringify(asset)})" 
+                    <button onclick='handleAssetEdit(${JSON.stringify(asset).replace(/'/g, "&apos;")})' 
                             class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200">
                         Edit
                     </button>
@@ -221,10 +221,10 @@ async function loadNPCs() {
         data.npcs.forEach(npc => {
             const associatedAsset = npc.assetID ? assetsMap.get(npc.assetID) : null;
             debugLog(`NPC ${npc.id} Associated Asset`, associatedAsset);
-            
+
             const npcCard = document.createElement('div');
             npcCard.className = 'bg-dark-800 p-6 rounded-xl shadow-xl border border-dark-700 hover:border-blue-500 transition-colors duration-200';
-            
+
             // Store the complete NPC data as a data attribute
             const npcData = {
                 id: npc.id,
@@ -234,9 +234,9 @@ async function loadNPCs() {
                 system_prompt: npc.system_prompt || '',
                 spawnPosition: npc.spawnPosition || { x: 0, y: 5, z: 0 }
             };
-            
+
             npcCard.dataset.npc = JSON.stringify(npcData);
-            
+
             npcCard.innerHTML = `
                 <div class="aspect-w-16 aspect-h-9 mb-4">
                     ${associatedAsset?.imageUrl ?
@@ -300,12 +300,15 @@ function handleAssetEdit(asset) {
     try {
         debugLog('Editing Asset', asset);
         const modal = document.getElementById('assetEditModal');
-        
-        document.getElementById('editAssetId').value = asset.assetId;
-        document.getElementById('editAssetName').value = asset.name || '';
-        document.getElementById('editAssetDescription').value = asset.description || '';
-        document.getElementById('editAssetImage').src = asset.imageUrl || '';
-        document.getElementById('editAssetId_display').textContent = `(ID: ${asset.assetId})`;
+
+        // Parse the asset if it's a string (from JSON.stringify)
+        const assetData = typeof asset === 'string' ? JSON.parse(asset) : asset;
+
+        document.getElementById('editAssetId').value = assetData.assetId;
+        document.getElementById('editAssetName').value = assetData.name || '';
+        document.getElementById('editAssetDescription').value = assetData.description || '';
+        document.getElementById('editAssetImage').src = assetData.imageUrl || '';
+        document.getElementById('editAssetId_display').textContent = `(ID: ${assetData.assetId})`;
 
         modal.style.display = 'block';
     } catch (error) {
@@ -325,7 +328,7 @@ function showNPCEditModal(npcData) {
         document.getElementById('editNpcDisplayName').value = npcData.displayName || '';
         document.getElementById('editNpcRadius').value = npcData.responseRadius || 20;
         document.getElementById('editNpcPrompt').value = npcData.system_prompt || '';
-        
+
         const spawnPos = npcData.spawnPosition || { x: 0, y: 5, z: 0 };
         document.getElementById('editNpcSpawnX').value = spawnPos.x || 0;
         document.getElementById('editNpcSpawnY').value = spawnPos.y || 5;
@@ -432,7 +435,6 @@ async function saveAssetEdit(event) {
         showNotification('Failed to update asset: ' + error.message, 'error');
     }
 }
-
 async function deleteItem(type, id) {
     if (!confirm(`Are you sure you want to delete this ${type}?`)) return;
 
@@ -470,3 +472,8 @@ window.onclick = function (event) {
         closeAssetEditModal();
     }
 };
+
+
+
+
+

@@ -8,7 +8,7 @@ return {
             spawnPosition = Vector3.new(20, 5, 20),
             system_prompt = "You are a wise and mysterious ancient entity. You speak with authority and have knowledge of ancient secrets.",
             shortTermMemory = {},
-            assetID = "14768974964", -- For asset linking
+            assetID = "1388902922", -- For asset linking
         },
         {
             id = "luna",

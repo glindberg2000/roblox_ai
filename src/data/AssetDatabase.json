@@ -45,7 +45,7 @@
         {
             "assetId": "10800319010",
             "name": "Seek Killer",
-            "description": "The asset features a slender, humanoid figure primarily in black, evoking a shadowy appearance. It has an exaggerated, large white eye on its head, contrasting sharply with the dark body. The figure stands still, with a slightly angular aesthetic, giving it a mysterious, eerie vibe typical of horror-themed Roblox assets. This is a potentially dangerous NPC.",
+            "description": "The asset features a slender, humanoid figure primarily in shiny black, evoking a shadowy appearance. It has an exaggerated, large white eye on its head, contrasting sharply with the dark body. The figure stands still, with a slightly angular aesthetic, giving it a mysterious, eerie vibe typical of horror-themed Roblox assets. This is a potentially dangerous NPC.",
             "imageUrl": "https://tr.rbxcdn.com/180DAY-2abe0a46275383b4ad40cc0737d7a351/420/420/Model/Png/noFilter"
         },
         {
@@ -81,12 +81,24 @@
         {
             "assetId": "7315192066",
             "name": "Pete",
-            "description": "The Roblox character features a sporty look with a green jersey displaying the number \"8\" and two white stars. It has dark, textured pants and stylish black-and-white sneakers. Accessories include purple sunglasses, adding a cool vibe. The character has brown hair and a cheerful smile, embodying a casual, playful style.",
+            "description": "The Roblox character features a sporty look with a green jersey displaying the number 8 and two white stars. It has dark, textured pants and stylish black-and-white sneakers. Accessories include purple sunglasses, adding a cool vibe. The character has brown hair and a cheerful smile, embodying a casual, playful style.",
             "imageUrl": "https://tr.rbxcdn.com/180DAY-22973e25b74f541f576812dc4a427522/420/420/Model/Png/noFilter",
             "sourceFile": {
                 "filename": "Pete.rbxm",
                 "localPath": "assets/7315192066.rbxm",
                 "uploadDate": "2024-10-25T07:42:09.808422",
+                "components": []
+            }
+        },
+        {
+            "assetId": "1388902922",
+            "name": "old_wizard",
+            "description": "This Roblox asset features a character resembling a wizard. He has a long, flowing gray beard and an intense expression. His attire includes a gray and white robe with wide sleeves, accented by a black belt. A tall, pointed hat sits atop his head, completing the magical look. The overall design conveys a classic wizard theme.",
+            "imageUrl": "https://tr.rbxcdn.com/180DAY-e4846653ec22d0bb260f4123011d9cf3/420/420/Model/Png/noFilter",
+            "sourceFile": {
+                "filename": "old_wizard.rbxm",
+                "localPath": "assets/1388902922.rbxm",
+                "uploadDate": "2024-10-27T00:05:11.375385",
                 "components": []
             }
         }
