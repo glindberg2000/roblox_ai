@@ -66,9 +66,9 @@ function NPCManagerV3:createNPC(npcData)
 		Instance.new("Folder", workspace).Name = "NPCs"
 	end
 
-	local model = ServerStorage.Assets.NPCs:FindFirstChild(npcData.model)
+	local model = ServerStorage.Assets.npcs:FindFirstChild(npcData.model)
 	if not model then
-		warn("NPCDatabase for NPC: ", npcData.displayName, " Model:", npcData.model)
+		warn("Model not found for NPC: " .. npcData.displayName .. " (Model name: " .. npcData.model .. ")")
 		return
 	end
 
@@ -644,7 +644,7 @@ function NPCManagerV3:testFollowFunctionality(npcId, playerId)
 		self:startFollowing(npc, player)
 		wait(5) -- Wait for 5 seconds
 		self:updateFollowing(npc)
-		wait(5) -- Wait another 5 seconds
+			wait(5) -- Wait another 5 seconds
 		self:stopFollowing(npc)
 		self:log("Follow test completed for NPC: " .. npc.displayName)
 	else

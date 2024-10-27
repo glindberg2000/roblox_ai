@@ -38,8 +38,25 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local Logger = require(ServerScriptService:WaitForChild("Logger"))
 
-local NPCManagerV3 = require(ReplicatedStorage:WaitForChild("NPCManagerV3"))
+-- Move ensureStorage to the top, before NPC initialization
+local function ensureStorage()
+    local ServerStorage = game:GetService("ServerStorage")
+    
+    -- Create Assets/npcs folder structure
+    local Assets = ServerStorage:FindFirstChild("Assets") or 
+                   Instance.new("Folder", ServerStorage)
+    Assets.Name = "Assets"
+    
+    local npcs = Assets:FindFirstChild("npcs") or 
+                 Instance.new("Folder", Assets)
+    npcs.Name = "npcs"
+end
 
+-- Call ensureStorage first
+ensureStorage()
+
+-- Then initialize NPC system
+local NPCManagerV3 = require(ReplicatedStorage:WaitForChild("NPCManagerV3"))
 print("Starting NPC initialization")
 local npcManagerV3 = NPCManagerV3.new()
 print("NPC Manager created")

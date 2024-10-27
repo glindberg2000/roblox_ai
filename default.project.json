@@ -2,6 +2,15 @@
   "name": "EllaAIRobloxGame",
   "tree": {
     "$className": "DataModel",
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "Assets": {
+        "$className": "Folder",
+        "npcs": {
+          "$path": "src/assets/npcs"
+        }
+      }
+    },
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
       "NPCManagerV3": {
@@ -9,12 +18,6 @@
       },
       "NPCDatabaseV3": {
         "$path": "src/data/NPCDatabase.lua"
-      },
-      "LocalDB": {
-        "$className": "Folder"
-      },
-      "AssetModule": {
-        "$path": "src/shared/AssetModule.lua"
       }
     },
     "ServerScriptService": {
@@ -47,21 +50,6 @@
         "$className": "StarterPlayerScripts",
         "NPCClientHandler": {
           "$path": "src/client/NPCClientHandler.client.lua"
-        }
-      }
-    },
-    "ServerStorage": {
-      "$className": "ServerStorage",
-      "NPCModels": {
-        "$className": "Folder",
-        "Eldrin": {
-          "$path": "src/assets/npcs/eldrin.rbxm"
-        },
-        "Luna": {
-          "$path": "src/assets/npcs/luna.rbxm"
-        },
-        "Oz": {
-          "$path": "src/assets/npcs/oz.rbxm"
         }
       }
     }

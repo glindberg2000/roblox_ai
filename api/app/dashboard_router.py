@@ -28,6 +28,7 @@ class AssetData(BaseModel):
 class EditItemRequest(BaseModel):
     name: str
     description: str
+    assetId: str
 
 class UpdateAssetsRequest(BaseModel):
     overwrite: bool = False
@@ -205,10 +206,18 @@ async def delete_asset(asset_id: str):
 async def get_npcs():
     try:
         npc_data = load_json_database(DB_PATHS['npc']['json'])
-        # Transform the data to use system_prompt for display
+        # Transform the data to ensure consistent field names
         for npc in npc_data["npcs"]:
-            if "description" in npc:
-                del npc["description"]  # Remove description field if it exists
+            # Convert assetID to assetId if needed
+            if "assetID" in npc and "assetId" not in npc:
+                npc["assetId"] = npc["assetID"]
+                del npc["assetID"]
+            # Ensure model field exists
+            if "model" not in npc and "displayName" in npc:
+                npc["model"] = "NPCModel_" + "".join(
+                    word.capitalize() 
+                    for word in npc["displayName"].split()
+                )
         return JSONResponse({"npcs": npc_data["npcs"]})
     except Exception as e:
         logger.error(f"Error fetching NPC data: {e}")
@@ -389,6 +398,7 @@ async def delete_player(player_id: str):
         logger.error(f"Error deleting player: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete player")
     
+
 
 
 

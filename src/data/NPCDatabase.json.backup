@@ -3,22 +3,27 @@
     {
       "id": "oz1",
       "displayName": "Oz the First",
-      "model": "Oz",
+      "assetId": "1388902922",
       "responseRadius": 25,
       "spawnPosition": {
         "x": 20,
         "y": 5,
         "z": 20
       },
-      "system_prompt": "You are a very wise and mysterious ancient old entity. You speak with authority and have knowledge of ancient secrets.",
+      "system_prompt": "You are a wise and mysterious ancient entity. You speak with authority and have knowledge of ancient secrets.",
       "shortTermMemory": [],
-      "assetID": "14768974964",
-      "thumbnailUrl": "https://tr.rbxcdn.com/180DAY-f4f52167be26db9f9c2fd4dc24ec3e2d/420/420/Model/Png/noFilter"
+      "abilities": [
+        "follow",
+        "inspect",
+        "cast_spell",
+        "teach"
+      ],
+      "model": "old_wizard"
     },
     {
       "id": "luna",
       "displayName": "Luna the Stargazer",
-      "model": "Luna",
+      "assetId": "14215126016",
       "responseRadius": 26,
       "spawnPosition": {
         "x": 0,
@@ -27,14 +32,19 @@
       },
       "system_prompt": "You are Luna the Stargazer, a celestial entity with deep knowledge of the cosmos. You speak in poetic verses and often relate things to celestial bodies.",
       "shortTermMemory": [],
-      "assetID": "14768974964",
-      "thumbnailUrl": "https://tr.rbxcdn.com/180DAY-f4f52167be26db9f9c2fd4dc24ec3e2d/420/420/Model/Png/noFilter"
+      "abilities": [
+        "follow",
+        "inspect",
+        "stargaze",
+        "teach_astronomy"
+      ],
+      "model": "wizard"
     },
     {
       "id": "pete",
       "displayName": "Pete the Kid",
-      "model": "Pete",
-      "responseRadius": 20,
+      "assetId": "7315192066",
+      "responseRadius": 10,
       "spawnPosition": {
         "x": -15,
         "y": 5,
@@ -42,12 +52,18 @@
       },
       "system_prompt": "You are Pete, a typical 10-year-old kid who loves baseball. You're energetic, curious, and sometimes use kid-friendly slang. You're always excited to talk about sports, especially baseball, and you're proud of your glasses because they help you see the ball better.",
       "shortTermMemory": [],
-      "assetID": "asset_pete"
+      "abilities": [
+        "follow",
+        "play_catch",
+        "run",
+        "teach_baseball"
+      ],
+      "model": "pete"
     },
     {
       "id": "cyclops",
       "displayName": "Cy the Cyclops",
-      "model": "Cyclops",
+      "assetId": "10800319010",
       "responseRadius": 30,
       "spawnPosition": {
         "x": 15,
@@ -56,7 +72,13 @@
       },
       "system_prompt": "You are Cy the Cyclops, a tall, black, skinny creature with one big eye on your forehead. You have a unique perspective on the world due to your single eye. You're gentle despite your intimidating appearance, and you often make observations about shapes and distances. You sometimes struggle with depth perception, which comes across in your speech.",
       "shortTermMemory": [],
-      "assetID": "asset_cyclops"
+      "abilities": [
+        "follow",
+        "inspect",
+        "night_vision",
+        "depth_perception_check"
+      ],
+      "model": "seek"
     }
   ]
 }

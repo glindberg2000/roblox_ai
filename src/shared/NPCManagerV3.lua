@@ -66,7 +66,7 @@ function NPCManagerV3:createNPC(npcData)
 		Instance.new("Folder", workspace).Name = "NPCs"
 	end
 
-	local model = ServerStorage.NPCModels:FindFirstChild(npcData.model)
+	local model = ServerStorage.Assets.npcs:FindFirstChild(npcData.model)
 	if not model then
 		warn("Model not found for NPC: " .. npcData.displayName)
 		return

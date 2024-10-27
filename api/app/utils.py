@@ -64,12 +64,20 @@ def save_lua_database(path: str, data: Dict[str, Any]) -> None:
                 f.write("    assets = {\n")
                 for asset in data["assets"]:
                     f.write("        {\n")
-                    f.write(f'            assetId = "{asset["assetId"]}",\n')
-                    f.write(f'            name = "{asset["name"]}",\n')
-                    # Escape any quotes in the description
-                    description = asset["description"].replace('"', '\\"')
-                    f.write(f'            description = "{description}",\n')
-                    f.write(f'            imageUrl = "{asset["imageUrl"]}",\n')
+                    for key, value in asset.items():
+                        # Handle different value types
+                        if isinstance(value, str):
+                            # Escape quotes in strings
+                            escaped_value = value.replace('"', '\\"')
+                            f.write(f'            {key} = "{escaped_value}",\n')
+                        elif isinstance(value, (int, float)):
+                            f.write(f'            {key} = {value},\n')
+                        elif isinstance(value, bool):
+                            f.write(f'            {key} = {str(value).lower()},\n')
+                        elif isinstance(value, list):
+                            # Fixed the problematic f-string
+                            items = ", ".join(f'"{x}"' for x in value)
+                            f.write(f'            {key} = {{ {items} }},\n')
                     f.write("        },\n")
                 f.write("    },\n")
             
@@ -81,6 +89,7 @@ def save_lua_database(path: str, data: Dict[str, Any]) -> None:
                     # Required fields
                     f.write(f'            id = "{npc["id"]}",\n')
                     f.write(f'            displayName = "{npc["displayName"]}",\n')
+                    f.write(f'            assetId = "{npc["assetId"]}",\n')  # Changed from assetID
                     f.write(f'            model = "{npc["model"]}",\n')
                     f.write(f'            responseRadius = {npc["responseRadius"]},\n')
                     
@@ -92,9 +101,17 @@ def save_lua_database(path: str, data: Dict[str, Any]) -> None:
                     system_prompt = npc["system_prompt"].replace('"', '\\"')
                     f.write(f'            system_prompt = "{system_prompt}",\n')
                     
-                    # Optional fields with defaults
-                    f.write(f'            shortTermMemory = {{}},\n')
-                    f.write(f'            assetID = "{npc.get("assetID", "")}", -- For asset linking\n')
+                    # Empty table for shortTermMemory
+                    f.write('            shortTermMemory = {},\n')
+                    
+                    # Handle abilities array
+                    if "abilities" in npc and npc["abilities"]:
+                        f.write('            abilities = {\n')
+                        for ability in npc["abilities"]:
+                            f.write(f'                "{ability}",\n')
+                        f.write('            },\n')
+                    else:
+                        f.write('            abilities = {},\n')
                     
                     f.write("        },\n")
                 f.write("    },\n")
@@ -104,11 +121,33 @@ def save_lua_database(path: str, data: Dict[str, Any]) -> None:
                 f.write("    players = {\n")
                 for player in data["players"]:
                     f.write("        {\n")
-                    f.write(f'            playerID = "{player["playerID"]}",\n')
+                    # Required fields
+                    f.write(f'            id = "{player["id"]}",\n')
                     f.write(f'            displayName = "{player["displayName"]}",\n')
-                    if "description" in player:
-                        description = player["description"].replace('"', '\\"')
-                        f.write(f'            description = "{description}",\n')
+                    f.write(f'            assetId = "{player["assetId"]}",\n')  # Changed from assetID
+                    f.write(f'            model = "{player["model"]}",\n')
+                    f.write(f'            responseRadius = {player["responseRadius"]},\n')
+                    
+                    # Convert spawn position to Vector3
+                    spawn_pos = player["spawnPosition"]
+                    f.write(f'            spawnPosition = Vector3.new({spawn_pos["x"]}, {spawn_pos["y"]}, {spawn_pos["z"]}),\n')
+                    
+                    # System prompt with escaped quotes
+                    system_prompt = player["system_prompt"].replace('"', '\\"')
+                    f.write(f'            system_prompt = "{system_prompt}",\n')
+                    
+                    # Empty table for shortTermMemory
+                    f.write('            shortTermMemory = {},\n')
+                    
+                    # Handle abilities array
+                    if "abilities" in player and player["abilities"]:
+                        f.write('            abilities = {\n')
+                        for ability in player["abilities"]:
+                            f.write(f'                "{ability}",\n')
+                        f.write('            },\n')
+                    else:
+                        f.write('            abilities = {},\n')
+                    
                     f.write("        },\n")
                 f.write("    },\n")
             

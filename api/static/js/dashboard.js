@@ -136,29 +136,54 @@ async function loadAssets() {
         assetList.innerHTML = '';
 
         data.assets.forEach(asset => {
+            const safeAsset = {
+                assetId: asset.assetId || '',
+                name: asset.name || 'Unnamed Asset',
+                description: asset.description || '',
+                imageUrl: asset.imageUrl || ''
+            };
+
             const assetCard = document.createElement('div');
             assetCard.className = 'bg-dark-800 p-6 rounded-xl shadow-xl border border-dark-700 hover:border-blue-500 transition-colors duration-200';
+
+            // Use data attributes instead of onclick
             assetCard.innerHTML = `
                 <div class="aspect-w-16 aspect-h-9 mb-4">
-                    <img src="${asset.imageUrl || ''}" 
-                         alt="${asset.name}" 
+                    <img src="${safeAsset.imageUrl}" 
+                         alt="${safeAsset.name}" 
                          class="w-full h-32 object-contain rounded-lg bg-dark-700 p-2">
                 </div>
-                <h3 class="font-bold text-lg truncate text-gray-100">${asset.name}</h3>
-                <p class="text-sm text-gray-400 mb-2">ID: ${asset.assetId}</p>
-                <p class="text-sm mb-4 h-20 overflow-y-auto text-gray-300">${asset.description || ''}</p>
+                <h3 class="font-bold text-lg truncate text-gray-100">${safeAsset.name}</h3>
+                <p class="text-sm text-gray-400 mb-2">ID: ${safeAsset.assetId}</p>
+                <p class="text-sm mb-4 h-20 overflow-y-auto text-gray-300">${safeAsset.description}</p>
                 <div class="flex space-x-2">
-                    <button onclick='handleAssetEdit(${JSON.stringify(asset).replace(/'/g, "&apos;")})' 
-                            class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200">
+                    <button data-asset='${JSON.stringify(safeAsset).replace(/'/g, "&apos;")}' 
+                            class="edit-asset-btn flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200">
                         Edit
                     </button>
-                    <button onclick="deleteItem('asset', '${asset.assetId}')" 
-                            class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200">
+                    <button data-id="${safeAsset.assetId}" 
+                            class="delete-asset-btn flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200">
                         Delete
                     </button>
                 </div>`;
+
             assetList.appendChild(assetCard);
         });
+
+        // Add event listeners after creating cards
+        document.querySelectorAll('.edit-asset-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const assetData = JSON.parse(this.dataset.asset);
+                handleAssetEdit(assetData);
+            });
+        });
+
+        document.querySelectorAll('.delete-asset-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                deleteItem('asset', this.dataset.id);
+            });
+        });
+
     } catch (error) {
         console.error('Error loading assets:', error);
         showNotification('Failed to load assets', 'error');
@@ -208,90 +233,114 @@ async function loadNPCs() {
     try {
         const response = await fetch('/api/npcs');
         const data = await response.json();
-        debugLog('Loaded NPCs', data.npcs);
+        debugLog('Raw NPC Data:', data.npcs);
 
+        // Fetch assets first to ensure we have the data
         const assetsResponse = await fetch('/api/assets');
         const assetsData = await assetsResponse.json();
-        debugLog('Available Assets', assetsData.assets);
         const assetsMap = new Map(assetsData.assets.map(asset => [asset.assetId, asset]));
 
         const npcList = document.getElementById('npcList');
         npcList.innerHTML = '';
 
         data.npcs.forEach(npc => {
-            const associatedAsset = npc.assetID ? assetsMap.get(npc.assetID) : null;
-            debugLog(`NPC ${npc.id} Associated Asset`, associatedAsset);
+            // Use assetId instead of assetID
+            const associatedAsset = npc.assetId ? assetsMap.get(npc.assetId) : null;
 
-            const npcCard = document.createElement('div');
-            npcCard.className = 'bg-dark-800 p-6 rounded-xl shadow-xl border border-dark-700 hover:border-blue-500 transition-colors duration-200';
-
-            // Store the complete NPC data as a data attribute
             const npcData = {
                 id: npc.id,
                 displayName: npc.displayName || '',
-                assetID: npc.assetID || '',
+                assetId: npc.assetId || '',  // Changed from assetID
+                model: npc.model || '',      // Added model field
                 responseRadius: npc.responseRadius || 20,
                 system_prompt: npc.system_prompt || '',
                 spawnPosition: npc.spawnPosition || { x: 0, y: 5, z: 0 }
             };
 
-            npcCard.dataset.npc = JSON.stringify(npcData);
+            const npcCard = document.createElement('div');
+            npcCard.className = 'bg-dark-800 p-6 rounded-xl shadow-xl border border-dark-700 hover:border-blue-500 transition-colors duration-200';
 
             npcCard.innerHTML = `
                 <div class="aspect-w-16 aspect-h-9 mb-4">
                     ${associatedAsset?.imageUrl ?
                     `<img src="${associatedAsset.imageUrl}" 
-                              alt="${npc.displayName}" 
-                              class="w-full h-32 object-contain rounded-lg bg-dark-700 p-2">` :
+                          alt="${npc.displayName}" 
+                          class="w-full h-32 object-contain rounded-lg bg-dark-700 p-2">` :
                     '<div class="w-full h-32 bg-dark-700 rounded-lg flex items-center justify-center text-gray-400">No Image</div>'}
                 </div>
                 <h3 class="font-bold text-lg text-gray-100">${npc.displayName || 'Unnamed NPC'}</h3>
+                <p class="text-sm text-gray-400 mb-1">Model: ${npc.model || 'No Model'}</p>
                 <p class="text-sm text-gray-400 mb-1">Asset: ${associatedAsset?.name || 'None'}</p>
-                <p class="text-sm text-gray-400 mb-2">Asset ID: ${npc.assetID || 'None'}</p>
+                <p class="text-sm text-gray-400 mb-2">Asset ID: ${npc.assetId || 'None'}</p>
                 <p class="text-sm mb-2 text-gray-300">Radius: ${npc.responseRadius || 20}m</p>
                 <div class="text-sm mb-4 h-20 overflow-y-auto">
                     <p class="font-medium text-gray-300">Personality:</p>
                     <p class="text-gray-400">${npc.system_prompt || 'No personality defined'}</p>
                 </div>
                 <div class="flex space-x-2">
-                    <button onclick="handleNPCEdit(this)" 
-                            class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200">
+                    <button data-npc='${JSON.stringify(npcData).replace(/'/g, "&apos;")}' 
+                            class="edit-npc-btn flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200">
                         Edit
                     </button>
-                    <button onclick="deleteItem('npc', '${npc.id}')" 
-                            class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200">
+                    <button data-id="${npc.id}" 
+                            class="delete-npc-btn flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200">
                         Delete
                     </button>
-                </div>
-            `;
+                </div>`;
+
             npcList.appendChild(npcCard);
         });
+
+        // Add event listeners after creating cards
+        document.querySelectorAll('.edit-npc-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const npcData = JSON.parse(this.dataset.npc);
+                handleNPCEdit(npcData);
+            });
+        });
+
+        document.querySelectorAll('.delete-npc-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                deleteItem('npc', this.dataset.id);
+            });
+        });
+
     } catch (error) {
         console.error('Error loading NPCs:', error);
         showNotification('Failed to load NPCs', 'error');
     }
 }
-
-function handleNPCEdit(button) {
+function handleNPCEdit(npcData) {
     try {
-        // Visual feedback
-        button.classList.add('opacity-75');
-        setTimeout(() => button.classList.remove('opacity-75'), 200);
+        // If npcData is a string, parse it
+        const data = typeof npcData === 'string' ? JSON.parse(npcData) : npcData;
+        debugLog('Opening NPC Edit Modal', data);
 
-        const npcCard = button.closest('div[data-npc]');
-        if (!npcCard) {
-            throw new Error('Could not find NPC data container');
+        const modal = document.getElementById('npcEditModal');
+        if (!modal) throw new Error('Modal element not found');
+
+        // Populate form fields
+        document.getElementById('editNpcId').value = data.id;
+        document.getElementById('editNpcDisplayName').value = data.displayName || '';
+        document.getElementById('editNpcRadius').value = data.responseRadius || 20;
+        document.getElementById('editNpcPrompt').value = data.system_prompt || '';
+
+        const spawnPos = data.spawnPosition || { x: 0, y: 5, z: 0 };
+        document.getElementById('editNpcSpawnX').value = spawnPos.x || 0;
+        document.getElementById('editNpcSpawnY').value = spawnPos.y || 5;
+        document.getElementById('editNpcSpawnZ').value = spawnPos.z || 0;
+
+        // Set asset ID if it exists
+        const assetSelect = document.getElementById('editNpcAssetId');
+        if (assetSelect) {
+            populateAssetSelect(assetSelect).then(() => {
+                assetSelect.value = data.assetId || '';
+            });
         }
 
-        const npcDataStr = npcCard.dataset.npc;
-        debugLog('Raw NPC Data', npcDataStr);
-
-        const npcData = JSON.parse(npcDataStr);
-        debugLog('Parsed NPC Data', npcData);
-
-        showNPCEditModal(npcData);
+        modal.style.display = 'block';
     } catch (error) {
-        console.error('Error handling NPC edit:', error);
+        console.error('Error showing NPC edit modal:', error);
         showNotification('Failed to open edit modal: ' + error.message, 'error');
     }
 }
@@ -304,11 +353,21 @@ function handleAssetEdit(asset) {
         // Parse the asset if it's a string (from JSON.stringify)
         const assetData = typeof asset === 'string' ? JSON.parse(asset) : asset;
 
+        // Populate the edit form
         document.getElementById('editAssetId').value = assetData.assetId;
         document.getElementById('editAssetName').value = assetData.name || '';
         document.getElementById('editAssetDescription').value = assetData.description || '';
-        document.getElementById('editAssetImage').src = assetData.imageUrl || '';
-        document.getElementById('editAssetId_display').textContent = `(ID: ${assetData.assetId})`;
+
+        // Only try to set image if element exists
+        const imageElement = document.getElementById('editAssetImage');
+        if (imageElement) {
+            imageElement.src = assetData.imageUrl || '';
+        }
+
+        const idDisplay = document.getElementById('editAssetId_display');
+        if (idDisplay) {
+            idDisplay.textContent = `(ID: ${assetData.assetId})`;
+        }
 
         modal.style.display = 'block';
     } catch (error) {
@@ -341,7 +400,7 @@ function showNPCEditModal(npcData) {
         // Populate asset select
         populateAssetSelect(assetSelect)
             .then(() => {
-                assetSelect.value = npcData.assetID || '';
+                assetSelect.value = npcData.assetId || '';
                 debugLog('Asset Select Value Set', { value: assetSelect.value });
             });
 
@@ -364,21 +423,32 @@ async function saveNPCEdit(event) {
     event.preventDefault();
 
     try {
+        const npcId = document.getElementById('editNpcId').value;
+        const assetId = document.getElementById('editNpcAssetId').value;
+
+        // Get current NPC data
+        const npcResponse = await fetch(`/api/npcs/${npcId}`);
+        const currentNPC = await npcResponse.json();
+
         const npcData = {
+            id: npcId,
             displayName: document.getElementById('editNpcDisplayName').value,
-            model: document.getElementById('editNpcDisplayName').value.replace(/\s+/g, ''),
-            assetID: document.getElementById('editNpcAssetId').value || null,
+            assetId: assetId,
+            model: currentNPC.model,
             responseRadius: parseInt(document.getElementById('editNpcRadius').value) || 20,
             spawnPosition: {
                 x: parseFloat(document.getElementById('editNpcSpawnX').value) || 0,
                 y: parseFloat(document.getElementById('editNpcSpawnY').value) || 5,
                 z: parseFloat(document.getElementById('editNpcSpawnZ').value) || 0
             },
-            system_prompt: document.getElementById('editNpcPrompt').value || ''
+            system_prompt: document.getElementById('editNpcPrompt').value || '',
+            shortTermMemory: [],
+            abilities: currentNPC.abilities || [] // Preserve existing abilities
         };
 
-        const npcId = document.getElementById('editNpcId').value;
-        debugLog('Saving NPC Edit', { id: npcId, data: npcData });
+        debugLog('=== NPC Update Payload: ===');
+        debugLog(JSON.stringify(npcData, null, 2));
+        debugLog('=================');
 
         const response = await fetch(`/api/npcs/${npcId}`, {
             method: 'PUT',
@@ -390,28 +460,29 @@ async function saveNPCEdit(event) {
 
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to update NPC');
+            console.error('Server Error Response:', errorData);
+            throw new Error(errorData.detail || `Failed to update NPC: ${response.status}`);
         }
 
         showNotification('NPC updated successfully', 'success');
         closeNPCEditModal();
-        loadNPCs();
+        await loadNPCs();
     } catch (error) {
         console.error('Error updating NPC:', error);
         showNotification('Failed to update NPC: ' + error.message, 'error');
     }
 }
-
 async function saveAssetEdit(event) {
     event.preventDefault();
-
     try {
+        const assetId = document.getElementById('editAssetId').value;
         const assetData = {
+            assetId: assetId, // Include the assetId in the payload
             name: document.getElementById('editAssetName').value,
-            description: document.getElementById('editAssetDescription').value || ''
+            description: document.getElementById('editAssetDescription').value || '',
+            // Include any other required fields from your API schema
         };
 
-        const assetId = document.getElementById('editAssetId').value;
         debugLog('Saving Asset Edit', { id: assetId, data: assetData });
 
         const response = await fetch(`/api/assets/${assetId}`, {
@@ -424,17 +495,18 @@ async function saveAssetEdit(event) {
 
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to update asset');
+            throw new Error(errorData.detail || 'Failed to update asset');
         }
 
         showNotification('Asset updated successfully', 'success');
         closeAssetEditModal();
-        loadAssets();
+        await loadAssets();
     } catch (error) {
         console.error('Error updating asset:', error);
         showNotification('Failed to update asset: ' + error.message, 'error');
     }
 }
+
 async function deleteItem(type, id) {
     if (!confirm(`Are you sure you want to delete this ${type}?`)) return;
 
@@ -471,7 +543,7 @@ window.onclick = function (event) {
     } else if (event.target === assetEditModal) {
         closeAssetEditModal();
     }
-};
+}
 
 
 
