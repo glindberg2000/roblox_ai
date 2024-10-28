@@ -92,31 +92,9 @@ async function createAsset(event) {
     const form = event.target;
     const formData = new FormData(form);
     const fileInput = form.querySelector('input[type="file"]');
+    const storageTypeSelect = form.querySelector('select[name="storage_type"]');
 
     try {
-        if (fileInput.files.length > 0) {
-            const file = fileInput.files[0];
-            if (file.name.endsWith('.rbxmx') || file.name.endsWith('.rbxm')) {
-                const parseFormData = new FormData();
-                parseFormData.append('file', file);
-
-                const parseResponse = await fetch('/api/parse-rbxmx', {
-                    method: 'POST',
-                    body: parseFormData
-                });
-
-                if (parseResponse.ok) {
-                    const parseData = await parseResponse.json();
-                    if (parseData.sourceAssetId) {
-                        form.querySelector('[name="assetId"]').value = parseData.sourceAssetId;
-                    }
-                    if (parseData.name) {
-                        form.querySelector('[name="name"]').value = parseData.name;
-                    }
-                }
-            }
-        }
-
         const assetData = {
             assetId: form.querySelector('[name="assetId"]').value,
             name: form.querySelector('[name="name"]').value
@@ -126,8 +104,17 @@ async function createAsset(event) {
 
         const submitFormData = new FormData();
         submitFormData.append('data', JSON.stringify(assetData));
+        
         if (fileInput.files.length > 0) {
+            if (!storageTypeSelect.value) {
+                throw new Error('Please select a storage type for the model file');
+            }
             submitFormData.append('file', fileInput.files[0]);
+            submitFormData.append('storage_type', storageTypeSelect.value);
+            debugLog('Uploading file:', {
+                filename: fileInput.files[0].name,
+                storageType: storageTypeSelect.value
+            });
         }
 
         const response = await fetch('/api/assets', {
@@ -135,7 +122,10 @@ async function createAsset(event) {
             body: submitFormData
         });
 
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to create asset');
+        }
 
         showNotification('Asset created successfully!', 'success');
         await loadAssets();
@@ -146,7 +136,6 @@ async function createAsset(event) {
         showNotification('Failed to create asset: ' + error.message, 'error');
     }
 }
-
 async function loadAssets() {
     try {
         const response = await fetch('/api/assets');
@@ -618,6 +607,8 @@ function populateAbilityCheckboxes(container, selectedAbilities = []) {
     
     console.log('Abilities populated:', container.innerHTML);
 }
+
+
 
 
 

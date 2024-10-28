@@ -125,6 +125,18 @@
                         <input type="file" name="file" accept=".rbxmx,.rbxm"
                             class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100 file:mr-4 file:py-2 file:px-4 file:border-0 file:bg-blue-600 file:text-white file:hover:bg-blue-700 cursor-pointer">
                     </div>
+                    <!-- Add this new storage type selector -->
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Storage Type:</label>
+                        <select name="storage_type" 
+                            class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="">Select storage type...</option>
+                            <option value="npcs">NPCs</option>
+                            <option value="props">Props</option>
+                            <option value="vehicles">Vehicles</option>
+                            <option value="buildings">Buildings</option>
+                        </select>
+                    </div>
                     <button type="submit"
                         class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-lg">
                         Add Asset

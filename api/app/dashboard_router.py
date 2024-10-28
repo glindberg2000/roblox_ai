@@ -97,10 +97,22 @@ async def upload_rbxmx(file: UploadFile = File(...)):
     return result
 
 @router.post("/api/assets")
-async def create_asset(data: str = Form(...), file: Optional[UploadFile] = None):
+async def create_asset(
+    data: str = Form(...), 
+    file: Optional[UploadFile] = None,
+    storage_type: str = Form(...)  # Explicit form field for storage location
+):
     try:
-        logger.info("Processing asset creation request")
+        logger.info(f"Processing asset creation request with storage type: {storage_type}")
         asset_data = json.loads(data)
+        
+        # Validate storage type
+        valid_types = ['npcs', 'vehicles', 'buildings', 'props']
+        if storage_type not in valid_types:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid storage type. Must be one of: {valid_types}"
+            )
         
         # Validate required fields
         if not asset_data.get("assetId") or not asset_data.get("name"):
@@ -116,30 +128,53 @@ async def create_asset(data: str = Form(...), file: Optional[UploadFile] = None)
         file_info = None
         if file:
             logger.info(f"Processing file upload: {file.filename}")
-            file_info = await file_manager.store_asset_file(file, asset_data["assetId"])
+            try:
+                file_info = await file_manager.store_asset_file(file, storage_type)
+                logger.info(f"File stored successfully: {file_info}")
+            except Exception as e:
+                logger.error(f"Failed to store file: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to store file: {str(e)}")
 
         # Create asset entry
         new_asset = {
             "assetId": asset_data["assetId"],
             "name": asset_data["name"],
-            "description": description_response["description"],
-            "imageUrl": description_response["imageUrl"]
+            "model": asset_data.get("model") or asset_data["name"].replace(" ", ""),
+            "description": description_response.get("description", ""),
+            "imageUrl": description_response.get("imageUrl", ""),
+            "type": asset_data.get("type", "unknown"),
+            "tags": asset_data.get("tags", [])
         }
 
-        if file_info:
-            new_asset["sourceFile"] = file_info
-
-        # Update database
+        # Load and update asset database
         asset_database = load_json_database(DB_PATHS['asset']['json'])
-        asset_database["assets"].append(new_asset)
+        
+        # Check for existing asset
+        existing_asset_index = next(
+            (i for i, asset in enumerate(asset_database["assets"]) 
+             if asset["assetId"] == new_asset["assetId"]), 
+            None
+        )
+
+        if existing_asset_index is not None:
+            asset_database["assets"][existing_asset_index] = new_asset
+            message = "Asset updated successfully"
+        else:
+            asset_database["assets"].append(new_asset)
+            message = "Asset created successfully"
+
+        # Save updated database
         save_json_database(DB_PATHS['asset']['json'], asset_database)
         save_lua_database(DB_PATHS['asset']['lua'], asset_database)
-        
-        return JSONResponse(new_asset)
+
+        return JSONResponse({
+            "message": message,
+            "asset": new_asset
+        })
 
     except Exception as e:
-        logger.error(f"Error creating asset: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to create asset: {str(e)}")
+        logger.error(f"Error creating asset: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/api/assets")
 async def get_assets():
@@ -424,10 +459,11 @@ async def create_npc(npc_data: Dict[str, Any]):
             raise HTTPException(status_code=400, detail="Invalid asset ID")
             
         # Create normalized NPC data structure
-        npc_data = {
+        normalized_npc = {
             "id": npc_data["id"],
             "displayName": str(npc_data["displayName"]),
             "assetId": asset_id,  # Use consistent field name
+            "model": linked_asset.get("model") or npc_data["displayName"].replace(" ", ""),
             "responseRadius": int(npc_data["responseRadius"]),
             "spawnPosition": {
                 "x": float(npc_data["spawnPosition"]["x"]),
@@ -436,23 +472,27 @@ async def create_npc(npc_data: Dict[str, Any]):
             },
             "system_prompt": str(npc_data["system_prompt"]),
             "abilities": list(npc_data.get("abilities", [])),
-            "shortTermMemory": [],
-            "model": linked_asset["model"]  # Use the model directly from the asset database
+            "shortTermMemory": []
         }
         
         # Load existing NPCs
         npc_database = load_json_database(DB_PATHS['npc']['json'])
-        
+        if "npcs" not in npc_database:
+            npc_database["npcs"] = []
+            
         # Add the NPC to the database
-        npc_database["npcs"].append(npc_data)
+        npc_database["npcs"].append(normalized_npc)
         
         # Save the updated database
         save_json_database(DB_PATHS['npc']['json'], npc_database)
         save_lua_database(DB_PATHS['npc']['lua'], npc_database)
         
-        logger.info(f"Successfully created NPC with ID: {npc_data['id']}")
-        return JSONResponse(npc_data)
+        logger.info(f"Successfully created NPC with ID: {normalized_npc['id']}")
+        return JSONResponse(normalized_npc)
         
     except Exception as e:
         logger.error(f"Error creating NPC: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+

@@ -16,6 +16,15 @@ AVATARS_DIR = STORAGE_DIR / "avatars"  # For player avatar images
 for directory in [STORAGE_DIR, ASSETS_DIR, THUMBNAILS_DIR, AVATARS_DIR]:
     directory.mkdir(parents=True, exist_ok=True)
 
+# Roblox project paths (new additions)
+ROBLOX_DIR = Path(os.path.dirname(BASE_DIR)) / "src"
+ROBLOX_ASSETS_DIR = ROBLOX_DIR / "assets"
+ROBLOX_DATA_DIR = ROBLOX_DIR / "data"
+
+# Ensure Roblox directories exist
+for directory in [ROBLOX_ASSETS_DIR, ROBLOX_DATA_DIR]:
+    directory.mkdir(parents=True, exist_ok=True)
+
 # API URLs
 ROBLOX_API_BASE = "https://thumbnails.roblox.com/v1"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -30,4 +39,3 @@ When responding, always use the appropriate action type:
 
 Your response must always include an action, even if it's "none".
 """
-

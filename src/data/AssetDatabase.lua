@@ -45,5 +45,10 @@ return {
             name = "Old Wizard", 
             description = "This Roblox asset features a old character resembling a wizard. He has a long, flowing gray beard and an intense expression. His attire includes a gray and white robe with wide sleeves, accented by a black belt. A tall, pointed hat sits atop his head, completing the magical look. The overall design conveys a classic wizard theme.", 
         },
+        {
+            assetId = "8363162194", 
+            name = "Buff", 
+            description = "The Roblox asset features a muscular character with a predominantly black appearance. It has an exaggerated, hulking physique with broad shoulders and defined muscles. The head is smooth and featureless except for a menacing, toothy grin and large, white eyes, giving a sinister vibe. The shading accentuates its imposing presence.", 
+        },
     },
 }
