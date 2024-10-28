@@ -3,10 +3,23 @@ let currentTab = 'assets';
 
 // Initial state and utilities
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM Content Loaded');
     loadAssets();
     loadNPCs();
     loadPlayers();
     populateAssetSelect();
+
+    // Initialize ability checkboxes for both create and edit forms
+    const createAbilitiesContainer = document.getElementById('abilitiesCheckboxes');
+    const editAbilitiesContainer = document.getElementById('editAbilitiesCheckboxes');
+    
+    console.log('Ability containers:', { 
+        create: createAbilitiesContainer, 
+        edit: editAbilitiesContainer 
+    });
+
+    populateAbilityCheckboxes(createAbilitiesContainer);
+    populateAbilityCheckboxes(editAbilitiesContainer);
 });
 
 // Show/hide tabs
@@ -21,6 +34,14 @@ function showTab(tabName) {
         populateAssetSelect();
     }
     else if (tabName === 'players') loadPlayers();
+
+    // Add this part to populate abilities when switching to NPCs tab
+    if (tabName === 'npcs') {
+        const createAbilitiesContainer = document.getElementById('abilitiesCheckboxes');
+        if (createAbilitiesContainer) {
+            populateAbilityCheckboxes(createAbilitiesContainer);
+        }
+    }
 }
 
 // Notification system
@@ -196,6 +217,10 @@ async function createNPC(event) {
 
     try {
         const form = event.target;
+        // Add this to get selected abilities
+        const selectedAbilities = Array.from(form.querySelectorAll('input[name="abilities"]:checked'))
+            .map(checkbox => checkbox.value);
+
         const npcData = {
             displayName: form.displayName.value,
             model: form.displayName.value.replace(/\s+/g, ''),
@@ -207,7 +232,7 @@ async function createNPC(event) {
                 y: parseFloat(form.spawnY.value),
                 z: parseFloat(form.spawnZ.value)
             },
-            shortTermMemory: []
+            abilities: selectedAbilities
         };
 
         debugLog('Creating NPC', npcData);
@@ -244,18 +269,15 @@ async function loadNPCs() {
         npcList.innerHTML = '';
 
         data.npcs.forEach(npc => {
-            // Use assetId instead of assetID
             const associatedAsset = npc.assetId ? assetsMap.get(npc.assetId) : null;
 
-            const npcData = {
-                id: npc.id,
-                displayName: npc.displayName || '',
-                assetId: npc.assetId || '',  // Changed from assetID
-                model: npc.model || '',      // Added model field
-                responseRadius: npc.responseRadius || 20,
-                system_prompt: npc.system_prompt || '',
-                spawnPosition: npc.spawnPosition || { x: 0, y: 5, z: 0 }
-            };
+            // Add abilities display to the card
+            const abilitiesHTML = (npc.abilities || []).map(ability => {
+                const abilityConfig = ABILITY_CONFIG[ability];
+                return abilityConfig ? 
+                    `<i class="${abilityConfig.icon}" title="${abilityConfig.label}" class="text-gray-300 mr-2"></i>` : 
+                    '';
+            }).join('');
 
             const npcCard = document.createElement('div');
             npcCard.className = 'bg-dark-800 p-6 rounded-xl shadow-xl border border-dark-700 hover:border-blue-500 transition-colors duration-200';
@@ -270,15 +292,18 @@ async function loadNPCs() {
                 </div>
                 <h3 class="font-bold text-lg text-gray-100">${npc.displayName || 'Unnamed NPC'}</h3>
                 <p class="text-sm text-gray-400 mb-1">Model: ${npc.model || 'No Model'}</p>
-                <p class="text-sm text-gray-400 mb-1">Asset: ${associatedAsset?.name || 'None'}</p>
+                <p class="text-sm text-gray-400 mb-1">Name: ${associatedAsset?.name || 'None'}</p>
                 <p class="text-sm text-gray-400 mb-2">Asset ID: ${npc.assetId || 'None'}</p>
                 <p class="text-sm mb-2 text-gray-300">Radius: ${npc.responseRadius || 20}m</p>
                 <div class="text-sm mb-4 h-20 overflow-y-auto">
                     <p class="font-medium text-gray-300">Personality:</p>
                     <p class="text-gray-400">${npc.system_prompt || 'No personality defined'}</p>
                 </div>
+                <div class="flex flex-wrap gap-2 mb-4">
+                    ${abilitiesHTML}
+                </div>
                 <div class="flex space-x-2">
-                    <button data-npc='${JSON.stringify(npcData).replace(/'/g, "&apos;")}' 
+                    <button data-npc='${JSON.stringify(npc).replace(/'/g, "&apos;")}' 
                             class="edit-npc-btn flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200">
                         Edit
                     </button>
@@ -337,6 +362,12 @@ function handleNPCEdit(npcData) {
                 assetSelect.value = data.assetId || '';
             });
         }
+
+        // Populate abilities checkboxes with current selections
+        populateAbilityCheckboxes(
+            document.getElementById('editAbilitiesCheckboxes'), 
+            data.abilities || []
+        );
 
         modal.style.display = 'block';
     } catch (error) {
@@ -426,6 +457,11 @@ async function saveNPCEdit(event) {
         const npcId = document.getElementById('editNpcId').value;
         const assetId = document.getElementById('editNpcAssetId').value;
 
+        // Get selected abilities
+        const selectedAbilities = Array.from(
+            document.querySelectorAll('#editAbilitiesCheckboxes input[name="abilities"]:checked')
+        ).map(checkbox => checkbox.value);
+
         // Get current NPC data
         const npcResponse = await fetch(`/api/npcs/${npcId}`);
         const currentNPC = await npcResponse.json();
@@ -443,7 +479,7 @@ async function saveNPCEdit(event) {
             },
             system_prompt: document.getElementById('editNpcPrompt').value || '',
             shortTermMemory: [],
-            abilities: currentNPC.abilities || [] // Preserve existing abilities
+            abilities: selectedAbilities // Add selected abilities
         };
 
         debugLog('=== NPC Update Payload: ===');
@@ -530,6 +566,8 @@ async function deleteItem(type, id) {
     }
 }
 
+
+
 // Modal click-outside handlers
 window.onclick = function (event) {
     const editModal = document.getElementById('editModal');
@@ -545,7 +583,41 @@ window.onclick = function (event) {
     }
 }
 
-
+// Add these new functions for ability handling
+function populateAbilityCheckboxes(container, selectedAbilities = []) {
+    console.log('Populating abilities:', { container, selectedAbilities });
+    if (!container) {
+        console.error('Container not found for abilities!');
+        return;
+    }
+    
+    // Verify ABILITY_CONFIG is available
+    if (!ABILITY_CONFIG) {
+        console.error('ABILITY_CONFIG is not defined!');
+        return;
+    }
+    
+    container.innerHTML = '';
+    Object.entries(ABILITY_CONFIG).forEach(([key, ability]) => {
+        const div = document.createElement('div');
+        div.className = 'flex items-center space-x-2';
+        div.innerHTML = `
+            <input type="checkbox" 
+                   id="ability_${key}" 
+                   name="abilities" 
+                   value="${key}"
+                   ${selectedAbilities.includes(key) ? 'checked' : ''}
+                   class="form-checkbox h-4 w-4 text-blue-600">
+            <label for="ability_${key}" class="flex items-center space-x-2">
+                <i class="${ability.icon}"></i>
+                <span>${ability.label}</span>
+            </label>
+        `;
+        container.appendChild(div);
+    });
+    
+    console.log('Abilities populated:', container.innerHTML);
+}
 
 
 
