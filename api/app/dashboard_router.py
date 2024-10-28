@@ -399,7 +399,60 @@ async def delete_player(player_id: str):
         raise HTTPException(status_code=500, detail="Failed to delete player")
     
 
-
-
-
-
+# Add this new route for creating NPCs
+@router.post("/api/npcs")
+async def create_npc(npc_data: Dict[str, Any]):
+    try:
+        logger.info(f"Creating new NPC: {npc_data}")
+        
+        # Generate a unique ID for the new NPC
+        import uuid
+        npc_data["id"] = str(uuid.uuid4())
+        
+        # Load assets to get the linked asset data
+        asset_database = load_json_database(DB_PATHS['asset']['json'])
+        
+        # Find the linked asset
+        asset_id = npc_data.get("assetID") or npc_data.get("assetId")
+        linked_asset = next(
+            (asset for asset in asset_database["assets"] 
+             if asset["assetId"] == asset_id),
+            None
+        )
+        
+        if not linked_asset:
+            raise HTTPException(status_code=400, detail="Invalid asset ID")
+            
+        # Create normalized NPC data structure
+        npc_data = {
+            "id": npc_data["id"],
+            "displayName": str(npc_data["displayName"]),
+            "assetId": asset_id,  # Use consistent field name
+            "responseRadius": int(npc_data["responseRadius"]),
+            "spawnPosition": {
+                "x": float(npc_data["spawnPosition"]["x"]),
+                "y": float(npc_data["spawnPosition"]["y"]),
+                "z": float(npc_data["spawnPosition"]["z"])
+            },
+            "system_prompt": str(npc_data["system_prompt"]),
+            "abilities": list(npc_data.get("abilities", [])),
+            "shortTermMemory": [],
+            "model": linked_asset["model"]  # Use the model directly from the asset database
+        }
+        
+        # Load existing NPCs
+        npc_database = load_json_database(DB_PATHS['npc']['json'])
+        
+        # Add the NPC to the database
+        npc_database["npcs"].append(npc_data)
+        
+        # Save the updated database
+        save_json_database(DB_PATHS['npc']['json'], npc_database)
+        save_lua_database(DB_PATHS['npc']['lua'], npc_database)
+        
+        logger.info(f"Successfully created NPC with ID: {npc_data['id']}")
+        return JSONResponse(npc_data)
+        
+    except Exception as e:
+        logger.error(f"Error creating NPC: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
