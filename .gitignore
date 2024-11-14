@@ -1,79 +1,20 @@
-# ============================
-# Python Virtual Environments
-# ============================
-
-# Ignore the entire Roblox virtual environment directory
+# Python virtual environment
 roblox/
-
-# Alternatively, if your virtual environment is named differently, adjust accordingly:
-# venv/
-# env/
-.venv/
-.env/
+venv/
+env/
 .env
 
-# ============================
-# Python Cache Files
-# ============================
-
+# Python cache
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
 
-# ============================
-# Rojo Tool Directories
-# ============================
+# Storage directories (from config.py lines 9-13 and storage.py lines 20-30)
+api/storage/
+api/stored_images/
+api/stored_asset_images/
+src/data/AssetDatabase.json
+src/data/AssetDatabase.lua
 
-.aftman/
-.cargo/
-.local/bin/rojo
-
-# ============================
-# IDE and Editor Configurations
-# ============================
-
+# IDE settings
 .vscode/
 .idea/
-*.sublime-project
-*.sublime-workspace
-
-# ============================
-# OS-Specific Files
-# ============================
-
-.DS_Store
-Thumbs.db
-
-# ============================
-# Logs and Temporary Files
-# ============================
-
-*.log
-*.tmp
-*.pid
-*.bak
-
-# ============================
-# Node.js Dependencies (If Applicable)
-# ============================
-
-node_modules/
-
-# ============================
-# Compiled Binaries
-# ============================
-
-*.exe
-*.dll
-*.dmg
-*.zip
-*.tar.gz
-
-# ============================
-# Other Unwanted Files
-# ============================
-
-*.swp
-*.bak
-system_prompt_source.py
