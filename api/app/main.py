@@ -22,7 +22,7 @@ openai_api_key = os.getenv("OPENAI_API_KEY")
 # Setup paths
 BASE_DIR = Path(os.getcwd())  # This will be /home/plato/dev/roblox/api
 STATIC_DIR = BASE_DIR / "static"
-TEMPLATES_DIR = BASE_DIR
+TEMPLATES_DIR = BASE_DIR / "templates"
 
 # Debug information
 logger.info(f"Base directory: {BASE_DIR}")
@@ -61,7 +61,7 @@ async def serve_dashboard():
     logger.info(f"Serving dashboard from: {dashboard_path}")
     if not dashboard_path.exists():
         logger.error(f"Dashboard file not found at {dashboard_path}")
-        raise HTTPException(status_code=404, detail=f"Dashboard file not found at {dashboard_path}")
+        raise HTTPException(status_code=404, detail=f"Dashboard file not found")
     return FileResponse(str(dashboard_path))
 
 @app.get("/npcs")

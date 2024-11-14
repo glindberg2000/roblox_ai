@@ -8,12 +8,12 @@ return {
         {
             assetId = "13292405039", 
             name = "Road Sign Stop", 
-            description = "The Roblox asset features a classic stop sign, characterized by an octagonal red sign mounted on a simple gray pole. The word STOP is prominently displayed in bold, white capital letters across the center. The design is minimalistic, reflecting typical traffic signage, suitable for various game environments.", 
+            description = "An simple americana-style street accessory features a classic stop sign, characterized by an octagonal red sign mounted on a simple gray pole. The word STOP is prominently displayed in bold, white capital letters across the center. The design is minimalistic, reflecting typical traffic signage, suitable for various game environments.", 
         },
         {
             assetId = "2690222444", 
             name = "ReNew Log House", 
-            description = "The Roblox asset features a rustic log cabin design, characterized by its brown log walls and a pointed, wooden roof. It has large, circular logs as structural elements, providing a sturdy appearance. The cabin boasts two rectangular windows with a light blue tint, allowing natural light inside, and a simple wooden door at the front entrance.", 
+            description = "The building asset features a rustic log cabin design, characterized by its brown log walls and a pointed, wooden roof. It has large, circular logs as structural elements, providing a sturdy appearance. The cabin boasts two rectangular windows with a light blue tint, allowing natural light inside, and a simple wooden door at the front entrance.", 
         },
         {
             assetId = "11691106540", 

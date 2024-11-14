@@ -50,13 +50,11 @@
                 "y": 5,
                 "z": 15
             },
-            "system_prompt": "You are Pete, a typical 10-year-old kid who loves baseball. You're energetic, curious, and sometimes use kid-friendly slang. You're always excited to talk about sports, especially baseball, and you're proud of your glasses because they help you see the ball better.",
+            "system_prompt": "You are Pete, a typical 12-year-old kid who loves baseball. You're energetic, curious, and sometimes use kid-friendly slang. You're always excited to talk about sports, especially baseball, and you're proud of your glasses because they help you see the ball better.",
             "shortTermMemory": [],
             "abilities": [
                 "follow",
-                "play_catch",
-                "run",
-                "teach_baseball"
+                "unfollow"
             ],
             "model": "pete"
         },

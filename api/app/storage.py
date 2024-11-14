@@ -11,25 +11,21 @@ import xml.etree.ElementTree as ET
 import requests
 from io import BytesIO
 from PIL import Image
-from .config import STORAGE_DIR, ASSETS_DIR, THUMBNAILS_DIR, AVATARS_DIR, ROBLOX_ASSETS_DIR
+from .config import STORAGE_DIR, ASSETS_DIR, THUMBNAILS_DIR, AVATARS_DIR
 
 logger = logging.getLogger("file_manager")
 
 class FileStorageManager:
     def __init__(self):
-        # Define storage paths using config constants
         self.storage_dir = STORAGE_DIR
         self.assets_dir = ASSETS_DIR
-        self.models_dir = os.path.join(self.assets_dir, 'models')
-        self.roblox_assets_dir = ROBLOX_ASSETS_DIR
+        self.thumbnails_dir = THUMBNAILS_DIR
+        self.avatars_dir = AVATARS_DIR
         
         # Ensure directories exist
-        os.makedirs(self.storage_dir, exist_ok=True)
-        os.makedirs(self.assets_dir, exist_ok=True)
-        os.makedirs(self.models_dir, exist_ok=True)
-        os.makedirs(self.roblox_assets_dir, exist_ok=True)
-        
-        logger.info(f"FileStorageManager initialized with models directory: {self.models_dir}")
+        for directory in [self.storage_dir, self.assets_dir, 
+                         self.thumbnails_dir, self.avatars_dir]:
+            directory.mkdir(parents=True, exist_ok=True)
 
     async def store_asset_file(self, file: UploadFile, asset_type: str) -> dict:
         """Store an asset file in the appropriate Roblox assets subdirectory."""
@@ -46,7 +42,7 @@ class FileStorageManager:
                 raise ValueError(f"Unsupported file type: {file_ext}")
 
             # Create type directory if it doesn't exist
-            type_dir = self.roblox_assets_dir / asset_type.lower()
+            type_dir = self.assets_dir / asset_type.lower()
             type_dir.mkdir(exist_ok=True)
             
             # Store in appropriate directory
