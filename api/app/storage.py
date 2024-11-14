@@ -16,11 +16,12 @@ from .config import STORAGE_DIR, ASSETS_DIR, THUMBNAILS_DIR, AVATARS_DIR
 logger = logging.getLogger("file_manager")
 
 class FileStorageManager:
-    def __init__(self):
-        self.storage_dir = STORAGE_DIR
-        self.assets_dir = ASSETS_DIR
-        self.thumbnails_dir = THUMBNAILS_DIR
-        self.avatars_dir = AVATARS_DIR
+    def __init__(self, game_slug=None):
+        self.game_slug = game_slug
+        self.storage_dir = STORAGE_DIR / (game_slug if game_slug else "default")
+        self.assets_dir = self.storage_dir / "assets"
+        self.thumbnails_dir = self.storage_dir / "thumbnails"
+        self.avatars_dir = self.storage_dir / "avatars"
         
         # Ensure directories exist
         for directory in [self.storage_dir, self.assets_dir, 

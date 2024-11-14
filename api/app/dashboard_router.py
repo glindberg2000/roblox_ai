@@ -5,10 +5,12 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import json
 import xml.etree.ElementTree as ET
+import requests
 from .utils import load_json_database, save_json_database, save_lua_database, get_database_paths
 from .storage import FileStorageManager
 from .image_utils import get_asset_description
 from .config import STORAGE_DIR, ASSETS_DIR, THUMBNAILS_DIR, AVATARS_DIR
+from .database import get_db
 
 # Initialize logging
 logger = logging.getLogger("roblox_app")
@@ -178,12 +180,32 @@ async def create_asset(
 
 @router.get("/api/assets")
 async def get_assets():
+    """Get all assets"""
     try:
-        asset_data = load_json_database(DB_PATHS['asset']['json'])
-        return JSONResponse({"assets": asset_data["assets"]})
+        with get_db() as db:
+            cursor = db.execute("""
+                SELECT * FROM assets
+            """)
+            assets = cursor.fetchall()
+            
+            # Format response
+            formatted_assets = []
+            for asset in assets:
+                asset_data = {
+                    "assetId": asset["asset_id"],
+                    "name": asset["name"],
+                    "description": asset["description"],
+                    "imageUrl": asset["image_url"],
+                    "type": asset["type"],
+                    "tags": json.loads(asset["tags"]) if asset["tags"] else []
+                }
+                formatted_assets.append(asset_data)
+            
+            return JSONResponse({"assets": formatted_assets})
+            
     except Exception as e:
         logger.error(f"Error fetching asset data: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch asset data")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/api/assets/{asset_id}")
 async def update_asset(asset_id: str, item: EditItemRequest):
@@ -192,21 +214,33 @@ async def update_asset(asset_id: str, item: EditItemRequest):
         if not asset_id:
             raise HTTPException(status_code=400, detail="Asset ID is required")
             
-        asset_database = load_json_database(DB_PATHS['asset']['json'])
-        
-        asset_found = False
-        for asset in asset_database["assets"]:
-            if asset["assetId"] == asset_id:
-                asset_found = True
-                asset["name"] = item.name
-                asset["description"] = item.description
-                save_json_database(DB_PATHS['asset']['json'], asset_database)
-                save_lua_database(DB_PATHS['asset']['lua'], asset_database)
-                logger.info(f"Successfully updated asset {asset_id}")
-                return JSONResponse(asset)
+        # First update SQLite
+        with get_db() as db:
+            cursor = db.execute("""
+                UPDATE assets 
+                SET name = ?, description = ?
+                WHERE asset_id = ?
+                RETURNING *
+            """, (item.name, item.description, asset_id))
+            updated = cursor.fetchone()
+            
+            if not updated:
+                raise HTTPException(status_code=404, detail="Asset not found")
                 
-        if not asset_found:
-            raise HTTPException(status_code=404, detail="Asset not found")
+            db.commit()
+            
+            # Then update JSON/Lua files
+            asset_database = load_json_database(DB_PATHS['asset']['json'])
+            for asset in asset_database["assets"]:
+                if asset["assetId"] == asset_id:
+                    asset["name"] = item.name
+                    asset["description"] = item.description
+                    break
+                    
+            save_json_database(DB_PATHS['asset']['json'], asset_database)
+            save_lua_database(DB_PATHS['asset']['lua'], asset_database)
+            
+            return JSONResponse(dict(updated))
             
     except Exception as e:
         logger.error(f"Error updating asset: {e}")
@@ -239,58 +273,148 @@ async def delete_asset(asset_id: str):
 # NPC Routes
 @router.get("/api/npcs")
 async def get_npcs():
+    """Get all NPCs with their asset data"""
     try:
-        npc_data = load_json_database(DB_PATHS['npc']['json'])
-        # Transform the data to ensure consistent field names
-        for npc in npc_data["npcs"]:
-            # Convert assetID to assetId if needed
-            if "assetID" in npc and "assetId" not in npc:
-                npc["assetId"] = npc["assetID"]
-                del npc["assetID"]
-            # Ensure model field exists
-            if "model" not in npc and "displayName" in npc:
-                npc["model"] = "NPCModel_" + "".join(
-                    word.capitalize() 
-                    for word in npc["displayName"].split()
-                )
-        return JSONResponse({"npcs": npc_data["npcs"]})
+        with get_db() as db:
+            cursor = db.execute("""
+                SELECT n.*, a.image_url, a.name as asset_name
+                FROM npcs n
+                JOIN assets a ON n.asset_id = a.asset_id
+            """)
+            npcs = cursor.fetchall()
+            
+            # Format response
+            formatted_npcs = []
+            for npc in npcs:
+                npc_data = {
+                    "npcId": npc["npc_id"],
+                    "assetId": npc["asset_id"],
+                    "displayName": npc["display_name"],
+                    "description": npc["system_prompt"],
+                    "system_prompt": npc["system_prompt"],
+                    "imageUrl": npc["image_url"],
+                    "model": npc["model"],
+                    "abilities": json.loads(npc["abilities"]) if npc["abilities"] else [],
+                    "responseRadius": npc["response_radius"],
+                    "spawnPosition": json.loads(npc["spawn_position"]) if npc["spawn_position"] else {},
+                }
+                formatted_npcs.append(npc_data)
+            
+            return JSONResponse({"npcs": formatted_npcs})
+            
     except Exception as e:
         logger.error(f"Error fetching NPC data: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch NPC data")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/npcs/{npc_id}")
+async def get_npc(npc_id: str):
+    """Get a specific NPC"""
+    try:
+        with get_db() as db:
+            cursor = db.execute("""
+                SELECT n.*, a.image_url 
+                FROM npcs n
+                JOIN assets a ON n.asset_id = a.asset_id
+                WHERE n.npc_id = ?
+            """, (npc_id,))
+            npc = cursor.fetchone()
+            
+            if not npc:
+                raise HTTPException(status_code=404, detail="NPC not found")
+            
+            return JSONResponse({
+                "npcId": npc["npc_id"],
+                "assetId": npc["asset_id"],
+                "displayName": npc["display_name"],
+                "description": npc["system_prompt"],
+                "system_prompt": npc["system_prompt"],
+                "imageUrl": npc["image_url"],
+                "model": npc["model"],
+                "abilities": json.loads(npc["abilities"]) if npc["abilities"] else [],
+                "responseRadius": npc["response_radius"],
+                "spawnPosition": json.loads(npc["spawn_position"]) if npc["spawn_position"] else {},
+            })
+            
+    except Exception as e:
+        logger.error(f"Error fetching NPC: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/api/npcs/{npc_id}")
-async def edit_npc(npc_id: str, npc_data: Dict[str, Any]):
+async def update_npc(npc_id: str, npc_data: dict):
+    """Update an NPC"""
     try:
         logger.info(f"Attempting to update NPC {npc_id}")
         if not npc_id:
             raise HTTPException(status_code=400, detail="NPC ID is required")
             
-        npc_database = load_json_database(DB_PATHS['npc']['json'])
-        npc_found = False
-        
-        for npc in npc_database["npcs"]:
-            if npc["id"] == npc_id:
-                npc_found = True
-                # Update the system_prompt if it's being edited
-                if "description" in npc_data:
-                    npc["system_prompt"] = npc_data["description"]
-                    if "description" in npc:
-                        del npc["description"]
+        # First update SQLite
+        with get_db() as db:
+            # First verify the NPC exists
+            cursor = db.execute("SELECT * FROM npcs WHERE npc_id = ?", (npc_id,))
+            existing = cursor.fetchone()
+            if not existing:
+                raise HTTPException(status_code=404, detail="NPC not found")
+            
+            # Update NPC in SQLite
+            update_fields = []
+            update_values = []
+            
+            if "displayName" in npc_data:
+                update_fields.append("display_name = ?")
+                update_values.append(npc_data["displayName"])
+            
+            if "system_prompt" in npc_data:
+                update_fields.append("system_prompt = ?")
+                update_values.append(npc_data["system_prompt"])
+            
+            if "model" in npc_data:
+                update_fields.append("model = ?")
+                update_values.append(npc_data["model"])
+            
+            if "responseRadius" in npc_data:
+                update_fields.append("response_radius = ?")
+                update_values.append(npc_data["responseRadius"])
+            
+            if "spawnPosition" in npc_data:
+                update_fields.append("spawn_position = ?")
+                update_values.append(json.dumps(npc_data["spawnPosition"]))
+            
+            if "abilities" in npc_data:
+                update_fields.append("abilities = ?")
+                update_values.append(json.dumps(npc_data["abilities"]))
+            
+            if update_fields:
+                # Add npc_id to values
+                update_values.append(npc_id)
                 
-                # Update other fields
-                for key, value in npc_data.items():
-                    if key != "description":  # Skip description field
-                        npc[key] = value
+                # Update SQLite
+                query = f"""
+                    UPDATE npcs 
+                    SET {", ".join(update_fields)}
+                    WHERE npc_id = ?
+                    RETURNING *
+                """
+                cursor = db.execute(query, update_values)
+                updated = cursor.fetchone()
+                db.commit()
                 
-                save_json_database(DB_PATHS['npc']['json'], npc_database)
-                save_lua_database(DB_PATHS['npc']['lua'], npc_database)
-                
-                logger.info(f"Successfully updated NPC {npc_id}")
-                return JSONResponse(npc)
-        
-        if not npc_found:
-            logger.error(f"NPC not found: {npc_id}")
-            raise HTTPException(status_code=404, detail="NPC not found")
+                if updated:
+                    # Then update JSON/Lua files
+                    npc_database = load_json_database(DB_PATHS['npc']['json'])
+                    for npc in npc_database["npcs"]:
+                        if npc["id"] == npc_id:
+                            # Update all provided fields
+                            for key, value in npc_data.items():
+                                if key != "id":  # Don't change the ID
+                                    npc[key] = value
+                            break
+                            
+                    save_json_database(DB_PATHS['npc']['json'], npc_database)
+                    save_lua_database(DB_PATHS['npc']['lua'], npc_database)
+                    
+                    return JSONResponse(dict(updated))
+            
+            return JSONResponse({"status": "no changes"})
             
     except Exception as e:
         logger.error(f"Error updating NPC: {e}")
@@ -313,6 +437,7 @@ async def delete_npc(npc_id: str):
     except Exception as e:
         logger.error(f"Error deleting NPC: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete NPC")
+
 # Add these new routes to the existing dashboard_router.py
 
 @router.get("/api/npcs/{npc_id}")

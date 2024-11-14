@@ -89,6 +89,12 @@
         <!-- Header -->
         <div class="mb-8">
             <h1 class="text-4xl font-bold mb-6 text-blue-400">Roblox Asset Manager</h1>
+            <nav>
+                <select id="gameSelector" onchange="switchGame(this.value)">
+                    <option value="">Select Game</option>
+                </select>
+                <button onclick="showGameModal()">New Game</button>
+            </nav>
             <div class="flex space-x-4">
                 <button onclick="showTab('assets')"
                     class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-lg">
@@ -376,6 +382,19 @@
                         Save Changes
                     </button>
                 </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add game management modal -->
+    <div id="gameModal" class="modal">
+        <div class="modal-content">
+            <h2>Create New Game</h2>
+            <form id="gameForm">
+                <input type="text" name="name" placeholder="Game Name" required>
+                <input type="text" name="slug" placeholder="URL Slug" required>
+                <textarea name="description" placeholder="Description"></textarea>
+                <button type="submit">Create Game</button>
             </form>
         </div>
     </div>

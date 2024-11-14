@@ -1,17 +1,19 @@
 import json
 from pathlib import Path
 
-def get_database_paths():
+def get_database_paths(game_slug="game1"):
     """Get paths to database files"""
-    root_dir = Path(__file__).parent.parent.parent  # Go up to roblox root
+    root_dir = Path(__file__).parent.parent.parent
+    game_dir = root_dir / "games" / game_slug / "src"
+    
     return {
         'asset': {
-            'json': root_dir / 'src' / 'data' / 'AssetDatabase.json',
-            'lua': root_dir / 'src' / 'data' / 'AssetDatabase.lua'
+            'json': game_dir / 'data' / 'AssetDatabase.json',
+            'lua': game_dir / 'data' / 'AssetDatabase.lua'
         },
         'npc': {
-            'json': root_dir / 'src' / 'data' / 'NPCDatabase.json',
-            'lua': root_dir / 'src' / 'data' / 'NPCDatabase.lua'
+            'json': game_dir / 'data' / 'NPCDatabase.json',
+            'lua': game_dir / 'data' / 'NPCDatabase.lua'
         }
     }
 
