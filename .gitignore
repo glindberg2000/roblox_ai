@@ -18,8 +18,52 @@ src/data/*
 *.db
 *.sqlite
 *.sqlite3
+*.backup
+*.bak
 !src/data/.gitkeep
+
+/api/db/
+*.db
+
 
 # IDE settings
 .vscode/
 .idea/
+
+# Backup files
+backup/*
+!backup/.gitkeep
+
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+roblox/
+.env
+
+# Database and private data
+api/db/
+*.db
+*.sqlite
+*.sqlite3
+
+# Storage directories
+api/storage/
+api/stored_images/
+api/stored_asset_images/
+
+# Private assets backup
+roblox_private_assets/
+
+# IDE
+.vscode/
+.idea/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
