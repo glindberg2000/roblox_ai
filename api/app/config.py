@@ -6,6 +6,13 @@ from pathlib import Path
 # Base directory is the api folder
 BASE_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Database paths
+DB_DIR = BASE_DIR / "db"
+SQLITE_DB_PATH = DB_DIR / "game_data.db"
+
+# Ensure directories exist
+DB_DIR.mkdir(parents=True, exist_ok=True)
+
 # Storage structure
 STORAGE_DIR = BASE_DIR / "storage"
 ASSETS_DIR = STORAGE_DIR / "assets"  # For RBXMX files

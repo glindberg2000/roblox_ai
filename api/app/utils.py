@@ -1,127 +1,86 @@
-import os
-import logging
 import json
-from typing import Any, Dict
+from pathlib import Path
 
-logger = logging.getLogger("roblox_app")
+def get_database_paths():
+    """Get paths to database files"""
+    root_dir = Path(__file__).parent.parent.parent  # Go up to roblox root
+    return {
+        'asset': {
+            'json': root_dir / 'src' / 'data' / 'AssetDatabase.json',
+            'lua': root_dir / 'src' / 'data' / 'AssetDatabase.lua'
+        },
+        'npc': {
+            'json': root_dir / 'src' / 'data' / 'NPCDatabase.json',
+            'lua': root_dir / 'src' / 'data' / 'NPCDatabase.lua'
+        }
+    }
 
-def load_json_database(path: str) -> Dict[str, Any]:
-    """Load a JSON database file."""
+def load_json_database(path):
+    """Load a JSON database file"""
     try:
         with open(path, 'r') as f:
             return json.load(f)
     except Exception as e:
-        logger.error(f"Error loading JSON database from {path}: {e}")
-        raise
+        print(f"Error loading JSON database from {path}: {e}")
+        return {"assets": []}
 
-def save_json_database(path: str, data: Dict[str, Any]) -> None:
-    """Save data to a JSON database file."""
+def save_json_database(path, data):
+    """Save data to a JSON database file"""
     try:
         with open(path, 'w') as f:
             json.dump(data, f, indent=4)
     except Exception as e:
-        logger.error(f"Error saving JSON database to {path}: {e}")
+        print(f"Error saving JSON database to {path}: {e}")
         raise
 
-def _value_to_lua(value: Any, indent_level: int = 0) -> str:
-    """Convert a Python value to its Lua representation."""
-    indent = "    " * indent_level
-    
-    if isinstance(value, str):
-        # Escape quotes and newlines in strings
-        escaped = value.replace('"', '\\"').replace("\n", "\\n")
-        return f'"{escaped}"'
-    elif isinstance(value, bool):
-        return str(value).lower()
-    elif isinstance(value, (int, float)):
-        return str(value)
-    elif isinstance(value, list):
-        if not value:  # Empty list
-            return "{}"
-        items = [_value_to_lua(item, indent_level + 1) for item in value]
-        return "{\n" + indent + "    " + ",\n    ".join(items) + "\n" + indent + "}"
-    elif isinstance(value, dict):
-        if not value:  # Empty dict
-            return "{}"
-        items = []
-        for k, v in value.items():
-            lua_value = _value_to_lua(v, indent_level + 1)
-            items.append(f"{k} = {lua_value}")
-        return "{\n" + indent + "    " + ",\n    ".join(items) + "\n" + indent + "}"
-    elif value is None:
-        return "nil"
-    else:
-        raise ValueError(f"Unsupported type for Lua conversion: {type(value)}")
-
-def save_lua_database(filepath: str, data: Dict) -> None:
-    """Save database as a Lua module."""
+def save_lua_database(path, data):
+    """Save data as a Lua table"""
     try:
-        # Start with the module header
-        lua_content = "return {\n"
-        
-        # For NPCs database
-        if "npcs" in data:
-            lua_content += "    npcs = {\n"
-            for npc in data["npcs"]:
-                lua_content += "        {\n"
-                lua_content += f'            id = "{npc.get("id", "")}", \n'
-                lua_content += f'            displayName = "{npc.get("displayName", "")}", \n'
-                lua_content += f'            model = "{npc.get("model", "")}", \n'
-                lua_content += f'            responseRadius = {npc.get("responseRadius", 0)}, \n'
-                lua_content += f'            assetId = "{npc.get("assetId", "")}", \n'
-                
-                # Generate Vector3 for spawn position
-                spawn_pos = npc.get("spawnPosition", {"x": 0, "y": 5, "z": 0})
-                lua_content += f'            spawnPosition = Vector3.new({spawn_pos.get("x", 0)}, {spawn_pos.get("y", 5)}, {spawn_pos.get("z", 0)}),\n'
-                
-                lua_content += f'            system_prompt = "{npc.get("system_prompt", "")}", \n'
-                
-                # Add abilities array
-                abilities = npc.get("abilities", [])
-                lua_content += '            abilities = {\n'
-                for ability in abilities:
-                    lua_content += f'                "{ability}",\n'
-                lua_content += '            },\n'
-                
-                lua_content += '            shortTermMemory = {},\n'
-                lua_content += "        },\n"
-            lua_content += "    },\n"
+        with open(path, 'w') as f:
+            f.write("return {\n")
             
-        # For assets database
-        elif "assets" in data:
-            lua_content += "    assets = {\n"
-            for asset in data["assets"]:
-                lua_content += "        {\n"
-                lua_content += f'            assetId = "{asset.get("assetId", "")}", \n'
-                lua_content += f'            name = "{asset.get("name", "")}", \n'
-                lua_content += f'            description = "{asset.get("description", "")}", \n'
-                lua_content += "        },\n"
-            lua_content += "    },\n"
+            # Write assets if present
+            if "assets" in data:
+                f.write("    assets = {\n")
+                for asset in data.get("assets", []):
+                    f.write("        {\n")
+                    f.write(f'            assetId = "{asset["assetId"]}",\n')
+                    f.write(f'            name = "{asset["name"]}",\n')
+                    f.write(f'            description = "{asset.get("description", "")}",\n')
+                    f.write("        },\n")
+                f.write("    },\n")
             
-        # Close the module
-        lua_content += "}\n"
-        
-        # Write to file
-        with open(filepath, 'w', encoding='utf-8') as f:
-            f.write(lua_content)
+            # Write NPCs if present
+            if "npcs" in data:
+                f.write("    npcs = {\n")
+                for npc in data.get("npcs", []):
+                    f.write("        {\n")
+                    f.write(f'            id = "{npc.get("id", "")}",\n')
+                    f.write(f'            displayName = "{npc.get("displayName", "Unknown NPC")}",\n')
+                    f.write(f'            model = "{npc.get("model", "")}",\n')
+                    f.write(f'            responseRadius = {npc.get("responseRadius", 20)},\n')
+                    f.write(f'            assetId = "{npc["assetId"]}",\n')
+                    
+                    # Handle spawnPosition using Vector3.new()
+                    spawn = npc.get("spawnPosition", {})
+                    f.write(f'            spawnPosition = Vector3.new({spawn.get("x", 0)}, {spawn.get("y", 0)}, {spawn.get("z", 0)}),\n')
+                    
+                    # Handle system prompt with [[ ]] for multi-line strings
+                    f.write(f'            system_prompt = [[{npc.get("system_prompt", "")}]],\n')
+                    
+                    # Handle abilities
+                    f.write('            abilities = {\n')
+                    for ability in npc.get("abilities", []):
+                        f.write(f'                "{ability}",\n')
+                    f.write('            },\n')
+                    
+                    # Add shortTermMemory
+                    f.write('            shortTermMemory = {},\n')
+                    
+                    f.write("        },\n")
+                f.write("    },\n")
             
+            f.write("}\n")
     except Exception as e:
-        logger.error(f"Error saving Lua database to {filepath}: {str(e)}")
+        print(f"Error saving Lua database to {path}: {e}")
         raise
-    
-def get_database_paths():
-    base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'src', 'data'))
-    return {
-        'asset': {
-            'json': os.path.join(base_path, 'AssetDatabase.json'),
-            'lua': os.path.join(base_path, 'AssetDatabase.lua')
-        },
-        'npc': {
-            'json': os.path.join(base_path, 'NPCDatabase.json'),
-            'lua': os.path.join(base_path, 'NPCDatabase.lua')
-        },
-        'player': {
-            'json': os.path.join(base_path, 'PlayerDatabase.json'),
-            'lua': os.path.join(base_path, 'PlayerDatabase.lua')
-        }
-    }

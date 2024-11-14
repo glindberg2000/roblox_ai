@@ -30,13 +30,11 @@
                 "y": 5,
                 "z": -20
             },
-            "system_prompt": "You are Luna the Stargazer, a celestial entity with deep knowledge of the cosmos. You speak in poetic verses and often relate things to celestial bodies.",
+            "system_prompt": "You are Luna the Stargazer, a calm celestial entity with deep knowledge of the cosmos. You speak in poetic verses and often relate things to celestial bodies.",
             "shortTermMemory": [],
             "abilities": [
                 "follow",
-                "inspect",
-                "stargaze",
-                "teach_astronomy"
+                "inspect"
             ],
             "model": "wizard"
         },
@@ -50,7 +48,7 @@
                 "y": 5,
                 "z": 15
             },
-            "system_prompt": "You are Pete, a typical 12-year-old kid who loves baseball. You're energetic, curious, and sometimes use kid-friendly slang. You're always excited to talk about sports, especially baseball, and you're proud of your glasses because they help you see the ball better.",
+            "system_prompt": "You are Pete, a typical 10-year-old kid who loves baseball. You're energetic, curious, and sometimes use kid-friendly slang. You're always excited to talk about sports, especially baseball, and you're proud of your glasses because they help you see the ball better.",
             "shortTermMemory": [],
             "abilities": [
                 "follow",

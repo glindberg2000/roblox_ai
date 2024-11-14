@@ -26,6 +26,8 @@ from .image_utils import (
     generate_image_description,
     get_asset_description
 )
+from .database import get_db
+from .storage import FileStorageManager
 
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -358,3 +360,130 @@ async def heartbeat_update(request: Request):
     except Exception as e:
         logger.error(f"Error processing heartbeat: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/api/npcs")
+async def get_npcs():
+    """Get all NPCs"""
+    try:
+        with get_db() as db:
+            # Get NPCs (items with storage_type = 'npcs')
+            cursor = db.execute("""
+                SELECT * FROM items 
+                WHERE json_extract(properties, '$.storage_type') = 'npcs'
+            """)
+            npcs = cursor.fetchall()
+            
+            # Format response
+            formatted_npcs = []
+            for npc in npcs:
+                properties = json.loads(npc["properties"])
+                npc_data = {
+                    "assetId": npc["item_id"],
+                    "name": properties.get("displayName", npc["name"]),
+                    "description": npc["description"],
+                    "imageUrl": properties.get("imageUrl", ""),
+                    "model": properties.get("model", ""),
+                    "abilities": properties.get("abilities", []),
+                    "responseRadius": properties.get("responseRadius", 20),
+                    "spawnPosition": properties.get("spawnPosition", {}),
+                    "system_prompt": npc["description"],  # Use description field for system_prompt
+                    "displayName": properties.get("displayName", npc["name"]),  # Add displayName explicitly
+                    "id": properties.get("id", "")  # Add NPC ID
+                }
+                formatted_npcs.append(npc_data)
+            
+            logger.debug(f"Found NPCs: {formatted_npcs}")
+            return JSONResponse({"npcs": formatted_npcs})
+            
+    except Exception as e:
+        logger.error(f"Error fetching NPC data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/api/assets/{asset_id}")
+async def update_asset(asset_id: str, item: dict):
+    try:
+        logger.info(f"Attempting to update asset {asset_id}")
+        logger.debug(f"Update data: {item}")
+        
+        # First verify the item exists
+        with get_db() as db:
+            verify = db.execute("SELECT * FROM items WHERE item_id = ?", (asset_id,))
+            existing = verify.fetchone()
+            if existing:
+                logger.debug(f"Found existing item: {dict(existing)}")
+            else:
+                logger.error(f"No item found with asset_id: {asset_id}")
+                raise HTTPException(status_code=404, detail="Asset not found")
+            
+            # Update SQLite database
+            cursor = db.execute("""
+                UPDATE items 
+                SET description = ?
+                WHERE item_id = ?
+            """, (item.get('description'), asset_id))
+            db.commit()
+            
+            # Fetch the updated item
+            cursor = db.execute("SELECT * FROM items WHERE item_id = ?", (asset_id,))
+            updated = cursor.fetchone()
+            if updated:
+                updated_dict = dict(updated)
+                logger.debug(f"Updated item: {updated_dict}")
+                
+                # Update JSON and Lua files
+                try:
+                    # Get all items for JSON/Lua files
+                    cursor = db.execute("SELECT * FROM items")
+                    all_items = cursor.fetchall()
+                    
+                    # Separate assets and NPCs
+                    assets = []
+                    npcs = []
+                    for item in all_items:
+                        item_dict = dict(item)
+                        properties = json.loads(item_dict["properties"])
+                        if properties.get("storage_type") == "npcs":
+                            npcs.append({
+                                "assetId": item_dict["item_id"],
+                                "displayName": properties.get("displayName", item_dict["name"]),
+                                "id": properties.get("id", ""),
+                                "model": properties.get("model", ""),
+                                "abilities": properties.get("abilities", []),
+                                "responseRadius": properties.get("responseRadius", 20),
+                                "spawnPosition": properties.get("spawnPosition", {}),
+                                "system_prompt": item_dict["description"]
+                            })
+                        else:
+                            assets.append({
+                                "assetId": item_dict["item_id"],
+                                "name": item_dict["name"],
+                                "description": item_dict["description"],
+                                "imageUrl": properties.get("imageUrl", "")
+                            })
+                    
+                    # Save to JSON and Lua files
+                    asset_data = {"assets": assets}
+                    npc_data = {"npcs": npcs}
+                    
+                    save_json_database(DB_PATHS['asset']['json'], asset_data)
+                    save_lua_database(DB_PATHS['asset']['lua'], asset_data)
+                    
+                    save_json_database(DB_PATHS['npc']['json'], npc_data)
+                    save_lua_database(DB_PATHS['npc']['lua'], npc_data)
+                    
+                    logger.debug("Successfully updated JSON and Lua files")
+                except Exception as json_error:
+                    logger.warning(f"Error updating JSON/Lua files (non-critical): {json_error}")
+                
+                return JSONResponse({
+                    "assetId": asset_id,
+                    "name": updated_dict["name"],
+                    "description": updated_dict["description"]
+                })
+            else:
+                logger.error("Item not found after update")
+                raise HTTPException(status_code=500, detail="Update failed")
+                
+    except Exception as e:
+        logger.error(f"Error updating asset: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
