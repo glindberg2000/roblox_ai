@@ -8,12 +8,17 @@ env/
 __pycache__/
 *.py[cod]
 
-# Storage directories (from config.py lines 9-13 and storage.py lines 20-30)
+# Storage directories
 api/storage/
 api/stored_images/
 api/stored_asset_images/
-src/data/AssetDatabase.json
-src/data/AssetDatabase.lua
+
+# Database files
+src/data/*
+*.db
+*.sqlite
+*.sqlite3
+!src/data/.gitkeep
 
 # IDE settings
 .vscode/
