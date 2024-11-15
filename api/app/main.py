@@ -1,12 +1,12 @@
 import os
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
 import logging
-from app.database import init_db, check_db_state, migrate_existing_data
 
 # Initialize logging
 logging.basicConfig(
@@ -18,10 +18,11 @@ logger.setLevel(logging.DEBUG)
 
 # Load environment variables
 load_dotenv()
-openai_api_key = os.getenv("OPENAI_API_KEY")
 
-# Setup paths
-BASE_DIR = Path(os.getcwd())  # This will be /home/plato/dev/roblox/api
+# Import after logging setup
+from .config import BASE_DIR
+
+# Setup paths - use BASE_DIR from config
 STATIC_DIR = BASE_DIR / "static"
 TEMPLATES_DIR = BASE_DIR / "templates"
 
@@ -43,8 +44,8 @@ app.add_middleware(
 )
 
 # Import routers after FastAPI initialization
-from app.routers import router
-from app.dashboard_router import router as dashboard_router
+from .routers import router
+from .dashboard_router import router as dashboard_router
 
 # Include routers
 app.include_router(router)
@@ -54,59 +55,44 @@ app.include_router(dashboard_router)
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+# Setup templates
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
+
 # Route handlers
 @app.get("/")
 @app.get("/dashboard")
-async def serve_dashboard():
-    dashboard_path = TEMPLATES_DIR / "dashboard.html"
-    logger.info(f"Serving dashboard from: {dashboard_path}")
-    if not dashboard_path.exists():
-        logger.error(f"Dashboard file not found at {dashboard_path}")
-        raise HTTPException(status_code=404, detail=f"Dashboard file not found")
-    return FileResponse(str(dashboard_path))
+async def serve_dashboard(request: Request):
+    return templates.TemplateResponse("dashboard.html", {"request": request})
 
 @app.get("/npcs")
 async def serve_npcs():
     npcs_path = TEMPLATES_DIR / "npcs.html"
-    logger.info(f"Serving NPCs from: {npcs_path}")
     if not npcs_path.exists():
         logger.error(f"NPCs file not found at {npcs_path}")
-        raise HTTPException(status_code=404, detail=f"NPCs file not found at {npcs_path}")
+        raise HTTPException(status_code=404, detail=f"NPCs file not found")
     return FileResponse(str(npcs_path))
 
 @app.get("/players")
 async def serve_players():
     players_path = TEMPLATES_DIR / "players.html"
-    logger.info(f"Serving players from: {players_path}")
     if not players_path.exists():
         logger.error(f"Players file not found at {players_path}")
-        raise HTTPException(status_code=404, detail=f"Players file not found at {players_path}")
+        raise HTTPException(status_code=404, detail=f"Players file not found")
     return FileResponse(str(players_path))
 
 @app.on_event("startup")
 async def startup_event():
     logger.info("RobloxAPI app is starting...")
-    
-    # Initialize database
-    init_db()
-    
-    # Check database state
-    check_db_state()
-    
-    # Migrate existing data if needed
-    migrate_existing_data()
 
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("RobloxAPI app is shutting down...")
 
-
-@app.get("/static/js/dashboard.js")
-async def serve_dashboard_js():
-    js_path = STATIC_DIR / "js" / "dashboard.js"
-    logger.info(f"Serving dashboard.js from: {js_path}")
-    if not js_path.exists():
-        logger.error(f"dashboard.js not found at {js_path}")
-        raise HTTPException(status_code=404, detail=f"dashboard.js not found at {js_path}")
-    return FileResponse(str(js_path), media_type="application/javascript")
+@app.exception_handler(500)
+async def internal_error_handler(request: Request, exc: Exception):
+    logger.error(f"Internal error: {str(exc)}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "error": str(exc)}
+    )
 

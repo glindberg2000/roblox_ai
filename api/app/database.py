@@ -1,10 +1,9 @@
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from .config import DB_DIR, SQLITE_DB_PATH
 import json
-import os
-from .utils import get_database_paths, load_json_database
+from .config import SQLITE_DB_PATH
+from .utils import get_database_paths, save_lua_database
 
 @contextmanager
 def get_db():
@@ -15,25 +14,73 @@ def get_db():
     finally:
         db.close()
 
+def generate_lua_from_db(game_slug: str, db_type: str) -> None:
+    """Generate Lua file directly from database data"""
+    with get_db() as db:
+        db.row_factory = sqlite3.Row
+        
+        # Get game ID
+        cursor = db.execute("SELECT id FROM games WHERE slug = ?", (game_slug,))
+        game = cursor.fetchone()
+        if not game:
+            raise ValueError(f"Game {game_slug} not found")
+        
+        game_id = game['id']
+        db_paths = get_database_paths(game_slug)
+        
+        if db_type == 'asset':
+            # Get assets from database
+            cursor = db.execute("""
+                SELECT asset_id, name, description, type, tags, image_url
+                FROM assets WHERE game_id = ?
+            """, (game_id,))
+            assets = [dict(row) for row in cursor.fetchall()]
+            
+            # Generate Lua file
+            save_lua_database(db_paths['asset']['lua'], {
+                "assets": [{
+                    "assetId": asset["asset_id"],
+                    "name": asset["name"],
+                    "description": asset.get("description", ""),
+                    "type": asset.get("type", "unknown"),
+                    "imageUrl": asset.get("image_url", ""),
+                    "tags": json.loads(asset.get("tags", "[]"))
+                } for asset in assets]
+            })
+            
+        elif db_type == 'npc':
+            # Get NPCs from database
+            cursor = db.execute("""
+                SELECT npc_id, display_name, asset_id, model, system_prompt,
+                       response_radius, spawn_position, abilities
+                FROM npcs WHERE game_id = ?
+            """, (game_id,))
+            npcs = [dict(row) for row in cursor.fetchall()]
+            
+            # Generate Lua file
+            save_lua_database(db_paths['npc']['lua'], {
+                "npcs": [{
+                    "id": npc["npc_id"],
+                    "displayName": npc["display_name"],
+                    "assetId": npc["asset_id"],
+                    "model": npc.get("model", ""),
+                    "system_prompt": npc.get("system_prompt", ""),
+                    "responseRadius": npc.get("response_radius", 20),
+                    "spawnPosition": json.loads(npc.get("spawn_position", "{}")),
+                    "abilities": json.loads(npc.get("abilities", "[]")),
+                    "shortTermMemory": []
+                } for npc in npcs]
+            })
+
 def init_db():
     """Initialize the database with schema"""
     DB_DIR.mkdir(parents=True, exist_ok=True)
     
     with get_db() as db:
-        # Drop any temporary tables first
-        db.execute("DROP TABLE IF EXISTS games_new")
-        
-        # Drop existing tables in correct order
-        db.executescript("""
-            DROP TABLE IF EXISTS npcs;
-            DROP TABLE IF EXISTS assets;
-            DROP TABLE IF EXISTS games;
-        """)
-        
-        # Create tables with new schema
+        # Create tables if they don't exist
         db.executescript("""
             -- Games table
-            CREATE TABLE games (
+            CREATE TABLE IF NOT EXISTS games (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 slug TEXT UNIQUE NOT NULL,
@@ -42,7 +89,7 @@ def init_db():
             );
 
             -- Assets table
-            CREATE TABLE assets (
+            CREATE TABLE IF NOT EXISTS assets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 asset_id TEXT NOT NULL,
                 name TEXT NOT NULL,
@@ -57,7 +104,7 @@ def init_db():
             );
 
             -- NPCs table
-            CREATE TABLE npcs (
+            CREATE TABLE IF NOT EXISTS npcs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 npc_id TEXT UNIQUE NOT NULL,
                 display_name TEXT NOT NULL,
@@ -74,77 +121,77 @@ def init_db():
             );
         """)
         
-        # Create default game
+        # Ensure game1 exists
         db.execute("""
-            INSERT INTO games (title, slug, description)
-            VALUES (?, ?, ?)
-        """, ('Default Game', 'default-game', 'The default game instance'))
+            INSERT OR IGNORE INTO games (title, slug, description)
+            VALUES ('Game 1', 'game1', 'The default game instance')
+            ON CONFLICT(slug) DO UPDATE SET
+            title = 'Game 1',
+            description = 'The default game instance'
+        """)
         
         db.commit()
 
-def get_items(game_id=None):
-    """Get all items (assets and NPCs)"""
+def import_json_to_db(game_slug: str, json_dir: Path) -> None:
+    """Import JSON data into database"""
     with get_db() as db:
-        if game_id:
-            # Get assets
-            cursor = db.execute("""
-                SELECT asset_id as item_id, name, description, image_url, type, tags
-                FROM assets WHERE game_id = ?
-            """, (game_id,))
-            assets = cursor.fetchall()
-            
-            # Get NPCs
-            cursor = db.execute("""
-                SELECT n.asset_id as item_id, n.display_name as name, 
-                       n.system_prompt as description, a.image_url,
-                       'npc' as type, n.abilities as tags
-                FROM npcs n
-                JOIN assets a ON n.asset_id = a.asset_id
-                WHERE n.game_id = ?
-            """, (game_id,))
-            npcs = cursor.fetchall()
-        else:
-            # Get all assets
-            cursor = db.execute("""
-                SELECT asset_id as item_id, name, description, image_url, type, tags
-                FROM assets
-            """)
-            assets = cursor.fetchall()
-            
-            # Get all NPCs
-            cursor = db.execute("""
-                SELECT n.asset_id as item_id, n.display_name as name, 
-                       n.system_prompt as description, a.image_url,
-                       'npc' as type, n.abilities as tags
-                FROM npcs n
-                JOIN assets a ON n.asset_id = a.asset_id
-            """)
-            npcs = cursor.fetchall()
+        # Get game ID
+        cursor = db.execute("SELECT id FROM games WHERE slug = ?", (game_slug,))
+        game = cursor.fetchone()
+        if not game:
+            raise ValueError(f"Game {game_slug} not found")
+        game_id = game['id']
         
-        # Convert rows to dicts and combine results
-        return [dict(row) for row in assets] + [dict(row) for row in npcs]
-
-def get_npcs(game_id=None):
-    """Get all NPCs"""
-    with get_db() as db:
-        if game_id:
-            cursor = db.execute("""
-                SELECT n.*, a.image_url
-                FROM npcs n
-                JOIN assets a ON n.asset_id = a.asset_id
-                WHERE n.game_id = ?
-            """, (game_id,))
-        else:
-            cursor = db.execute("""
-                SELECT n.*, a.image_url
-                FROM npcs n
-                JOIN assets a ON n.asset_id = a.asset_id
-            """)
-        return [dict(row) for row in cursor.fetchall()]
+        # Import assets
+        asset_file = json_dir / 'AssetDatabase.json'
+        if asset_file.exists():
+            with open(asset_file, 'r') as f:
+                asset_data = json.load(f)
+                for asset in asset_data.get('assets', []):
+                    db.execute("""
+                        INSERT OR REPLACE INTO assets 
+                        (asset_id, name, description, type, tags, image_url, game_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        asset['assetId'],
+                        asset['name'],
+                        asset.get('description', ''),
+                        asset.get('type', 'unknown'),
+                        json.dumps(asset.get('tags', [])),
+                        asset.get('imageUrl', ''),
+                        game_id
+                    ))
+        
+        # Import NPCs
+        npc_file = json_dir / 'NPCDatabase.json'
+        if npc_file.exists():
+            with open(npc_file, 'r') as f:
+                npc_data = json.load(f)
+                for npc in npc_data.get('npcs', []):
+                    db.execute("""
+                        INSERT OR REPLACE INTO npcs 
+                        (npc_id, display_name, asset_id, model, system_prompt,
+                         response_radius, spawn_position, abilities, game_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        npc['id'],
+                        npc['displayName'],
+                        npc['assetId'],
+                        npc.get('model', ''),
+                        npc.get('system_prompt', ''),
+                        npc.get('responseRadius', 20),
+                        json.dumps(npc.get('spawnPosition', {})),
+                        json.dumps(npc.get('abilities', [])),
+                        game_id
+                    ))
+        
+        db.commit()
 
 def check_db_state():
     """Check database tables and their contents"""
     with get_db() as db:
+        print("\n=== Database State ===")
+        
         # Check tables
         cursor = db.execute("""
             SELECT name FROM sqlite_master 
@@ -152,7 +199,6 @@ def check_db_state():
             ORDER BY name;
         """)
         tables = cursor.fetchall()
-        print("\n=== Database State ===")
         print("Tables:", [table[0] for table in tables])
         
         # Check games
@@ -163,64 +209,76 @@ def check_db_state():
             print(f"- {game['title']} (ID: {game['id']}, slug: {game['slug']})")
             
             # Count assets and NPCs for this game
-            assets = db.execute("SELECT COUNT(*) as count FROM assets WHERE game_id = ?", 
-                              (game['id'],)).fetchone()['count']
-            npcs = db.execute("SELECT COUNT(*) as count FROM npcs WHERE game_id = ?", 
-                            (game['id'],)).fetchone()['count']
-            print(f"  Assets: {assets}, NPCs: {npcs}")
+            assets = db.execute("""
+                SELECT COUNT(*) as count FROM assets WHERE game_id = ?
+            """, (game['id'],)).fetchone()['count']
+            
+            npcs = db.execute("""
+                SELECT COUNT(*) as count FROM npcs WHERE game_id = ?
+            """, (game['id'],)).fetchone()['count']
+            
+            print(f"  Assets: {assets}")
+            print(f"  NPCs: {npcs}")
+            
+            # Show asset details
+            print("\n  Assets:")
+            cursor = db.execute("SELECT * FROM assets WHERE game_id = ?", (game['id'],))
+            for asset in cursor.fetchall():
+                print(f"    - {asset['name']} (ID: {asset['asset_id']})")
+            
+            # Show NPC details
+            print("\n  NPCs:")
+            cursor = db.execute("SELECT * FROM npcs WHERE game_id = ?", (game['id'],))
+            for npc in cursor.fetchall():
+                print(f"    - {npc['display_name']} (ID: {npc['npc_id']})")
+        
         print("=====================\n")
 
 def migrate_existing_data():
     """Migrate existing JSON data to SQLite if needed"""
     with get_db() as db:
         # Get the default game
-        default_game = db.execute("""
-            SELECT id FROM games WHERE slug = 'default-game'
-        """).fetchone()
-        
-        if not default_game:
+        cursor = db.execute("SELECT id FROM games WHERE slug = 'game1'")
+        game = cursor.fetchone()
+        if not game:
             print("Error: Default game not found")
             return
             
-        default_game_id = default_game['id']
+        default_game_id = game['id']
         
         # Load existing JSON data from the correct paths
-        db_paths = get_database_paths()
-        
-        # Debug output
-        print(f"Migrating data from:")
-        print(f"Assets: {db_paths['asset']['json']}")
-        print(f"NPCs: {db_paths['npc']['json']}")
+        db_paths = get_database_paths("game1")
         
         try:
-            # Migrate assets
-            asset_data = load_json_database(db_paths['asset']['json'])
-            print(f"Found {len(asset_data.get('assets', []))} assets to migrate")
+            # Load JSON data
+            with open(db_paths['asset']['json'], 'r') as f:
+                asset_data = json.load(f)
+            with open(db_paths['npc']['json'], 'r') as f:
+                npc_data = json.load(f)
             
+            print(f"Found {len(asset_data.get('assets', []))} assets and {len(npc_data.get('npcs', []))} NPCs to migrate")
+            
+            # Migrate assets
             for asset in asset_data.get('assets', []):
                 db.execute("""
-                    INSERT OR IGNORE INTO assets 
-                    (asset_id, name, description, image_url, type, tags, game_id)
+                    INSERT OR REPLACE INTO assets 
+                    (asset_id, name, description, type, tags, image_url, game_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (
                     asset['assetId'],
                     asset['name'],
                     asset.get('description', ''),
-                    asset.get('imageUrl', ''),
                     asset.get('type', 'unknown'),
                     json.dumps(asset.get('tags', [])),
+                    asset.get('imageUrl', ''),
                     default_game_id
                 ))
-                print(f"Migrated asset: {asset['name']}")
             
             # Migrate NPCs
-            npc_data = load_json_database(db_paths['npc']['json'])
-            print(f"Found {len(npc_data.get('npcs', []))} NPCs to migrate")
-            
             for npc in npc_data.get('npcs', []):
                 db.execute("""
-                    INSERT OR IGNORE INTO npcs 
-                    (npc_id, display_name, asset_id, model, system_prompt, 
+                    INSERT OR REPLACE INTO npcs 
+                    (npc_id, display_name, asset_id, model, system_prompt,
                      response_radius, spawn_position, abilities, game_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
@@ -234,7 +292,6 @@ def migrate_existing_data():
                     json.dumps(npc.get('abilities', [])),
                     default_game_id
                 ))
-                print(f"Migrated NPC: {npc['displayName']}")
             
             db.commit()
             print("Migration completed successfully")
@@ -363,24 +420,4 @@ def fetch_npcs_by_game(game_id: int):
             WHERE n.game_id = ?
             ORDER BY n.display_name
         """, (game_id,))
-        return [dict(row) for row in cursor.fetchall()]
-
-def fetch_all_assets():
-    """Fetch all assets"""
-    with get_db() as db:
-        cursor = db.execute("""
-            SELECT * FROM assets
-            ORDER BY name
-        """)
-        return [dict(row) for row in cursor.fetchall()]
-
-def fetch_all_npcs():
-    """Fetch all NPCs"""
-    with get_db() as db:
-        cursor = db.execute("""
-            SELECT n.*, a.image_url
-            FROM npcs n
-            JOIN assets a ON n.asset_id = a.asset_id
-            ORDER BY n.display_name
-        """)
         return [dict(row) for row in cursor.fetchall()]

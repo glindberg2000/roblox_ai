@@ -1,0 +1,4 @@
+return {
+    assets = {},
+    npcs = {}
+}

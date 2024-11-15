@@ -73,32 +73,9 @@ class GamesDashboard {
             
             console.log('Found', games.length, 'games');
             this.renderGames(games);
-            this.updateGameSelector(games);
         } catch (error) {
             console.error('Failed to load games:', error);
         }
-    }
-
-    updateGameSelector(games) {
-        console.log('Updating game selector with games:', games);
-        if (!this.gameSelector) {
-            console.error('Game selector element not found!');
-            return;
-        }
-        
-        const options = games.map(game => `
-            <option value="${game.id}" ${game.id === this.currentGameId ? 'selected' : ''}>
-                ${game.title}
-            </option>
-        `).join('');
-        
-        console.log('Generated options:', options);
-        
-        this.gameSelector.innerHTML = `
-            <option value="">Select a game...</option>
-            ${options}
-        `;
-        console.log('Updated game selector HTML:', this.gameSelector.innerHTML);
     }
 
     renderGames(games) {

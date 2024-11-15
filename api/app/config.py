@@ -23,20 +23,28 @@ AVATARS_DIR = STORAGE_DIR / "avatars"  # For player avatar images
 for directory in [STORAGE_DIR, ASSETS_DIR, THUMBNAILS_DIR, AVATARS_DIR]:
     directory.mkdir(parents=True, exist_ok=True)
 
-# Roblox project paths (new additions)
-ROBLOX_DIR = Path(os.path.dirname(BASE_DIR)) / "src"
-ROBLOX_ASSETS_DIR = ROBLOX_DIR / "assets"
-ROBLOX_DATA_DIR = ROBLOX_DIR / "data"
+# Replace hard-coded ROBLOX_DIR with dynamic game-specific paths
+def get_game_paths(game_slug: str) -> dict:
+    """Get game-specific paths"""
+    game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / game_slug
+    return {
+        'root': game_dir,
+        'src': game_dir / "src",
+        'assets': game_dir / "src" / "assets",
+        'data': game_dir / "src" / "data"
+    }
 
-# Ensure Roblox directories exist
-for directory in [ROBLOX_ASSETS_DIR, ROBLOX_DATA_DIR]:
-    directory.mkdir(parents=True, exist_ok=True)
+def ensure_game_directories(game_slug: str) -> None:
+    """Ensure all required directories exist for a specific game"""
+    paths = get_game_paths(game_slug)
+    for path in paths.values():
+        path.mkdir(parents=True, exist_ok=True)
 
 # API URLs
 ROBLOX_API_BASE = "https://thumbnails.roblox.com/v1"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-
+# NPC Configuration
 NPC_SYSTEM_PROMPT_ADDITION = """
 When responding, always use the appropriate action type:
 - Use "follow" when you intend to start following the player.

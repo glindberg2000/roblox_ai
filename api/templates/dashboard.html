@@ -35,6 +35,7 @@
     </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <script src="/static/js/abilityConfig.js"></script>
+    <script src="/static/js/dashboard.js"></script>
     <style>
         .modal {
             display: none;
@@ -81,8 +82,7 @@
             background: #6b7280;
         }
     </style>
-    <script src="/static/js/dashboard.js"></script>
-    <script src="/static/js/games.js" defer></script>
+    <!-- <script src="/static/js/games.js" defer></script> -->
 </head>
 
 <body class="bg-dark-900 text-gray-100 min-h-screen font-sans">
@@ -91,12 +91,8 @@
         <div class="mb-8">
             <h1 class="text-4xl font-bold mb-6 text-blue-400">Roblox Asset Manager</h1>
             <div class="mb-6 bg-dark-800 p-4 rounded-xl shadow-xl">
-                <div class="flex items-center space-x-4">
-                    <label class="text-gray-300 font-medium">Current Game:</label>
-                    <select id="gameSelector" onchange="gamesDashboard.switchGame(this.value)"
-                        class="p-2 bg-dark-700 border border-dark-600 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                        <option value="">Select a game...</option>
-                    </select>
+                <div id="currentGameDisplay" class="text-xl font-semibold text-gray-300">
+                    <!-- Will be populated by JS -->
                 </div>
             </div>
             <div class="flex space-x-4">
@@ -245,7 +241,7 @@
         </div>
 
         <!-- Games Tab -->
-        <div id="gamesTab" class="tab-content hidden">
+        <div id="gamesTab" class="tab-content">
             <div class="mb-8 bg-dark-800 p-6 rounded-xl shadow-xl">
                 <h2 class="text-2xl font-bold mb-4 text-blue-400">Add New Game</h2>
                 <form id="gameForm" class="space-y-4">
@@ -270,7 +266,7 @@
             <div>
                 <h2 class="text-2xl font-bold mb-4 text-blue-400">Game List</h2>
                 <div id="games-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <!-- Games will be loaded here dynamically -->
+                    <!-- Games will be loaded here -->
                 </div>
             </div>
         </div>
@@ -314,64 +310,41 @@
                 <div>
                     <label class="block text-sm font-medium mb-1 text-gray-300">Display Name:</label>
                     <input type="text" id="editNpcDisplayName" required
-                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium mb-1 text-gray-300">Associated Asset:</label>
-                    <select id="editNpcAssetId"
-                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                        <option value="">Select an asset...</option>
-                    </select>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Model:</label>
+                    <input type="text" id="editNpcModel"
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
                 </div>
 
                 <div>
                     <label class="block text-sm font-medium mb-1 text-gray-300">Response Radius:</label>
                     <input type="number" id="editNpcRadius" required min="1" max="100"
-                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium mb-1 text-gray-300">Spawn Position:</label>
-                    <div class="grid grid-cols-3 gap-4">
-                        <div>
-                            <label class="text-xs text-gray-400">X</label>
-                            <input type="number" id="editNpcSpawnX"
-                                class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                        </div>
-                        <div>
-                            <label class="text-xs text-gray-400">Y</label>
-                            <input type="number" id="editNpcSpawnY"
-                                class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                        </div>
-                        <div>
-                            <label class="text-xs text-gray-400">Z</label>
-                            <input type="number" id="editNpcSpawnZ"
-                                class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                        </div>
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium mb-1 text-gray-300">System Prompt (Personality):</label>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Personality:</label>
                     <textarea id="editNpcPrompt" required rows="4"
-                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100"></textarea>
                 </div>
 
-                <div class="mb-4">
-                    <label class="block text-sm font-medium mb-2 text-gray-300">Abilities:</label>
-                    <div id="editAbilitiesCheckboxes" class="grid grid-cols-2 md:grid-cols-3 gap-3 bg-dark-700 p-4 rounded-lg">
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Abilities:</label>
+                    <div id="editAbilitiesCheckboxes" class="grid grid-cols-2 gap-2 bg-dark-700 p-4 rounded-lg">
                         <!-- Checkboxes will be populated via JavaScript -->
                     </div>
                 </div>
 
                 <div class="flex justify-end space-x-4 pt-4">
                     <button type="button" onclick="closeNPCEditModal()"
-                        class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors duration-200">
+                        class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
                         Cancel
                     </button>
                     <button type="submit"
-                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200">
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                         Save Changes
                     </button>
                 </div>
