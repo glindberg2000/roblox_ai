@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <!-- Existing head content -->
+    <script src="{{ url_for('static', filename='js/games.js') }}" defer></script>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="sidebar">
+            <div class="tab-buttons">
+                <!-- Existing tabs -->
+                <button class="tab-button" data-tab="assets">
+                    <i class="fas fa-cube"></i>
+                    <span>Assets</span>
+                </button>
+                <button class="tab-button" data-tab="npcs">
+                    <i class="fas fa-user"></i>
+                    <span>NPCs</span>
+                </button>
+                <!-- Add the new games tab -->
+                <button class="tab-button" data-tab="games">
+                    <i class="fas fa-gamepad"></i>
+                    <span>Games</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- Existing tab contents -->
+            <div id="assets" class="tab-content">
+                <!-- Assets content -->
+            </div>
+            <div id="npcs" class="tab-content">
+                <!-- NPCs content -->
+            </div>
+            <!-- Add the new games content -->
+            <div id="games" class="tab-content">
+                <div class="content-header">
+                    <h2>Games</h2>
+                    <button id="create-game-btn" class="btn primary">
+                        <i class="fas fa-plus"></i> New Game
+                    </button>
+                </div>
+                <div id="games-container" class="grid-container">
+                    <!-- Games will be loaded here dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html> 
