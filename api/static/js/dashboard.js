@@ -1,4 +1,5 @@
 // Dashboard state
+//dashboard.js
 let currentTab = 'assets';
 
 // Initial state and utilities
@@ -12,10 +13,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize ability checkboxes for both create and edit forms
     const createAbilitiesContainer = document.getElementById('abilitiesCheckboxes');
     const editAbilitiesContainer = document.getElementById('editAbilitiesCheckboxes');
-    
-    console.log('Ability containers:', { 
-        create: createAbilitiesContainer, 
-        edit: editAbilitiesContainer 
+
+    console.log('Ability containers:', {
+        create: createAbilitiesContainer,
+        edit: editAbilitiesContainer
     });
 
     populateAbilityCheckboxes(createAbilitiesContainer);
@@ -104,7 +105,7 @@ async function createAsset(event) {
 
         const submitFormData = new FormData();
         submitFormData.append('data', JSON.stringify(assetData));
-        
+
         if (fileInput.files.length > 0) {
             if (!storageTypeSelect.value) {
                 throw new Error('Please select a storage type for the model file');
@@ -260,70 +261,130 @@ async function loadNPCs() {
         data.npcs.forEach(npc => {
             const associatedAsset = npc.assetId ? assetsMap.get(npc.assetId) : null;
 
-            // Add abilities display to the card
-            const abilitiesHTML = (npc.abilities || []).map(ability => {
-                const abilityConfig = ABILITY_CONFIG[ability];
-                return abilityConfig ? 
-                    `<i class="${abilityConfig.icon}" title="${abilityConfig.label}" class="text-gray-300 mr-2"></i>` : 
-                    '';
-            }).join('');
-
             const npcCard = document.createElement('div');
             npcCard.className = 'bg-dark-800 p-6 rounded-xl shadow-xl border border-dark-700 hover:border-blue-500 transition-colors duration-200';
 
-            npcCard.innerHTML = `
-                <div class="aspect-w-16 aspect-h-9 mb-4">
-                    ${associatedAsset?.imageUrl ?
-                    `<img src="${associatedAsset.imageUrl}" 
-                          alt="${npc.displayName}" 
-                          class="w-full h-32 object-contain rounded-lg bg-dark-700 p-2">` :
-                    '<div class="w-full h-32 bg-dark-700 rounded-lg flex items-center justify-center text-gray-400">No Image</div>'}
-                </div>
-                <h3 class="font-bold text-lg text-gray-100">${npc.displayName || 'Unnamed NPC'}</h3>
-                <p class="text-sm text-gray-400 mb-1">Model: ${npc.model || 'No Model'}</p>
-                <p class="text-sm text-gray-400 mb-1">Name: ${associatedAsset?.name || 'None'}</p>
-                <p class="text-sm text-gray-400 mb-2">Asset ID: ${npc.assetId || 'None'}</p>
-                <p class="text-sm mb-2 text-gray-300">Radius: ${npc.responseRadius || 20}m</p>
-                <div class="text-sm mb-4 h-20 overflow-y-auto">
-                    <p class="font-medium text-gray-300">Personality:</p>
-                    <p class="text-gray-400">${npc.system_prompt || 'No personality defined'}</p>
-                </div>
-                <div class="flex flex-wrap gap-2 mb-4">
-                    ${abilitiesHTML}
-                </div>
-                <div class="flex space-x-2">
-                    <button data-npc='${JSON.stringify(npc).replace(/'/g, "&apos;")}' 
-                            class="edit-npc-btn flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200">
-                        Edit
-                    </button>
-                    <button data-id="${npc.id}" 
-                            class="delete-npc-btn flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200">
-                        Delete
-                    </button>
-                </div>`;
+            // Image container
+            const imgContainer = document.createElement('div');
+            imgContainer.className = 'aspect-w-16 aspect-h-9 mb-4';
+
+            if (associatedAsset?.imageUrl) {
+                const img = document.createElement('img');
+                img.src = associatedAsset.imageUrl;
+                img.alt = npc.displayName || 'Unnamed NPC';
+                img.className = 'w-full h-32 object-contain rounded-lg bg-dark-700 p-2';
+                imgContainer.appendChild(img);
+            } else {
+                const noImageDiv = document.createElement('div');
+                noImageDiv.className = 'w-full h-32 bg-dark-700 rounded-lg flex items-center justify-center text-gray-400';
+                noImageDiv.textContent = 'No Image';
+                imgContainer.appendChild(noImageDiv);
+            }
+
+            npcCard.appendChild(imgContainer);
+
+            // Display Name
+            const title = document.createElement('h3');
+            title.className = 'font-bold text-lg text-gray-100';
+            title.textContent = npc.displayName || 'Unnamed NPC';
+            npcCard.appendChild(title);
+
+            // Model
+            const modelInfo = document.createElement('p');
+            modelInfo.className = 'text-sm text-gray-400 mb-1';
+            modelInfo.textContent = `Model: ${npc.model || 'No Model'}`;
+            npcCard.appendChild(modelInfo);
+
+            // Name
+            const assetName = document.createElement('p');
+            assetName.className = 'text-sm text-gray-400 mb-1';
+            assetName.textContent = `Name: ${associatedAsset?.name || 'None'}`;
+            npcCard.appendChild(assetName);
+
+            // Asset ID
+            const assetId = document.createElement('p');
+            assetId.className = 'text-sm text-gray-400 mb-2';
+            assetId.textContent = `Asset ID: ${npc.assetId || 'None'}`;
+            npcCard.appendChild(assetId);
+
+            // Radius
+            const radius = document.createElement('p');
+            radius.className = 'text-sm mb-2 text-gray-300';
+            radius.textContent = `Radius: ${npc.responseRadius || 20}m`;
+            npcCard.appendChild(radius);
+
+            // Personality
+            const personalityContainer = document.createElement('div');
+            personalityContainer.className = 'text-sm mb-4 h-20 overflow-y-auto';
+
+            const personalityTitle = document.createElement('p');
+            personalityTitle.className = 'font-medium text-gray-300';
+            personalityTitle.textContent = 'Personality:';
+            personalityContainer.appendChild(personalityTitle);
+
+            const personalityText = document.createElement('p');
+            personalityText.className = 'text-gray-400';
+
+            // Add console logging to verify fields
+            console.log('NPC ID:', npc.id);
+            console.log('npc.system_prompt:', npc.system_prompt);
+            console.log('npc.systemPrompt:', npc.systemPrompt);
+            console.log('npc.personality:', npc.personality);
+
+            personalityText.textContent = npc.systemPrompt || npc.personality || 'No personality defined';
+            personalityContainer.appendChild(personalityText);
+
+            npcCard.appendChild(personalityContainer);
+
+            // Abilities
+            const abilitiesContainer = document.createElement('div');
+            abilitiesContainer.className = 'flex flex-wrap gap-2 mb-4';
+
+            (npc.abilities || []).forEach(ability => {
+                const abilityConfig = ABILITY_CONFIG[ability];
+                if (abilityConfig) {
+                    const abilityIcon = document.createElement('i');
+                    abilityIcon.className = `${abilityConfig.icon} text-gray-300 mr-2`;
+                    abilityIcon.title = abilityConfig.label;
+                    abilitiesContainer.appendChild(abilityIcon);
+                }
+            });
+
+            npcCard.appendChild(abilitiesContainer);
+
+            // Buttons
+            const buttonContainer = document.createElement('div');
+            buttonContainer.className = 'flex space-x-2';
+
+            const editButton = document.createElement('button');
+            editButton.className = 'edit-npc-btn flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200';
+            editButton.textContent = 'Edit';
+            editButton.dataset.npc = JSON.stringify(npc).replace(/'/g, "&apos;");
+            editButton.addEventListener('click', function () {
+                handleNPCEdit(npc);
+            });
+            buttonContainer.appendChild(editButton);
+
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'delete-npc-btn flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200';
+            deleteButton.textContent = 'Delete';
+            deleteButton.dataset.id = npc.id;
+            deleteButton.addEventListener('click', function () {
+                deleteItem('npc', npc.id);
+            });
+            buttonContainer.appendChild(deleteButton);
+
+            npcCard.appendChild(buttonContainer);
 
             npcList.appendChild(npcCard);
         });
-
-        // Add event listeners after creating cards
-        document.querySelectorAll('.edit-npc-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const npcData = JSON.parse(this.dataset.npc);
-                handleNPCEdit(npcData);
-            });
-        });
-
-        document.querySelectorAll('.delete-npc-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                deleteItem('npc', this.dataset.id);
-            });
-        });
-
     } catch (error) {
         console.error('Error loading NPCs:', error);
         showNotification('Failed to load NPCs', 'error');
     }
 }
+
+
 function handleNPCEdit(npcData) {
     try {
         // If npcData is a string, parse it
@@ -337,7 +398,7 @@ function handleNPCEdit(npcData) {
         document.getElementById('editNpcId').value = data.id;
         document.getElementById('editNpcDisplayName').value = data.displayName || '';
         document.getElementById('editNpcRadius').value = data.responseRadius || 20;
-        document.getElementById('editNpcPrompt').value = data.system_prompt || '';
+        document.getElementById('editNpcPrompt').value = data.systemPrompt || data.personality || '';
 
         const spawnPos = data.spawnPosition || { x: 0, y: 5, z: 0 };
         document.getElementById('editNpcSpawnX').value = spawnPos.x || 0;
@@ -354,7 +415,7 @@ function handleNPCEdit(npcData) {
 
         // Populate abilities checkboxes with current selections
         populateAbilityCheckboxes(
-            document.getElementById('editAbilitiesCheckboxes'), 
+            document.getElementById('editAbilitiesCheckboxes'),
             data.abilities || []
         );
 
@@ -579,13 +640,13 @@ function populateAbilityCheckboxes(container, selectedAbilities = []) {
         console.error('Container not found for abilities!');
         return;
     }
-    
+
     // Verify ABILITY_CONFIG is available
     if (!ABILITY_CONFIG) {
         console.error('ABILITY_CONFIG is not defined!');
         return;
     }
-    
+
     container.innerHTML = '';
     Object.entries(ABILITY_CONFIG).forEach(([key, ability]) => {
         const div = document.createElement('div');
@@ -604,7 +665,7 @@ function populateAbilityCheckboxes(container, selectedAbilities = []) {
         `;
         container.appendChild(div);
     });
-    
+
     console.log('Abilities populated:', container.innerHTML);
 }
 

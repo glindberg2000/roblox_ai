@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 import logging
-from app.database import init_db
+from app.database import init_db, check_db_state, migrate_existing_data
 
 # Initialize logging
 logging.basicConfig(
@@ -86,12 +86,15 @@ async def serve_players():
 @app.on_event("startup")
 async def startup_event():
     logger.info("RobloxAPI app is starting...")
-    logger.info(f"Current directory: {BASE_DIR}")
-    logger.info(f"Static directory: {STATIC_DIR}")
-    logger.info(f"Templates directory: {TEMPLATES_DIR}")
     
     # Initialize database
     init_db()
+    
+    # Check database state
+    check_db_state()
+    
+    # Migrate existing data if needed
+    migrate_existing_data()
 
 @app.on_event("shutdown")
 async def shutdown_event():
