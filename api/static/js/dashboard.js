@@ -100,8 +100,9 @@ async function selectGame(gameSlug) {
             display.textContent = `Current Game: ${game.title}`;
         }
         
-        // Switch to assets tab and load data
-        showTab('assets');
+        // Stay on games tab and refresh the list
+        showTab('games');
+        loadGames();
         
         showNotification(`Selected game: ${game.title}`, 'success');
         
@@ -430,6 +431,102 @@ function populateAbilityCheckboxes(container, selectedAbilities = []) {
         `;
         container.appendChild(div);
     });
+}
+
+// Add game editing functions
+async function editGame(gameSlug) {
+    try {
+        debugLog('Editing game', { gameSlug });
+        // Fetch the game data
+        const response = await fetch(`/api/games/${gameSlug}`);
+        const game = await response.json();
+        
+        // Create modal dynamically
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.style.display = 'block';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold text-blue-400">Edit Game</h2>
+                    <button onclick="this.closest('.modal').remove()"
+                        class="text-gray-400 hover:text-gray-200 text-2xl">&times;</button>
+                </div>
+                <form id="edit-game-form" class="space-y-4">
+                    <input type="hidden" id="edit-game-slug" value="${gameSlug}">
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Title</label>
+                        <input type="text" id="edit-game-title" value="${game.title}" required
+                            class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Description</label>
+                        <textarea id="edit-game-description" required rows="4"
+                            class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">${game.description || ''}</textarea>
+                    </div>
+                    <div class="flex justify-end space-x-4">
+                        <button type="button" onclick="this.closest('.modal').remove()"
+                            class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">Cancel</button>
+                        <button type="submit"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Add submit handler
+        document.getElementById('edit-game-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const slug = document.getElementById('edit-game-slug').value;
+            const title = document.getElementById('edit-game-title').value;
+            const description = document.getElementById('edit-game-description').value;
+
+            try {
+                const response = await fetch(`/api/games/${slug}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ title, description })
+                });
+
+                if (!response.ok) throw new Error('Failed to update game');
+                
+                showNotification('Game updated successfully', 'success');
+                modal.remove();
+                loadGames();  // Reload games list
+            } catch (error) {
+                console.error('Error updating game:', error);
+                showNotification('Failed to update game', 'error');
+            }
+        });
+    } catch (error) {
+        console.error('Error editing game:', error);
+        showNotification('Failed to edit game', 'error');
+    }
+}
+
+async function deleteGame(gameSlug) {
+    if (!confirm('Are you sure you want to delete this game? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        debugLog('Deleting game', { gameSlug });
+        const response = await fetch(`/api/games/${gameSlug}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Failed to delete game');
+        
+        showNotification('Game deleted successfully', 'success');
+        loadGames();  // Reload games list
+    } catch (error) {
+        console.error('Error deleting game:', error);
+        showNotification('Failed to delete game', 'error');
+    }
 }
 
 

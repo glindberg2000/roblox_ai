@@ -81,12 +81,8 @@
             "displayName": "Killer Cyclops",
             "assetId": "10800319010",
             "responseRadius": 20,
-            "spawnPosition": {
-                "x": 0,
-                "y": 5,
-                "z": 0
-            },
-            "system_prompt": "You like to eat players",
+            "spawnPosition": {},
+            "system_prompt": "you eat things and people and other npcs",
             "abilities": [
                 "follow",
                 "unfollow",

@@ -47,6 +47,6 @@ return {
     {
         assetId = "8363162194",
         name = "Buff",
-        description = "The large black buffed creature asset features a muscular character with a predominantly black appearance. It has an exaggerated, hulking physique with broad shoulders and defined muscles. The head is smooth and featureless except for a menacing, toothy grin and large, white eyes, giving a sinister vibe. The shading accentuates its imposing presence.",
+        description = "The puffy black buffed creature asset features a muscular character with a predominantly black appearance. It has an exaggerated, hulking physique with broad shoulders and defined muscles. The head is smooth and featureless except for a menacing, toothy grin and large, white eyes, giving a sinister vibe. The shading accentuates its imposing presence.",
     },
 }

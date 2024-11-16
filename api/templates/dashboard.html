@@ -242,7 +242,14 @@
 
         <!-- Games Tab -->
         <div id="gamesTab" class="tab-content">
-            <div class="mb-8 bg-dark-800 p-6 rounded-xl shadow-xl">
+            <div>
+                <h2 class="text-2xl font-bold mb-4 text-blue-400">Game List</h2>
+                <div id="games-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                    <!-- Games will be loaded here -->
+                </div>
+            </div>
+
+            <div class="bg-dark-800 p-6 rounded-xl shadow-xl">
                 <h2 class="text-2xl font-bold mb-4 text-blue-400">Add New Game</h2>
                 <form id="gameForm" class="space-y-4">
                     <div>
@@ -261,13 +268,6 @@
                         Add Game
                     </button>
                 </form>
-            </div>
-
-            <div>
-                <h2 class="text-2xl font-bold mb-4 text-blue-400">Game List</h2>
-                <div id="games-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <!-- Games will be loaded here -->
-                </div>
             </div>
         </div>
     </div>

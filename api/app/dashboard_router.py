@@ -282,26 +282,46 @@ async def update_asset(asset_id: str, request: Request):
             
             # Update JSON file
             try:
-                asset_database = load_json_database(db_paths['asset']['json'])
-                logger.info(f"Loaded JSON from {db_paths['asset']['json']}")
+                # Read current JSON file
+                with open(db_paths['asset']['json'], 'r') as f:
+                    asset_database = json.load(f)
+                    logger.info(f"Loaded JSON from {db_paths['asset']['json']}")
+                    logger.info(f"Current JSON content: {json.dumps(asset_database, indent=2)}")
                 
+                # Update the specific asset
+                updated = False
                 for asset in asset_database.get("assets", []):
                     if asset["assetId"] == asset_id:
+                        old_data = asset.copy()
                         asset.update({
                             "name": data['name'],
                             "description": data.get('description', '')
                         })
-                        logger.info("Updated asset in JSON data")
+                        updated = True
+                        logger.info(f"Updated asset in JSON data")
+                        logger.info(f"Old data: {old_data}")
+                        logger.info(f"New data: {asset}")
                         break
                 
+                if not updated:
+                    logger.error(f"Asset {asset_id} not found in JSON file")
+                
                 # Save both JSON and Lua files
-                save_json_database(db_paths['asset']['json'], asset_database)
-                logger.info(f"Saved JSON to {db_paths['asset']['json']}")
+                with open(db_paths['asset']['json'], 'w') as f:
+                    json.dump(asset_database, f, indent=4)
+                    logger.info(f"Saved JSON to {db_paths['asset']['json']}")
                 
                 save_lua_database(db_paths['asset']['lua'], {"assets": asset_database.get("assets", [])})
                 logger.info(f"Saved Lua to {db_paths['asset']['lua']}")
+                
+                # Verify the files were updated
+                with open(db_paths['asset']['json'], 'r') as f:
+                    verify_data = json.load(f)
+                    logger.info(f"Verification - JSON content after save: {json.dumps(verify_data, indent=2)}")
+                
             except Exception as e:
-                logger.error(f"Error updating files: {e}")
+                logger.error(f"Error updating files: {str(e)}")
+                logger.error(f"Error details: {e.__class__.__name__}")
                 raise
             
             # Get updated asset

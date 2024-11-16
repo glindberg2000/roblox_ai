@@ -65,8 +65,8 @@ return {
         model = "seek",
         responseRadius = 20,
         assetId = "10800319010",
-        spawnPosition = Vector3.new(0, 5, 0),
-        system_prompt = [[You like to eat players]],
+        spawnPosition = Vector3.new(0, 0, 0),
+        system_prompt = [[you eat things and people and other npcs]],
         abilities = {
             "follow",
             "unfollow",
