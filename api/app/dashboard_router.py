@@ -186,32 +186,46 @@ async def list_npcs(game_id: Optional[int] = None):
         with get_db() as db:
             if game_id:
                 cursor = db.execute("""
-                    SELECT 
-                        n.*,
+                    SELECT DISTINCT
+                        n.id,
+                        n.npc_id,
+                        n.display_name,
+                        n.asset_id,
+                        n.model,
+                        n.system_prompt,
+                        n.response_radius,
+                        n.spawn_position,
+                        n.abilities,
                         a.name as asset_name,
-                        a.image_url,
-                        n.system_prompt as personality
+                        a.image_url
                     FROM npcs n
-                    JOIN assets a ON n.asset_id = a.asset_id
+                    JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
                     WHERE n.game_id = ?
                     ORDER BY n.display_name
                 """, (game_id,))
             else:
                 cursor = db.execute("""
-                    SELECT 
-                        n.*,
+                    SELECT DISTINCT
+                        n.id,
+                        n.npc_id,
+                        n.display_name,
+                        n.asset_id,
+                        n.model,
+                        n.system_prompt,
+                        n.response_radius,
+                        n.spawn_position,
+                        n.abilities,
                         a.name as asset_name,
                         a.image_url,
-                        n.system_prompt as personality,
                         g.title as game_title
                     FROM npcs n
-                    JOIN assets a ON n.asset_id = a.asset_id
+                    JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
                     JOIN games g ON n.game_id = g.id
                     ORDER BY n.display_name
                 """)
             
             npcs = [dict(row) for row in cursor.fetchall()]
-            logger.info(f"Found {len(npcs)} NPCs")
+            logger.info(f"Found {len(npcs)} unique NPCs")
             
             # Format the response
             formatted_npcs = []
@@ -223,17 +237,17 @@ async def list_npcs(game_id: Optional[int] = None):
                     "assetId": npc["asset_id"],
                     "assetName": npc["asset_name"],
                     "model": npc["model"],
-                    "personality": npc["system_prompt"],
                     "systemPrompt": npc["system_prompt"],
                     "responseRadius": npc["response_radius"],
                     "spawnPosition": json.loads(npc["spawn_position"]) if npc["spawn_position"] else {},
                     "abilities": json.loads(npc["abilities"]) if npc["abilities"] else [],
                     "imageUrl": npc["image_url"],
-                    "gameTitle": npc.get("game_title")  # Include game title when listing all NPCs
+                    "gameTitle": npc.get("game_title")
                 }
                 formatted_npcs.append(npc_data)
             
             return JSONResponse({"npcs": formatted_npcs})
+            
     except Exception as e:
         logger.error(f"Error fetching NPCs: {str(e)}")
         return JSONResponse({"error": "Failed to fetch NPCs"}, status_code=500)
