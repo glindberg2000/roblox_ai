@@ -42,7 +42,7 @@ return {
     {
         assetId = "1388902922",
         name = "Old Wizard",
-        description = "This Roblox asset features a old character resembling a wizard. He has a long, flowing gray beard and an intense expression. His attire includes a gray and white robe with wide sleeves, accented by a black belt. A tall, pointed hat sits atop his head, completing the magical look. The overall design conveys a classic wizard theme.",
+        description = "This character features a old character resembling a wizard. He has a long, flowing gray beard and an intense expression. His attire includes a gray and white robe with wide sleeves, accented by a black belt. A tall, pointed hat sits atop his head, completing the magical look. The overall design conveys a classic wizard theme.",
     },
     {
         assetId = "8363162194",

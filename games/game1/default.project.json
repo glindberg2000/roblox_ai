@@ -1,30 +1,64 @@
 {
-  "name": "Game1",
-  "tree": {
-    "$className": "DataModel",
-    "ReplicatedStorage": {
-      "$className": "ReplicatedStorage",
-      "Shared": {
-        "$className": "Folder",
-        "NPCManagerV3": {
-          "$path": "src/shared/modules/NPCManagerV3.lua"
+    "name": "EllaAIRobloxGame",
+    "servePort": 34872,
+    "tree": {
+        "$className": "DataModel",
+        "ReplicatedStorage": {
+            "$className": "ReplicatedStorage",
+            "Shared": {
+                "$className": "Folder",
+                "NPCManagerV3": {
+                    "$path": "src/shared/modules/NPCManagerV3.lua"
+                },
+                "AssetModule": {
+                    "$path": "src/shared/modules/AssetModule.lua"
+                }
+            },
+            "GameData": {
+                "$className": "Folder",
+                "AssetDatabase": {
+                    "$path": "src/data/AssetDatabase.lua"
+                },
+                "NPCDatabase": {
+                    "$path": "src/data/NPCDatabase.lua"
+                },
+                "PlayerDescriptions": {
+                    "$className": "Folder"
+                }
+            },
+            "NPCChatEvent": {
+                "$className": "RemoteEvent"
+            }
         },
-        "AssetModule": {
-          "$path": "src/shared/modules/AssetModule.lua"
+        "ServerScriptService": {
+            "$className": "ServerScriptService",
+            "NPCSystemInitializer": {
+                "$path": "src/server/NPCSystemInitializer.server.lua"
+            },
+            "MainNPCScript": {
+                "$path": "src/server/MainNPCScript.server.lua"
+            },
+            "PlayerJoinHandler": {
+                "$path": "src/server/PlayerJoinHandler.server.lua"
+            },
+            "Logger": {
+                "$path": "src/server/Logger.lua"
+            },
+            "InteractionController": {
+                "$path": "src/server/InteractionController.lua"
+            },
+            "AssetInitializer": {
+                "$path": "src/server/AssetInitializer.server.lua"
+            }
+        },
+        "StarterPlayer": {
+            "$className": "StarterPlayer",
+            "StarterPlayerScripts": {
+                "$className": "StarterPlayerScripts",
+                "NPCClientHandler": {
+                    "$path": "src/client/NPCClientHandler.client.lua"
+                }
+            }
         }
-      },
-      "GameData": {
-        "$path": "src/data"
-      }
-    },
-    "ServerStorage": {
-      "$className": "ServerStorage",
-      "Assets": {
-        "$className": "Folder",
-        "npcs": {
-          "$path": "src/assets/npcs"
-        }
-      }
     }
-  }
 }
