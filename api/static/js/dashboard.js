@@ -15,12 +15,12 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Show/hide tabs
-window.showTab = function(tabName) {  // Make showTab globally available
+window.showTab = function (tabName) {  // Make showTab globally available
     console.log('Showing tab:', tabName);
     document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
     document.getElementById(`${tabName}Tab`).classList.remove('hidden');
     currentTab = tabName;
-    
+
     if (tabName === 'games') {
         loadGames();
     } else if (tabName === 'assets' && currentGame) {
@@ -38,15 +38,15 @@ async function loadGames() {
         const response = await fetch('/api/games');
         const games = await response.json();
         console.log('Loaded games:', games);
-        
+
         const gamesContainer = document.getElementById('games-container');
         if (!gamesContainer) {
             console.error('games-container element not found!');
             return;
         }
-        
+
         gamesContainer.innerHTML = '';
-        
+
         games.forEach(game => {
             console.log('Creating card for game:', game);
             const gameCard = document.createElement('div');
@@ -87,26 +87,26 @@ async function selectGame(gameSlug) {
     try {
         debugLog('Selecting game', { gameSlug });
         const response = await fetch(`/api/games/${gameSlug}`);
-        
+
         if (!response.ok) {
             throw new Error(`Failed to select game: ${response.statusText}`);
         }
-        
+
         const game = await response.json();
         currentGame = game;
-        
+
         // Update current game display
         const display = document.getElementById('currentGameDisplay');
         if (display) {
             display.textContent = `Current Game: ${game.title}`;
         }
-        
+
         // Stay on games tab and refresh the list
         showTab('games');
         loadGames();
-        
+
         showNotification(`Selected game: ${game.title}`, 'success');
-        
+
     } catch (error) {
         console.error('Error selecting game:', error);
         showNotification(`Failed to select game: ${error.message}`, 'error');
@@ -122,9 +122,9 @@ async function loadAssets() {
     }
 
     try {
-        debugLog('Loading assets for game', { 
-            gameId: currentGame.id, 
-            gameSlug: currentGame.slug 
+        debugLog('Loading assets for game', {
+            gameId: currentGame.id,
+            gameSlug: currentGame.slug
         });
 
         const response = await fetch(`/api/assets?game_id=${currentGame.id}`);
@@ -182,9 +182,9 @@ async function loadNPCs() {
     }
 
     try {
-        debugLog('Loading NPCs for game', { 
-            gameId: currentGame.id, 
-            gameSlug: currentGame.slug 
+        debugLog('Loading NPCs for game', {
+            gameId: currentGame.id,
+            gameSlug: currentGame.slug
         });
 
         const response = await fetch(`/api/npcs?game_id=${currentGame.id}`);
@@ -241,11 +241,10 @@ async function loadNPCs() {
 // Add notification system
 function showNotification(message, type = 'info') {
     const notification = document.createElement('div');
-    notification.className = `notification fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${
-        type === 'error' ? 'bg-red-600' : 
-        type === 'success' ? 'bg-green-600' : 
-        'bg-blue-600'
-    } text-white`;
+    notification.className = `notification fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${type === 'error' ? 'bg-red-600' :
+            type === 'success' ? 'bg-green-600' :
+                'bg-blue-600'
+        } text-white`;
     notification.textContent = message;
 
     document.body.appendChild(notification);
@@ -320,7 +319,7 @@ function editNPC(npcId) {
 async function saveAssetEdit(event) {
     event.preventDefault();
     const assetId = document.getElementById('editAssetId').value;
-    
+
     try {
         const data = {
             name: document.getElementById('editAssetName').value,
@@ -348,10 +347,10 @@ async function saveAssetEdit(event) {
 async function saveNPCEdit(event) {
     event.preventDefault();
     const npcId = document.getElementById('editNpcId').value;
-    
+
     try {
         debugLog('Saving NPC edit', { npcId });
-        
+
         const selectedAbilities = Array.from(
             document.querySelectorAll('#editAbilitiesCheckboxes input[name="abilities"]:checked')
         ).map(checkbox => checkbox.value);
@@ -372,7 +371,7 @@ async function saveNPCEdit(event) {
         };
 
         debugLog('Update data:', data);
-        
+
         // Use the database ID for the API call
         const response = await fetch(`/api/npcs/${npc.id}`, {
             method: 'PUT',
@@ -401,7 +400,7 @@ function closeNPCEditModal() {
 }
 
 // Add click-outside handlers for modals
-window.onclick = function(event) {
+window.onclick = function (event) {
     if (event.target.classList.contains('modal')) {
         event.target.style.display = 'none';
     }
@@ -441,7 +440,7 @@ async function editGame(gameSlug) {
         // Fetch the game data
         const response = await fetch(`/api/games/${gameSlug}`);
         const game = await response.json();
-        
+
         // Create modal dynamically
         const modal = document.createElement('div');
         modal.className = 'modal';
@@ -494,7 +493,7 @@ async function editGame(gameSlug) {
                 });
 
                 if (!response.ok) throw new Error('Failed to update game');
-                
+
                 showNotification('Game updated successfully', 'success');
                 modal.remove();
                 loadGames();  // Reload games list
@@ -513,15 +512,15 @@ async function deleteGame(gameSlug) {
     if (!confirm('Are you sure you want to delete this game? This action cannot be undone.')) {
         return;
     }
-    
+
     try {
         debugLog('Deleting game', { gameSlug });
         const response = await fetch(`/api/games/${gameSlug}`, {
             method: 'DELETE'
         });
-        
+
         if (!response.ok) throw new Error('Failed to delete game');
-        
+
         showNotification('Game deleted successfully', 'success');
         loadGames();  // Reload games list
     } catch (error) {
@@ -531,13 +530,13 @@ async function deleteGame(gameSlug) {
 }
 
 // Add form handler
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     const assetForm = document.getElementById('assetForm');
     if (assetForm) {
-        assetForm.addEventListener('submit', async function(event) {
+        assetForm.addEventListener('submit', async function (event) {
             event.preventDefault();
             event.stopPropagation();
-            
+
             if (!currentGame) {
                 showNotification('Please select a game first', 'error');
                 return;
@@ -549,7 +548,7 @@ document.addEventListener('DOMContentLoaded', function() {
             try {
                 const formData = new FormData(this);
                 formData.set('game_id', currentGame.id);
-                
+
                 console.log('Submitting form with data:', {
                     game_id: formData.get('game_id'),
                     asset_id: formData.get('asset_id'),
@@ -570,11 +569,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 const result = await response.json();
                 console.log('Asset created:', result);
-                
+
                 showNotification('Asset created successfully', 'success');
                 this.reset();
                 loadAssets();
-                
+
             } catch (error) {
                 console.error('Error creating asset:', error);
                 showNotification(error.message, 'error');
@@ -595,12 +594,12 @@ async function populateAssetSelector() {
     try {
         const response = await fetch(`/api/assets?game_id=${currentGame.id}`);
         const data = await response.json();
-        
+
         const assetSelect = document.querySelector('select[name="assetID"]');
         if (assetSelect) {
             // Clear existing options
             assetSelect.innerHTML = '<option value="">Select an asset...</option>';
-            
+
             // Add options for each asset
             data.assets.forEach(asset => {
                 const option = document.createElement('option');
@@ -629,14 +628,14 @@ async function handleNPCSubmit(event) {
         const form = event.target;
         const formData = new FormData(form);
         formData.set('game_id', currentGame.id);
-        
+
         // Get selected abilities
         const abilities = [];
         form.querySelectorAll('input[name="abilities"]:checked').forEach(checkbox => {
             abilities.push(checkbox.value);
         });
         formData.set('abilities', JSON.stringify(abilities));
-        
+
         debugLog('Submitting NPC', {
             game_id: formData.get('game_id'),
             displayName: formData.get('displayName'),
@@ -657,13 +656,13 @@ async function handleNPCSubmit(event) {
 
         const result = await response.json();
         console.log('NPC created:', result);
-        
+
         showNotification('NPC created successfully', 'success');
         form.reset();
-        
+
         // Refresh the NPCs list
         loadNPCs();
-        
+
     } catch (error) {
         console.error('Error creating NPC:', error);
         showNotification(error.message, 'error');
@@ -671,7 +670,7 @@ async function handleNPCSubmit(event) {
 }
 
 // Add this to the DOMContentLoaded event listener
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // ... existing code ...
 
     // Add NPC form handler
@@ -729,6 +728,87 @@ async function deleteNPC(npcId) {
 
 // Make it globally available
 window.deleteNPC = deleteNPC;
+
+// Make handler globally available
+window.handleGameSubmit = async function(event) {
+    event.preventDefault();
+    console.log('Game form submitted - handleGameSubmit');
+
+    try {
+        const formData = new FormData(event.target);
+        const data = {
+            title: formData.get('title'),
+            description: formData.get('description'),
+            cloneFrom: formData.get('cloneFrom') || null
+        };
+        
+        console.log('Submitting game data:', data);
+        
+        const response = await fetch('/api/games', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+
+        console.log('Got response:', response.status);
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to create game');
+        }
+
+        const result = await response.json();
+        console.log('Game created:', result);
+        
+        event.target.reset();
+        loadGames();
+        showNotification('Game created successfully', 'success');
+        
+    } catch (error) {
+        console.error('Error creating game:', error);
+        showNotification(error.message, 'error');
+    }
+    
+    return false;  // Prevent form submission
+};
+
+// Add function to populate clone options
+async function populateCloneOptions() {
+    try {
+        const response = await fetch('/api/games');
+        const games = await response.json();
+        
+        const cloneSelect = document.getElementById('cloneFromSelect');
+        if (cloneSelect) {
+            // Clear existing options except the first one
+            cloneSelect.innerHTML = '<option value="">Empty Game (No Assets)</option>';
+            
+            // Add options for each existing game
+            games.forEach(game => {
+                const option = document.createElement('option');
+                option.value = game.slug;
+                option.textContent = `${game.title} (${game.asset_count} assets, ${game.npc_count} NPCs)`;
+                cloneSelect.appendChild(option);
+            });
+            console.log('Populated clone options:', games.length, 'games');
+        }
+    } catch (error) {
+        console.error('Error loading games for clone options:', error);
+        showNotification('Failed to load clone options', 'error');
+    }
+}
+
+// Initialize when document is ready
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM Content Loaded - Initializing dashboard');
+    
+    // Populate clone options when page loads
+    populateCloneOptions();
+    
+    // Other initialization code...
+});
 
 
 

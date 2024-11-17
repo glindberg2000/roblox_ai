@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 import requests
 from pathlib import Path
 import shutil
+import os
 from slugify import slugify as python_slugify
 from .utils import load_json_database, save_json_database, save_lua_database, get_database_paths
 from .storage import FileStorageManager
@@ -18,7 +19,8 @@ from .config import (
     THUMBNAILS_DIR, 
     AVATARS_DIR,
     ensure_game_directories,
-    get_game_paths
+    get_game_paths,
+    BASE_DIR
 )
 from .database import (
     get_db,
@@ -38,8 +40,23 @@ logger = logging.getLogger("roblox_app")
 router = APIRouter()
 
 def slugify(text):
-    """Wrapper around python_slugify to ensure consistent slug generation"""
-    return python_slugify(text, separator='-', lowercase=True)
+    """Generate a unique slug for the game."""
+    base_slug = python_slugify(text, separator='-', lowercase=True)
+    slug = base_slug
+    counter = 1
+    
+    with get_db() as db:
+        while True:
+            # Check if slug exists
+            cursor = db.execute("SELECT 1 FROM games WHERE slug = ?", (slug,))
+            if not cursor.fetchone():
+                break
+            # If exists, append counter and try again
+            slug = f"{base_slug}-{counter}"
+            counter += 1
+    
+    logger.info(f"Generated unique slug: {slug} from title: {text}")
+    return slug
 
 @router.get("/api/games")
 async def list_games():
@@ -82,32 +99,135 @@ async def create_game_endpoint(request: Request):
     try:
         data = await request.json()
         game_slug = slugify(data['title'])
+        clone_from = data.get('cloneFrom')
+        
+        logger.info(f"Creating game with title: {data['title']}, slug: {game_slug}, clone_from: {clone_from}")
         
         # Create game directories
         ensure_game_directories(game_slug)
         
-        try:
-            game_id = create_game(data['title'], game_slug, data['description'])
-            
-            # Initialize empty database files
-            db_paths = get_database_paths(game_slug)
-            for db_type in ['asset', 'npc']:
-                if not db_paths[db_type]['json'].exists():
-                    save_json_database(db_paths[db_type]['json'], {"assets": [], "npcs": []})
-                if not db_paths[db_type]['lua'].exists():
-                    save_lua_database(db_paths[db_type]['lua'], {"assets": [], "npcs": []})
-            
-            return JSONResponse({
-                "id": game_id,
-                "slug": game_slug,
-                "message": "Game created successfully"
-            })
-        except Exception as e:
-            if "UNIQUE constraint failed" in str(e):
+        with get_db() as db:
+            try:
+                # Start transaction
+                db.execute('BEGIN')
+                
+                # Create game in database first
+                game_id = create_game(data['title'], game_slug, data['description'])
+                
+                if clone_from:
+                    # Get source game ID
+                    cursor = db.execute("SELECT id FROM games WHERE slug = ?", (clone_from,))
+                    source_game = cursor.fetchone()
+                    if not source_game:
+                        raise HTTPException(status_code=404, detail="Source game not found")
+                    source_game_id = source_game['id']
+                    
+                    # Copy assets
+                    cursor.execute("""
+                        INSERT INTO assets (game_id, asset_id, name, description, type, image_url, tags)
+                        SELECT ?, asset_id, name, description, type, image_url, tags
+                        FROM assets WHERE game_id = ?
+                    """, (game_id, source_game_id))
+                    
+                    # Copy NPCs
+                    cursor.execute("""
+                        SELECT * FROM npcs WHERE game_id = ?
+                    """, (source_game_id,))
+                    source_npcs = cursor.fetchall()
+                    
+                    # Copy NPCs with new IDs
+                    for npc in source_npcs:
+                        new_npc_id = f"npc_{game_id}_{npc['npc_id']}"
+                        cursor.execute("""
+                            INSERT INTO npcs (
+                                game_id, npc_id, asset_id, display_name, model,
+                                system_prompt, response_radius, spawn_position, abilities
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            game_id,
+                            new_npc_id,
+                            npc['asset_id'],
+                            npc['display_name'],
+                            npc['model'],
+                            npc['system_prompt'],
+                            npc['response_radius'],
+                            npc['spawn_position'],
+                            npc['abilities']
+                        ))
+                    
+                    # Copy files
+                    source_game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / clone_from
+                    target_game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / game_slug
+                    
+                    # Copy directory structure
+                    dirs_to_copy = [
+                        "src/assets/npcs",
+                        "src/assets/unknown",
+                        "src/client",
+                        "src/data",
+                        "src/server",
+                        "src/shared/modules"
+                    ]
+                    
+                    for dir_path in dirs_to_copy:
+                        source_dir = source_game_dir / dir_path
+                        target_dir = target_game_dir / dir_path
+                        
+                        if source_dir.exists():
+                            target_dir.parent.mkdir(parents=True, exist_ok=True)
+                            if target_dir.exists():
+                                shutil.rmtree(target_dir)
+                            shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
+                    
+                    # Copy specific files
+                    files_to_copy = [
+                        "default.project.json",
+                        "src/client/NPCClientHandler.client.lua",
+                        "src/server/AssetInitializer.server.lua",
+                        "src/server/InteractionController.lua",
+                        "src/server/Logger.lua",
+                        "src/server/MainNPCScript.server.lua",
+                        "src/server/NPCConfigurations.lua",
+                        "src/server/NPCSystemInitializer.server.lua",
+                        "src/server/PlayerJoinHandler.server.lua",
+                        "src/shared/modules/AssetModule.lua",
+                        "src/shared/modules/NPCManagerV3.lua"
+                    ]
+                    
+                    for file_path in files_to_copy:
+                        source_file = source_game_dir / file_path
+                        target_file = target_game_dir / file_path
+                        
+                        if source_file.exists():
+                            target_file.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(source_file, target_file)
+                    
+                    # Update project.json name
+                    project_file = target_game_dir / "default.project.json"
+                    if project_file.exists():
+                        with open(project_file, 'r') as f:
+                            project_data = json.load(f)
+                        project_data['name'] = data['title']
+                        with open(project_file, 'w') as f:
+                            json.dump(project_data, f, indent=2)
+                
+                # Commit transaction
+                db.commit()
+                
                 return JSONResponse({
-                    "error": "A game with this name already exists"
-                }, status_code=400)
-            raise e
+                    "id": game_id,
+                    "slug": game_slug,
+                    "message": "Game created successfully"
+                })
+                
+            except Exception as e:
+                # Rollback transaction on error
+                db.rollback()
+                if "UNIQUE constraint failed" in str(e):
+                    return JSONResponse({
+                        "error": "A game with this name already exists"
+                    }, status_code=400)
+                raise e
             
     except Exception as e:
         logger.error(f"Error creating game: {str(e)}")
