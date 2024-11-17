@@ -131,7 +131,7 @@ async def create_game_endpoint(request: Request):
                     
                     # Copy NPCs with new IDs
                     for npc in source_npcs:
-                        new_npc_id = f"npc_{game_id}_{npc['npc_id']}"  # Create unique NPC ID
+                        new_npc_id = f"npc_{game_id}_{npc['npc_id']}"
                         cursor.execute("""
                             INSERT INTO npcs (
                                 game_id, npc_id, asset_id, display_name, model,
@@ -150,7 +150,58 @@ async def create_game_endpoint(request: Request):
                         ))
                     logger.info("Copied NPCs with new IDs")
                     
-                    # Copy files
+                    # Copy complete game directory structure
+                    source_game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / clone_from
+                    target_game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / game_slug
+                    
+                    # Define directories to copy
+                    dirs_to_copy = [
+                        "src/assets/npcs",
+                        "src/assets/unknown",
+                        "src/client",
+                        "src/data",
+                        "src/server",
+                        "src/shared/modules",
+                        "backups"
+                    ]
+                    
+                    # Copy each directory
+                    for dir_path in dirs_to_copy:
+                        source_dir = source_game_dir / dir_path
+                        target_dir = target_game_dir / dir_path
+                        
+                        if source_dir.exists():
+                            target_dir.parent.mkdir(parents=True, exist_ok=True)
+                            if target_dir.exists():
+                                shutil.rmtree(target_dir)
+                            shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
+                            logger.info(f"Copied directory: {dir_path}")
+                    
+                    # Copy specific files
+                    files_to_copy = [
+                        "default.project.json",
+                        "src/client/NPCClientHandler.client.lua",
+                        "src/server/AssetInitializer.server.lua",
+                        "src/server/InteractionController.lua",
+                        "src/server/Logger.lua",
+                        "src/server/MainNPCScript.server.lua",
+                        "src/server/NPCConfigurations.lua",
+                        "src/server/NPCSystemInitializer.server.lua",
+                        "src/server/PlayerJoinHandler.server.lua",
+                        "src/shared/modules/AssetModule.lua",
+                        "src/shared/modules/NPCManagerV3.lua"
+                    ]
+                    
+                    for file_path in files_to_copy:
+                        source_file = source_game_dir / file_path
+                        target_file = target_game_dir / file_path
+                        
+                        if source_file.exists():
+                            target_file.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(source_file, target_file)
+                            logger.info(f"Copied file: {file_path}")
+                    
+                    # Copy JSON/Lua database files
                     db_paths = get_database_paths(game_slug)
                     source_paths = get_database_paths(clone_from)
                     
@@ -162,23 +213,28 @@ async def create_game_endpoint(request: Request):
                             shutil.copy2(source_paths[db_type]['lua'], db_paths[db_type]['lua'])
                             logger.info(f"Copied {db_type} Lua file")
                     
-                    source_game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / clone_from
-                    target_game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / game_slug
-                    
-                    if (source_game_dir / "src" / "assets").exists():
-                        shutil.copytree(
-                            source_game_dir / "src" / "assets",
-                            target_game_dir / "src" / "assets",
-                            dirs_exist_ok=True
-                        )
-                        logger.info("Copied asset files")
-                    
                     # Verify copy
                     cursor.execute("SELECT COUNT(*) as count FROM assets WHERE game_id = ?", (game_id,))
                     new_asset_count = cursor.fetchone()['count']
                     cursor.execute("SELECT COUNT(*) as count FROM npcs WHERE game_id = ?", (game_id,))
                     new_npc_count = cursor.fetchone()['count']
                     logger.info(f"New game has {new_asset_count} assets and {new_npc_count} NPCs")
+                    
+                    # Copy and modify default.project.json
+                    source_project_file = source_game_dir / "default.project.json"
+                    target_project_file = target_game_dir / "default.project.json"
+                    
+                    if source_project_file.exists():
+                        with open(source_project_file, 'r') as f:
+                            project_data = json.load(f)
+                            
+                        # Update the name to match the new game
+                        project_data['name'] = data['title']
+                        
+                        # Write updated project file
+                        with open(target_project_file, 'w') as f:
+                            json.dump(project_data, f, indent=2)
+                        logger.info(f"Created project file with name: {data['title']}")
                 
                 # Commit transaction
                 db.commit()
