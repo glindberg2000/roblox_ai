@@ -27,6 +27,7 @@ window.showTab = function(tabName) {  // Make showTab globally available
         loadAssets();
     } else if (tabName === 'npcs' && currentGame) {
         loadNPCs();
+        populateAssetSelector();
     }
 }
 
@@ -252,7 +253,7 @@ function showNotification(message, type = 'info') {
     // Remove notification after 3 seconds
     setTimeout(() => {
         notification.style.opacity = '0';
-        setTimeout(() => notification.remove(), 300);
+        setTimeout(() => notification.remove(), 3000);
     }, 3000);
 }
 
@@ -581,6 +582,94 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitBtn.disabled = false;
             }
         });
+    }
+});
+
+// Add this function to populate asset selector
+async function populateAssetSelector() {
+    if (!currentGame) {
+        console.log('No game selected for asset selector');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/assets?game_id=${currentGame.id}`);
+        const data = await response.json();
+        
+        const assetSelect = document.querySelector('select[name="assetID"]');
+        if (assetSelect) {
+            // Clear existing options
+            assetSelect.innerHTML = '<option value="">Select an asset...</option>';
+            
+            // Add options for each asset
+            data.assets.forEach(asset => {
+                const option = document.createElement('option');
+                option.value = asset.assetId;
+                option.textContent = `${asset.name} (${asset.assetId})`;
+                assetSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading assets for selector:', error);
+        showNotification('Failed to load assets for selection', 'error');
+    }
+}
+
+// Add NPC form submission handler
+async function handleNPCSubmit(event) {
+    event.preventDefault();
+    console.log('NPC form submitted');
+
+    if (!currentGame) {
+        showNotification('Please select a game first', 'error');
+        return;
+    }
+
+    try {
+        const form = event.target;
+        const formData = new FormData(form);
+        formData.set('game_id', currentGame.id);
+        
+        debugLog('Submitting NPC', {
+            game_id: formData.get('game_id'),
+            display_name: formData.get('displayName'),
+            asset_id: formData.get('assetID'),
+            system_prompt: formData.get('system_prompt')
+        });
+
+        const response = await fetch('/api/npcs', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to create NPC');
+        }
+
+        const result = await response.json();
+        console.log('NPC created:', result);
+        
+        showNotification('NPC created successfully', 'success');
+        form.reset();
+        
+        // Refresh the NPCs list
+        loadNPCs();
+        
+    } catch (error) {
+        console.error('Error creating NPC:', error);
+        showNotification(error.message, 'error');
+    }
+}
+
+// Add this to the DOMContentLoaded event listener
+document.addEventListener('DOMContentLoaded', function() {
+    // ... existing code ...
+
+    // Add NPC form handler
+    const npcForm = document.getElementById('npcForm');
+    if (npcForm) {
+        npcForm.addEventListener('submit', handleNPCSubmit);
     }
 });
 
