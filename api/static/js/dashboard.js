@@ -681,6 +681,37 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+// Add NPC deletion function
+async function deleteNPC(npcId) {
+    if (!currentGame) {
+        showNotification('No game selected', 'error');
+        return;
+    }
+
+    if (!confirm('Are you sure you want to delete this NPC?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/npcs/${npcId}?game_id=${currentGame.id}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to delete NPC');
+        }
+
+        showNotification('NPC deleted successfully', 'success');
+        loadNPCs();  // Refresh the list
+    } catch (error) {
+        console.error('Error deleting NPC:', error);
+        showNotification('Failed to delete NPC', 'error');
+    }
+}
+
+// Make it globally available
+window.deleteNPC = deleteNPC;
+
 
 
 

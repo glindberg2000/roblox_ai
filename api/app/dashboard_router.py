@@ -689,6 +689,38 @@ async def create_npc(
         logger.error(f"Error creating NPC: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.delete("/api/npcs/{npc_id}")
+async def delete_npc(npc_id: str, game_id: int):
+    try:
+        logger.info(f"Deleting NPC {npc_id} from game {game_id}")
+        
+        with get_db() as db:
+            # Get NPC info first
+            cursor = db.execute("""
+                SELECT n.*, g.slug 
+                FROM npcs n
+                JOIN games g ON n.game_id = g.id
+                WHERE n.npc_id = ? AND n.game_id = ?
+            """, (npc_id, game_id))
+            npc = cursor.fetchone()
+            
+            if not npc:
+                raise HTTPException(status_code=404, detail="NPC not found")
+            
+            # Delete the database entry
+            cursor.execute("""
+                DELETE FROM npcs 
+                WHERE npc_id = ? AND game_id = ?
+            """, (npc_id, game_id))
+            
+            db.commit()
+            
+        return JSONResponse({"message": "NPC deleted successfully"})
+        
+    except Exception as e:
+        logger.error(f"Error deleting NPC: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ... rest of your existing routes ...
 
 
