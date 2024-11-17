@@ -217,11 +217,46 @@ async def update_game_endpoint(slug: str, request: Request):
 @router.delete("/api/games/{slug}")
 async def delete_game_endpoint(slug: str):
     try:
-        delete_game(slug)  # Using non-async version
-        return JSONResponse({"message": "Game deleted successfully"})
+        logger.info(f"Deleting game: {slug}")
+        
+        with get_db() as db:
+            try:
+                # Start transaction
+                db.execute('BEGIN')
+                
+                # Get game ID first
+                cursor = db.execute("SELECT id FROM games WHERE slug = ?", (slug,))
+                game = cursor.fetchone()
+                if not game:
+                    raise HTTPException(status_code=404, detail="Game not found")
+                game_id = game['id']
+                
+                # Delete NPCs and assets first (foreign key constraints)
+                db.execute("DELETE FROM npcs WHERE game_id = ?", (game_id,))
+                db.execute("DELETE FROM assets WHERE game_id = ?", (game_id,))
+                
+                # Delete game
+                db.execute("DELETE FROM games WHERE id = ?", (game_id,))
+                
+                # Delete game directory
+                game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / slug
+                if game_dir.exists():
+                    shutil.rmtree(game_dir)
+                    logger.info(f"Deleted game directory: {game_dir}")
+                
+                db.commit()
+                logger.info(f"Successfully deleted game {slug}")
+                
+                return JSONResponse({"message": "Game deleted successfully"})
+                
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Error in transaction, rolling back: {str(e)}")
+                raise
+            
     except Exception as e:
         logger.error(f"Error deleting game: {str(e)}")
-        return JSONResponse({"error": "Failed to delete game"}, status_code=500)
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 @router.get("/api/assets")
 async def list_assets(game_id: Optional[int] = None):
