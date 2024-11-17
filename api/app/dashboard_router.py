@@ -519,6 +519,94 @@ async def get_current_game():
         logger.error(f"Error getting current game: {str(e)}")
         return JSONResponse({"error": "Failed to get current game"}, status_code=500)
 
+@router.post("/api/assets/create")
+async def create_asset(
+    request: Request,
+    game_id: int = Form(...),
+    asset_id: str = Form(...),
+    name: str = Form(...),
+    type: str = Form(...),
+    file: UploadFile = File(...)
+):
+    try:
+        logger.info(f"Creating asset for game {game_id}")
+        
+        # Get game info
+        with get_db() as db:
+            cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
+            game = cursor.fetchone()
+            if not game:
+                raise HTTPException(status_code=404, detail="Game not found")
+            game_slug = game['slug']
+
+            # Delete existing asset if any
+            cursor.execute("""
+                DELETE FROM assets 
+                WHERE asset_id = ? AND game_id = ?
+            """, (asset_id, game_id))
+            
+            # Save file
+            game_paths = get_game_paths(game_slug)
+            asset_type_dir = type.lower() + 's'
+            asset_dir = game_paths['assets'] / asset_type_dir
+            asset_dir.mkdir(parents=True, exist_ok=True)
+            file_path = asset_dir / f"{asset_id}.rbxm"
+
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+
+            # Get description using utility
+            description_data = await get_asset_description(
+                asset_id=asset_id, 
+                name=name
+            )
+            
+            logger.info(f"Description data received: {description_data}")
+            
+            if description_data:
+                description = description_data.get('description')
+                image_url = description_data.get('imageUrl')
+                logger.info(f"Got image URL from description: {image_url}")
+            else:
+                description = None
+                image_url = None
+            
+            # Create new database entry
+            cursor.execute("""
+                INSERT INTO assets (
+                    game_id, 
+                    asset_id, 
+                    name, 
+                    description, 
+                    type,
+                    image_url
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                RETURNING id
+            """, (
+                game_id,
+                asset_id,
+                name,
+                description,
+                type,
+                image_url
+            ))
+            db_id = cursor.fetchone()['id']
+            db.commit()
+            
+            return JSONResponse({
+                "id": db_id,
+                "asset_id": asset_id,
+                "name": name,
+                "description": description,
+                "type": type,
+                "image_url": image_url,
+                "message": "Asset created successfully"
+            })
+                
+    except Exception as e:
+        logger.error(f"Error creating asset: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ... rest of your existing routes ...
 
 

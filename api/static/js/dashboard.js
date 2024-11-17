@@ -529,6 +529,61 @@ async function deleteGame(gameSlug) {
     }
 }
 
+// Add form handler
+document.addEventListener('DOMContentLoaded', function() {
+    const assetForm = document.getElementById('assetForm');
+    if (assetForm) {
+        assetForm.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            
+            if (!currentGame) {
+                showNotification('Please select a game first', 'error');
+                return;
+            }
+
+            const submitBtn = document.getElementById('submitAssetBtn');
+            submitBtn.disabled = true;
+
+            try {
+                const formData = new FormData(this);
+                formData.set('game_id', currentGame.id);
+                
+                console.log('Submitting form with data:', {
+                    game_id: formData.get('game_id'),
+                    asset_id: formData.get('asset_id'),
+                    name: formData.get('name'),
+                    type: formData.get('type'),
+                    file: formData.get('file').name
+                });
+
+                const response = await fetch('/api/assets/create', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to create asset');
+                }
+
+                const result = await response.json();
+                console.log('Asset created:', result);
+                
+                showNotification('Asset created successfully', 'success');
+                this.reset();
+                loadAssets();
+                
+            } catch (error) {
+                console.error('Error creating asset:', error);
+                showNotification(error.message, 'error');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+    }
+});
+
 
 
 
