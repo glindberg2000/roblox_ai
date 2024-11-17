@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM Content Loaded - Initializing dashboard');
     showTab('games');  // Start on games tab
     loadGames();
+    populateCloneOptions();
 });
 
 // Show/hide tabs
@@ -729,6 +730,75 @@ async function deleteNPC(npcId) {
 
 // Make it globally available
 window.deleteNPC = deleteNPC;
+
+// Make handler globally available
+window.handleGameSubmit = async function(event) {
+    event.preventDefault();
+    console.log('Game form submitted');
+
+    try {
+        const formData = new FormData(event.target);
+        const data = {
+            title: formData.get('title'),
+            description: formData.get('description'),
+            cloneFrom: formData.get('cloneFrom') || null
+        };
+        
+        console.log('Creating game:', data);
+        
+        const response = await fetch('/api/games', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to create game');
+        }
+
+        const result = await response.json();
+        console.log('Game created:', result);
+        
+        event.target.reset();
+        loadGames();
+        showNotification('Game created successfully', 'success');
+        
+    } catch (error) {
+        console.error('Error creating game:', error);
+        showNotification(error.message, 'error');
+    }
+    
+    return false;  // Prevent form submission
+};
+
+// Add clone selector population
+async function populateCloneOptions() {
+    try {
+        const response = await fetch('/api/games');
+        const games = await response.json();
+        
+        const cloneSelect = document.getElementById('cloneFromSelect');
+        if (cloneSelect) {
+            // Clear existing options except the first one
+            cloneSelect.innerHTML = '<option value="">Empty Game (No Assets)</option>';
+            
+            // Add options for each existing game
+            games.forEach(game => {
+                const option = document.createElement('option');
+                option.value = game.slug;
+                option.textContent = `${game.title} (${game.asset_count} assets, ${game.npc_count} NPCs)`;
+                cloneSelect.appendChild(option);
+            });
+            console.log('Populated clone options:', games.length, 'games');
+        }
+    } catch (error) {
+        console.error('Error loading games for clone options:', error);
+        showNotification('Failed to load clone options', 'error');
+    }
+}
 
 
 

@@ -33,6 +33,7 @@ from .database import (
     fetch_npcs_by_game
 )
 import uuid
+import os
 
 logger = logging.getLogger("roblox_app")
 router = APIRouter()
@@ -82,6 +83,9 @@ async def create_game_endpoint(request: Request):
     try:
         data = await request.json()
         game_slug = slugify(data['title'])
+        clone_from = data.get('cloneFrom')
+        
+        logger.info(f"Creating game with title: {data['title']}, slug: {game_slug}, clone_from: {clone_from}")
         
         # Create game directories
         ensure_game_directories(game_slug)
@@ -89,12 +93,62 @@ async def create_game_endpoint(request: Request):
         try:
             game_id = create_game(data['title'], game_slug, data['description'])
             
-            # Initialize empty database files
+            # Initialize paths
             db_paths = get_database_paths(game_slug)
-            for db_type in ['asset', 'npc']:
-                if not db_paths[db_type]['json'].exists():
+            
+            if clone_from:
+                logger.info(f"Cloning from game: {clone_from}")
+                # Get source game paths
+                source_paths = get_database_paths(clone_from)
+                
+                # Copy assets and NPCs from source game
+                for db_type in ['asset', 'npc']:
+                    if source_paths[db_type]['json'].exists():
+                        shutil.copy2(source_paths[db_type]['json'], db_paths[db_type]['json'])
+                    if source_paths[db_type]['lua'].exists():
+                        shutil.copy2(source_paths[db_type]['lua'], db_paths[db_type]['lua'])
+                        
+                # Copy asset files
+                source_game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / clone_from
+                target_game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / game_slug
+                
+                if (source_game_dir / "src" / "assets").exists():
+                    shutil.copytree(
+                        source_game_dir / "src" / "assets",
+                        target_game_dir / "src" / "assets",
+                        dirs_exist_ok=True
+                    )
+                    
+                # Copy database records
+                with get_db() as db:
+                    # Get source game ID
+                    cursor = db.execute("SELECT id FROM games WHERE slug = ?", (clone_from,))
+                    source_game = cursor.fetchone()
+                    if source_game:
+                        source_game_id = source_game['id']
+                        
+                        # Copy assets
+                        cursor.execute("""
+                            INSERT INTO assets (game_id, asset_id, name, description, type, image_url, tags)
+                            SELECT ?, asset_id, name, description, type, image_url, tags
+                            FROM assets WHERE game_id = ?
+                        """, (game_id, source_game_id))
+                        
+                        # Copy NPCs
+                        cursor.execute("""
+                            INSERT INTO npcs (game_id, npc_id, asset_id, display_name, model, 
+                                            system_prompt, response_radius, spawn_position, abilities)
+                            SELECT ?, npc_id, asset_id, display_name, model,
+                                   system_prompt, response_radius, spawn_position, abilities
+                            FROM npcs WHERE game_id = ?
+                        """, (game_id, source_game_id))
+                        
+                        db.commit()
+                        logger.info(f"Copied database records from game {clone_from} to {game_slug}")
+            else:
+                # Initialize empty files
+                for db_type in ['asset', 'npc']:
                     save_json_database(db_paths[db_type]['json'], {"assets": [], "npcs": []})
-                if not db_paths[db_type]['lua'].exists():
                     save_lua_database(db_paths[db_type]['lua'], {"assets": [], "npcs": []})
             
             return JSONResponse({
@@ -102,6 +156,7 @@ async def create_game_endpoint(request: Request):
                 "slug": game_slug,
                 "message": "Game created successfully"
             })
+            
         except Exception as e:
             if "UNIQUE constraint failed" in str(e):
                 return JSONResponse({
