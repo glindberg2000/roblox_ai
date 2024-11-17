@@ -679,6 +679,24 @@ document.addEventListener('DOMContentLoaded', function() {
     if (npcForm) {
         npcForm.addEventListener('submit', handleNPCSubmit);
     }
+
+    // Populate create form abilities
+    const createContainer = document.getElementById('createAbilitiesCheckboxes');
+    if (createContainer) {
+        Object.entries(ABILITY_CONFIG).forEach(([key, ability]) => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center space-x-2';
+            div.innerHTML = `
+                <input type="checkbox" id="create_${key}" name="abilities" 
+                       value="${key}" class="form-checkbox h-4 w-4 text-blue-600">
+                <label for="create_${key}" class="flex items-center space-x-2">
+                    <i class="${ability.icon}"></i>
+                    <span>${ability.label}</span>
+                </label>
+            `;
+            createContainer.appendChild(div);
+        });
+    }
 });
 
 // Add NPC deletion function

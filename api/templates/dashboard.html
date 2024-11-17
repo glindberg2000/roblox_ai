@@ -216,27 +216,8 @@
                     </div>
                     <div class="mb-4">
                         <label class="block text-sm font-medium mb-2 text-gray-300">Abilities:</label>
-                        <div class="space-y-2">
-                            <div class="flex items-center">
-                                <input type="checkbox" name="abilities" value="follow" id="ability_follow"
-                                    class="mr-2 bg-dark-700 border-dark-600 rounded text-blue-600">
-                                <label for="ability_follow" class="text-gray-300">Follow Player</label>
-                            </div>
-                            <div class="flex items-center">
-                                <input type="checkbox" name="abilities" value="wander" id="ability_wander"
-                                    class="mr-2 bg-dark-700 border-dark-600 rounded text-blue-600">
-                                <label for="ability_wander" class="text-gray-300">Wander Around</label>
-                            </div>
-                            <div class="flex items-center">
-                                <input type="checkbox" name="abilities" value="patrol" id="ability_patrol"
-                                    class="mr-2 bg-dark-700 border-dark-600 rounded text-blue-600">
-                                <label for="ability_patrol" class="text-gray-300">Patrol Area</label>
-                            </div>
-                            <div class="flex items-center">
-                                <input type="checkbox" name="abilities" value="greet" id="ability_greet"
-                                    class="mr-2 bg-dark-700 border-dark-600 rounded text-blue-600">
-                                <label for="ability_greet" class="text-gray-300">Greet Players</label>
-                            </div>
+                        <div id="createAbilitiesCheckboxes" class="grid grid-cols-2 gap-2 bg-dark-700 p-4 rounded-lg">
+                            <!-- Will be populated from ABILITY_CONFIG -->
                         </div>
                     </div>
                     <button type="submit"
