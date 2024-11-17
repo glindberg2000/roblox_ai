@@ -18,7 +18,8 @@ from .config import (
     THUMBNAILS_DIR, 
     AVATARS_DIR,
     ensure_game_directories,
-    get_game_paths
+    get_game_paths,
+    BASE_DIR
 )
 from .database import (
     get_db,
@@ -89,80 +90,115 @@ async def create_game_endpoint(request: Request):
         
         # Create game directories
         ensure_game_directories(game_slug)
+        logger.info(f"Created game directories for {game_slug}")
         
-        try:
-            game_id = create_game(data['title'], game_slug, data['description'])
-            
-            # Initialize paths
-            db_paths = get_database_paths(game_slug)
-            
-            if clone_from:
-                logger.info(f"Cloning from game: {clone_from}")
-                # Get source game paths
-                source_paths = get_database_paths(clone_from)
+        with get_db() as db:
+            try:
+                # Start transaction
+                db.execute('BEGIN')
+                logger.info("Started database transaction")
                 
-                # Copy assets and NPCs from source game
-                for db_type in ['asset', 'npc']:
-                    if source_paths[db_type]['json'].exists():
-                        shutil.copy2(source_paths[db_type]['json'], db_paths[db_type]['json'])
-                    if source_paths[db_type]['lua'].exists():
-                        shutil.copy2(source_paths[db_type]['lua'], db_paths[db_type]['lua'])
-                        
-                # Copy asset files
-                source_game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / clone_from
-                target_game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / game_slug
+                # Create game in database first
+                game_id = create_game(data['title'], game_slug, data['description'])
+                logger.info(f"Created game in database with ID: {game_id}")
                 
-                if (source_game_dir / "src" / "assets").exists():
-                    shutil.copytree(
-                        source_game_dir / "src" / "assets",
-                        target_game_dir / "src" / "assets",
-                        dirs_exist_ok=True
-                    )
+                if clone_from:
+                    logger.info(f"Starting clone from game: {clone_from}")
                     
-                # Copy database records
-                with get_db() as db:
                     # Get source game ID
                     cursor = db.execute("SELECT id FROM games WHERE slug = ?", (clone_from,))
                     source_game = cursor.fetchone()
-                    if source_game:
-                        source_game_id = source_game['id']
-                        
-                        # Copy assets
+                    if not source_game:
+                        logger.error(f"Source game not found: {clone_from}")
+                        raise HTTPException(status_code=404, detail="Source game not found")
+                    source_game_id = source_game['id']
+                    logger.info(f"Found source game ID: {source_game_id}")
+                    
+                    # Copy assets first
+                    cursor.execute("""
+                        INSERT INTO assets (game_id, asset_id, name, description, type, image_url, tags)
+                        SELECT ?, asset_id, name, description, type, image_url, tags
+                        FROM assets WHERE game_id = ?
+                    """, (game_id, source_game_id))
+                    logger.info("Copied assets")
+                    
+                    # Get NPCs and generate new IDs
+                    cursor.execute("""
+                        SELECT * FROM npcs WHERE game_id = ?
+                    """, (source_game_id,))
+                    source_npcs = cursor.fetchall()
+                    logger.info(f"Found {len(source_npcs)} NPCs to copy")
+                    
+                    # Copy NPCs with new IDs
+                    for npc in source_npcs:
+                        new_npc_id = f"npc_{game_id}_{npc['npc_id']}"  # Create unique NPC ID
                         cursor.execute("""
-                            INSERT INTO assets (game_id, asset_id, name, description, type, image_url, tags)
-                            SELECT ?, asset_id, name, description, type, image_url, tags
-                            FROM assets WHERE game_id = ?
-                        """, (game_id, source_game_id))
-                        
-                        # Copy NPCs
-                        cursor.execute("""
-                            INSERT INTO npcs (game_id, npc_id, asset_id, display_name, model, 
-                                            system_prompt, response_radius, spawn_position, abilities)
-                            SELECT ?, npc_id, asset_id, display_name, model,
-                                   system_prompt, response_radius, spawn_position, abilities
-                            FROM npcs WHERE game_id = ?
-                        """, (game_id, source_game_id))
-                        
-                        db.commit()
-                        logger.info(f"Copied database records from game {clone_from} to {game_slug}")
-            else:
-                # Initialize empty files
-                for db_type in ['asset', 'npc']:
-                    save_json_database(db_paths[db_type]['json'], {"assets": [], "npcs": []})
-                    save_lua_database(db_paths[db_type]['lua'], {"assets": [], "npcs": []})
-            
-            return JSONResponse({
-                "id": game_id,
-                "slug": game_slug,
-                "message": "Game created successfully"
-            })
-            
-        except Exception as e:
-            if "UNIQUE constraint failed" in str(e):
+                            INSERT INTO npcs (
+                                game_id, npc_id, asset_id, display_name, model,
+                                system_prompt, response_radius, spawn_position, abilities
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            game_id,
+                            new_npc_id,
+                            npc['asset_id'],
+                            npc['display_name'],
+                            npc['model'],
+                            npc['system_prompt'],
+                            npc['response_radius'],
+                            npc['spawn_position'],
+                            npc['abilities']
+                        ))
+                    logger.info("Copied NPCs with new IDs")
+                    
+                    # Copy files
+                    db_paths = get_database_paths(game_slug)
+                    source_paths = get_database_paths(clone_from)
+                    
+                    for db_type in ['asset', 'npc']:
+                        if source_paths[db_type]['json'].exists():
+                            shutil.copy2(source_paths[db_type]['json'], db_paths[db_type]['json'])
+                            logger.info(f"Copied {db_type} JSON file")
+                        if source_paths[db_type]['lua'].exists():
+                            shutil.copy2(source_paths[db_type]['lua'], db_paths[db_type]['lua'])
+                            logger.info(f"Copied {db_type} Lua file")
+                    
+                    source_game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / clone_from
+                    target_game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / game_slug
+                    
+                    if (source_game_dir / "src" / "assets").exists():
+                        shutil.copytree(
+                            source_game_dir / "src" / "assets",
+                            target_game_dir / "src" / "assets",
+                            dirs_exist_ok=True
+                        )
+                        logger.info("Copied asset files")
+                    
+                    # Verify copy
+                    cursor.execute("SELECT COUNT(*) as count FROM assets WHERE game_id = ?", (game_id,))
+                    new_asset_count = cursor.fetchone()['count']
+                    cursor.execute("SELECT COUNT(*) as count FROM npcs WHERE game_id = ?", (game_id,))
+                    new_npc_count = cursor.fetchone()['count']
+                    logger.info(f"New game has {new_asset_count} assets and {new_npc_count} NPCs")
+                
+                # Commit transaction
+                db.commit()
+                logger.info(f"Successfully created game {game_slug}")
+                
                 return JSONResponse({
-                    "error": "A game with this name already exists"
-                }, status_code=400)
-            raise e
+                    "id": game_id,
+                    "slug": game_slug,
+                    "message": "Game created successfully"
+                })
+                
+            except Exception as e:
+                # Rollback transaction on error
+                db.rollback()
+                logger.error(f"Error in transaction, rolling back: {str(e)}")
+                if "UNIQUE constraint failed" in str(e):
+                    return JSONResponse({
+                        "error": "A game with this name already exists"
+                    }, status_code=400)
+                raise e
             
     except Exception as e:
         logger.error(f"Error creating game: {str(e)}")
