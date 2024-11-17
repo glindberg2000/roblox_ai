@@ -630,11 +630,19 @@ async function handleNPCSubmit(event) {
         const formData = new FormData(form);
         formData.set('game_id', currentGame.id);
         
+        // Get selected abilities
+        const abilities = [];
+        form.querySelectorAll('input[name="abilities"]:checked').forEach(checkbox => {
+            abilities.push(checkbox.value);
+        });
+        formData.set('abilities', JSON.stringify(abilities));
+        
         debugLog('Submitting NPC', {
             game_id: formData.get('game_id'),
-            display_name: formData.get('displayName'),
-            asset_id: formData.get('assetID'),
-            system_prompt: formData.get('system_prompt')
+            displayName: formData.get('displayName'),
+            assetID: formData.get('assetID'),
+            system_prompt: formData.get('system_prompt'),
+            abilities: formData.get('abilities')
         });
 
         const response = await fetch('/api/npcs', {

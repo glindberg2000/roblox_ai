@@ -32,6 +32,7 @@ from .database import (
     fetch_assets_by_game,
     fetch_npcs_by_game
 )
+import uuid
 
 logger = logging.getLogger("roblox_app")
 router = APIRouter()
@@ -605,6 +606,87 @@ async def create_asset(
                 
     except Exception as e:
         logger.error(f"Error creating asset: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/npcs")
+async def create_npc(
+    request: Request,
+    game_id: int = Form(...),
+    displayName: str = Form(...),
+    assetID: str = Form(...),
+    system_prompt: str = Form(None),
+    responseRadius: int = Form(20),
+    spawnX: float = Form(0),
+    spawnY: float = Form(5),
+    spawnZ: float = Form(0),
+    abilities: str = Form("[]")  # JSON string of abilities array
+):
+    try:
+        logger.info(f"Creating NPC for game {game_id}")
+        
+        # Create spawn position JSON
+        spawn_position = json.dumps({
+            "x": spawnX,
+            "y": spawnY,
+            "z": spawnZ
+        })
+        
+        # Validate abilities JSON
+        try:
+            abilities_list = json.loads(abilities)
+            if not isinstance(abilities_list, list):
+                abilities = "[]"
+        except:
+            abilities = "[]"
+        
+        with get_db() as db:
+            # First check if game exists
+            cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
+            game = cursor.fetchone()
+            if not game:
+                raise HTTPException(status_code=404, detail="Game not found")
+
+            # Generate a unique NPC ID
+            npc_id = str(uuid.uuid4())
+            
+            # Create NPC record
+            cursor.execute("""
+                INSERT INTO npcs (
+                    game_id,
+                    npc_id,
+                    display_name,
+                    asset_id,
+                    system_prompt,
+                    response_radius,
+                    spawn_position,
+                    abilities
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                RETURNING id
+            """, (
+                game_id,
+                npc_id,
+                displayName,
+                assetID,
+                system_prompt,
+                responseRadius,
+                spawn_position,
+                abilities  # Use the abilities JSON string
+            ))
+            db_id = cursor.fetchone()['id']
+            db.commit()
+            
+            logger.info(f"NPC created successfully with ID: {db_id}")
+            
+            return JSONResponse({
+                "id": db_id,
+                "npc_id": npc_id,
+                "display_name": displayName,
+                "asset_id": assetID,
+                "message": "NPC created successfully"
+            })
+            
+    except Exception as e:
+        logger.error(f"Error creating NPC: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ... rest of your existing routes ...
