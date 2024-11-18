@@ -31,6 +31,41 @@ window.showTab = function (tabName) {  // Make showTab globally available
     }
 }
 
+// Add these two functions to dashboard.js - do not delete anything else
+
+function showModal(content) {
+    // Create modal backdrop
+    const backdrop = document.createElement('div');
+    backdrop.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+
+    // Create modal container
+    const modal = document.createElement('div');
+    modal.className = 'bg-dark-900 rounded-lg shadow-xl max-w-2xl w-full mx-4';
+
+    // Add close button
+    const closeButton = document.createElement('button');
+    closeButton.className = 'absolute top-4 right-4 text-gray-400 hover:text-white';
+    closeButton.innerHTML = '<i class="fas fa-times"></i>';
+    closeButton.onclick = hideModal;
+
+    // Add content
+    modal.appendChild(closeButton);
+    modal.appendChild(content);
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+
+    // Prevent body scroll
+    document.body.style.overflow = 'hidden';
+}
+
+function hideModal() {
+    const modal = document.querySelector('.fixed.inset-0');
+    if (modal) {
+        modal.remove();
+        document.body.style.overflow = '';
+    }
+}
+
 // Update loadGames function with SELECT button
 async function loadGames() {
     console.log('Loading games...');
@@ -242,8 +277,8 @@ async function loadNPCs() {
 function showNotification(message, type = 'info') {
     const notification = document.createElement('div');
     notification.className = `notification fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${type === 'error' ? 'bg-red-600' :
-            type === 'success' ? 'bg-green-600' :
-                'bg-blue-600'
+        type === 'success' ? 'bg-green-600' :
+            'bg-blue-600'
         } text-white`;
     notification.textContent = message;
 
@@ -263,29 +298,149 @@ function debugLog(title, data) {
     console.log('=================');
 }
 
-// Add modal handling functions
+// Update just these two functions in dashboard.js:
+
 function editAsset(assetId) {
-    debugLog('Editing asset', { assetId });
-    try {
-        // Find asset in stored data
-        const asset = currentAssets.find(a => a.assetId === assetId);
-        if (!asset) {
-            throw new Error(`Asset not found: ${assetId}`);
+    if (!currentGame) {
+        showNotification('Please select a game first', 'error');
+        return;
+    }
+
+    console.log(`Editing asset ${assetId} for game ${currentGame.id}`);
+
+    const asset = currentAssets.find(a => a.assetId === assetId);
+    if (!asset) {
+        console.error('Asset not found:', assetId);
+        return;
+    }
+
+    // Create modal content
+    const modalContent = document.createElement('div');
+    modalContent.className = 'p-6';
+    // Update just the modal content HTML in editAsset function
+    // Update the form submission part in the modal content
+    modalContent.innerHTML = `
+    <div class="p-6 rounded-lg bg-dark-900">
+        <h2 class="text-xl text-blue-400 font-bold mb-6">Edit Asset</h2>
+        
+        <form id="editAssetForm" onsubmit="return handleAssetEdit(event, '${asset.assetId}', ${currentGame.id})">
+            <div class="flex gap-6">
+                <!-- Left side - thumbnail -->
+                <div class="w-1/4">
+                    <img src="${asset.imageUrl || '/static/img/placeholder.png'}" 
+                        alt="${asset.name}" 
+                        class="w-full rounded-lg shadow-lg mb-2">
+                </div>
+                
+                <!-- Right side - form -->
+                <div class="w-3/4 space-y-4">
+                    <div>
+                        <label class="block text-gray-300 mb-2">Name:</label>
+                        <input type="text" name="name" value="${asset.name}" required
+                            class="w-full p-3 bg-dark-800 border border-dark-700 rounded-lg text-gray-100">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-300 mb-2">Description:</label>
+                        <textarea name="description" rows="4" required
+                            class="w-full p-3 bg-dark-800 border border-dark-700 rounded-lg text-gray-100"
+                            style="min-width: 450px">${asset.description || ''}</textarea>
+                    </div>
+                    
+                    <div class="text-sm text-gray-400 mt-4">
+                        Asset ID: ${asset.assetId}
+                        <span class="mx-2">•</span>
+                        Game: ${currentGame.title}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end space-x-3 mt-6">
+                <button type="button" onclick="hideModal()" 
+                    class="px-6 py-2 bg-dark-700 text-gray-300 rounded-lg hover:bg-dark-600">
+                    Cancel
+                </button>
+                <button type="submit" 
+                    class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+`;
+
+    // Add the form handler function
+    async function handleAssetEdit(event, assetId, gameId) {
+        event.preventDefault();
+        console.log(`Saving asset ${assetId} for game ${gameId}`);
+
+        try {
+            const form = event.target;
+            const response = await fetch(`/api/games/${gameId}/assets/${assetId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: form.querySelector('[name="name"]').value,
+                    description: form.querySelector('[name="description"]').value
+                })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to update asset');
+            }
+
+            hideModal();
+            showNotification('Asset updated successfully', 'success');
+            loadAssets();  // Refresh the assets list
+        } catch (error) {
+            console.error('Error saving asset:', error);
+            showNotification(error.message, 'error');
         }
-        debugLog('Found asset to edit', asset);
 
-        // Populate modal
-        document.getElementById('editAssetId').value = asset.assetId;
-        document.getElementById('editAssetName').value = asset.name;
-        document.getElementById('editAssetDescription').value = asset.description || '';
-        document.getElementById('editAssetImage').src = asset.imageUrl || '';
-        document.getElementById('editAssetId_display').textContent = `(ID: ${asset.assetId})`;
+        return false;
+    }
+    // Show modal
+    showModal(modalContent);
 
-        // Show modal
-        document.getElementById('assetEditModal').style.display = 'block';
+    // Add form submit handler
+    const form = modalContent.querySelector('form');
+    form.onsubmit = function (event) {
+        event.preventDefault();
+        saveAssetEdit(event, assetId, currentGame.id);
+    };
+}
+
+async function saveAssetEdit(event, assetId, gameId) {
+    event.preventDefault();
+    console.log(`Saving asset ${assetId} for game ${gameId}`);
+
+    try {
+        const form = event.target;
+        const response = await fetch(`/api/games/${gameId}/assets/${assetId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                name: form.querySelector('[name="name"]').value,
+                description: form.querySelector('[name="description"]').value
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to update asset');
+        }
+
+        hideModal();
+        showNotification('Asset updated successfully', 'success');
+        loadAssets();
     } catch (error) {
-        console.error('Error opening asset edit modal:', error);
-        showNotification('Failed to open edit modal', 'error');
+        console.error('Error saving asset:', error);
+        showNotification(error.message, 'error');
     }
 }
 
@@ -316,34 +471,6 @@ function editNPC(npcId) {
 }
 
 // Add save functions
-async function saveAssetEdit(event) {
-    event.preventDefault();
-    const assetId = document.getElementById('editAssetId').value;
-
-    try {
-        const data = {
-            name: document.getElementById('editAssetName').value,
-            description: document.getElementById('editAssetDescription').value
-        };
-
-        const response = await fetch(`/api/assets/${assetId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-
-        if (!response.ok) throw new Error('Failed to update asset');
-
-        showNotification('Asset updated successfully', 'success');
-        closeAssetEditModal();
-        loadAssets();  // Reload assets to show changes
-    } catch (error) {
-        console.error('Error saving asset:', error);
-        showNotification('Failed to save changes', 'error');
-    }
-}
-
-// Update saveNPCEdit function to include assetId
 async function saveNPCEdit(event) {
     event.preventDefault();
     const npcId = document.getElementById('editNpcId').value;
@@ -730,7 +857,7 @@ async function deleteNPC(npcId) {
 window.deleteNPC = deleteNPC;
 
 // Make handler globally available
-window.handleGameSubmit = async function(event) {
+window.handleGameSubmit = async function (event) {
     event.preventDefault();
     console.log('Game form submitted - handleGameSubmit');
 
@@ -741,9 +868,9 @@ window.handleGameSubmit = async function(event) {
             description: formData.get('description'),
             cloneFrom: formData.get('cloneFrom') || null
         };
-        
+
         console.log('Submitting game data:', data);
-        
+
         const response = await fetch('/api/games', {
             method: 'POST',
             headers: {
@@ -761,16 +888,16 @@ window.handleGameSubmit = async function(event) {
 
         const result = await response.json();
         console.log('Game created:', result);
-        
+
         event.target.reset();
         loadGames();
         showNotification('Game created successfully', 'success');
-        
+
     } catch (error) {
         console.error('Error creating game:', error);
         showNotification(error.message, 'error');
     }
-    
+
     return false;  // Prevent form submission
 };
 
@@ -779,12 +906,12 @@ async function populateCloneOptions() {
     try {
         const response = await fetch('/api/games');
         const games = await response.json();
-        
+
         const cloneSelect = document.getElementById('cloneFromSelect');
         if (cloneSelect) {
             // Clear existing options except the first one
             cloneSelect.innerHTML = '<option value="">Empty Game (No Assets)</option>';
-            
+
             // Add options for each existing game
             games.forEach(game => {
                 const option = document.createElement('option');
@@ -801,12 +928,12 @@ async function populateCloneOptions() {
 }
 
 // Initialize when document is ready
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     console.log('DOM Content Loaded - Initializing dashboard');
-    
+
     // Populate clone options when page loads
     populateCloneOptions();
-    
+
     // Other initialization code...
 });
 

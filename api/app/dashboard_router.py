@@ -408,101 +408,75 @@ async def list_npcs(game_id: Optional[int] = None):
         logger.error(f"Error fetching NPCs: {str(e)}")
         return JSONResponse({"error": "Failed to fetch NPCs"}, status_code=500)
 
-@router.put("/api/assets/{asset_id}")
-async def update_asset(asset_id: str, request: Request):
+@router.put("/api/games/{game_id}/assets/{asset_id}")
+async def update_asset(game_id: int, asset_id: str, request: Request):
     try:
         data = await request.json()
-        logger.info(f"Updating asset {asset_id} with data: {data}")
+        logger.info(f"=== Updating asset {asset_id} for game {game_id} ===")
         
         with get_db() as db:
-            # First get the game_id for this asset
-            cursor = db.execute("""
-                SELECT a.*, g.slug 
-                FROM assets a
-                JOIN games g ON a.game_id = g.id
-                WHERE a.asset_id = ?
-            """, (asset_id,))
-            current_asset = cursor.fetchone()
-            
-            if not current_asset:
-                logger.error(f"Asset not found: {asset_id}")
-                return JSONResponse({"error": "Asset not found"}, status_code=404)
-            
-            game_slug = current_asset['slug']
-            logger.info(f"Found asset in game: {game_slug}")
-            
-            # Get database paths for this specific game
-            db_paths = get_database_paths(game_slug)
-            logger.info(f"Using paths: {db_paths}")
+            # First get game info
+            cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
+            game = cursor.fetchone()
+            if not game:
+                logger.error(f"Game not found: {game_id}")
+                return JSONResponse({"error": "Game not found"}, status_code=404)
+                
+            game_slug = game['slug']
+            logger.info(f"Found game: {game_slug}")
             
             # Update asset in database
-            db.execute("""
+            cursor.execute("""
                 UPDATE assets 
-                SET name = ?,
-                    description = ?
-                WHERE asset_id = ?
-            """, (
-                data['name'],
-                data.get('description', ''),
-                asset_id
-            ))
+                SET name = ?, description = ?
+                WHERE asset_id = ? AND game_id = ?
+            """, (data['name'], data['description'], asset_id, game_id))
+            
+            if cursor.rowcount == 0:
+                logger.error(f"Asset not found: {asset_id} in game {game_id}")
+                return JSONResponse({"error": "Asset not found"}, status_code=404)
+            
+            # Get all assets for this game to update files
+            cursor.execute("""
+                SELECT asset_id, name, description, type, image_url, tags
+                FROM assets WHERE game_id = ?
+            """, (game_id,))
+            all_assets = cursor.fetchall()
+            
+            # Format assets for Lua
+            formatted_assets = [{
+                "assetId": asset["asset_id"],
+                "name": asset["name"],
+                "description": asset["description"],
+                "type": asset["type"],
+                "imageUrl": asset["image_url"],
+                "tags": json.loads(asset["tags"]) if asset["tags"] else []
+            } for asset in all_assets]
+            
+            # Update JSON and Lua files
+            db_paths = get_database_paths(game_slug)
+            
+            # Save JSON
+            save_json_database(db_paths['asset']['json'], {
+                "assets": formatted_assets
+            })
+            
+            # Save Lua
+            save_lua_database(db_paths['asset']['lua'], {
+                "assets": formatted_assets
+            })
+            
+            logger.info(f"Updated files for game {game_slug}")
+            logger.info(f"JSON: {db_paths['asset']['json']}")
+            logger.info(f"Lua: {db_paths['asset']['lua']}")
             
             db.commit()
-            logger.info("Database updated successfully")
             
-            # Update JSON file
-            try:
-                # Read current JSON file
-                with open(db_paths['asset']['json'], 'r') as f:
-                    asset_database = json.load(f)
-                    logger.info(f"Loaded JSON from {db_paths['asset']['json']}")
-                    logger.info(f"Current JSON content: {json.dumps(asset_database, indent=2)}")
-                
-                # Update the specific asset
-                updated = False
-                for asset in asset_database.get("assets", []):
-                    if asset["assetId"] == asset_id:
-                        old_data = asset.copy()
-                        asset.update({
-                            "name": data['name'],
-                            "description": data.get('description', '')
-                        })
-                        updated = True
-                        logger.info(f"Updated asset in JSON data")
-                        logger.info(f"Old data: {old_data}")
-                        logger.info(f"New data: {asset}")
-                        break
-                
-                if not updated:
-                    logger.error(f"Asset {asset_id} not found in JSON file")
-                
-                # Save both JSON and Lua files
-                with open(db_paths['asset']['json'], 'w') as f:
-                    json.dump(asset_database, f, indent=4)
-                    logger.info(f"Saved JSON to {db_paths['asset']['json']}")
-                
-                save_lua_database(db_paths['asset']['lua'], {"assets": asset_database.get("assets", [])})
-                logger.info(f"Saved Lua to {db_paths['asset']['lua']}")
-                
-                # Verify the files were updated
-                with open(db_paths['asset']['json'], 'r') as f:
-                    verify_data = json.load(f)
-                    logger.info(f"Verification - JSON content after save: {json.dumps(verify_data, indent=2)}")
-                
-            except Exception as e:
-                logger.error(f"Error updating files: {str(e)}")
-                logger.error(f"Error details: {e.__class__.__name__}")
-                raise
-            
-            # Get updated asset
-            cursor = db.execute("SELECT * FROM assets WHERE asset_id = ?", (asset_id,))
-            updated = cursor.fetchone()
-            
-            return JSONResponse(dict(updated))
+            return JSONResponse({"message": "Asset updated successfully"})
             
     except Exception as e:
         logger.error(f"Error updating asset: {str(e)}")
-        return JSONResponse({"error": "Failed to update asset"}, status_code=500)
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 @router.get("/api/npcs/{npc_id}")
 async def get_npc(npc_id: str):
