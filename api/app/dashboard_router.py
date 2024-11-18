@@ -35,9 +35,14 @@ from .database import (
     fetch_npcs_by_game
 )
 import uuid
+from fastapi.templating import Jinja2Templates
 
 logger = logging.getLogger("roblox_app")
 router = APIRouter()
+
+# Set up templates
+BASE_DIR = Path(__file__).resolve().parent.parent
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 def slugify(text):
     """Generate a unique slug for the game."""
@@ -849,6 +854,15 @@ async def delete_npc(npc_id: str, game_id: int):
     except Exception as e:
         logger.error(f"Error deleting NPC: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# Update the dashboard_new route
+@router.get("/dashboard/new")
+async def dashboard_new(request: Request):
+    """Render the new version of the dashboard"""
+    return templates.TemplateResponse(
+        "dashboard_new.html", 
+        {"request": request}  # Jinja2Templates requires the request object
+    )
 
 # ... rest of your existing routes ...
 
