@@ -36,3 +36,9 @@ backup/*
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Add to .gitignore
+*.backup
+games/*/
+*.patch
+generate_problem_doc.py
