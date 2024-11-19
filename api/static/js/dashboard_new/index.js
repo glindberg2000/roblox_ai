@@ -65,51 +65,7 @@ window.showTab = function(tabName) {
 // Make populateAssetSelector globally available
 window.populateAssetSelector = populateAssetSelector;
 
-async function createGame(title, description, cloneFrom = null) {
-    try {
-        const response = await fetch('/api/games', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                title,
-                description,
-                cloneFrom
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log('Game created:', data);
-        
-        // Redirect to the game's page
-        window.location.href = `/dashboard?game=${data.slug}`;
-    } catch (error) {
-        console.error('Error creating game:', error);
-        alert('Failed to create game: ' + error.message);
-    }
-}
-
-// Add event listener to form submission
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.querySelector('#createGameForm');
-    if (form) {
-        form.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const title = document.querySelector('#gameTitle').value;
-            const description = document.querySelector('#gameDescription').value;
-            const cloneFrom = document.querySelector('#cloneFrom')?.value;
-            
-            await createGame(title, description, cloneFrom);
-        });
-    }
-});
-
-// Handle game form submission
+// Single game form submission handler
 window.handleGameSubmit = async function(event) {
     event.preventDefault();
     
@@ -119,6 +75,8 @@ window.handleGameSubmit = async function(event) {
     const cloneFrom = form.querySelector('[name="cloneFrom"]').value;
 
     try {
+        console.log('Creating game with:', { title, description, cloneFrom });
+        
         const response = await fetch('/api/games', {
             method: 'POST',
             headers: {
@@ -132,7 +90,8 @@ window.handleGameSubmit = async function(event) {
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const errorData = await response.json();
+            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
         }
 
         const result = await response.json();
@@ -146,6 +105,9 @@ window.handleGameSubmit = async function(event) {
         
         // Show success message
         showNotification('Game created successfully!', 'success');
+        
+        // Redirect to the new game
+        window.location.href = `/dashboard/new?game=${result.slug}`;
         
     } catch (error) {
         console.error('Error creating game:', error);

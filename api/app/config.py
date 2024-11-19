@@ -6,6 +6,9 @@ from pathlib import Path
 # Base directory is the api folder
 BASE_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Games directory is one level up from api folder
+GAMES_DIR = BASE_DIR.parent / "games"
+
 # Database paths
 DB_DIR = BASE_DIR / "db"
 SQLITE_DB_PATH = DB_DIR / "game_data.db"
@@ -26,7 +29,7 @@ for directory in [STORAGE_DIR, ASSETS_DIR, THUMBNAILS_DIR, AVATARS_DIR]:
 # Replace hard-coded ROBLOX_DIR with dynamic game-specific paths
 def get_game_paths(game_slug: str) -> dict:
     """Get game-specific paths"""
-    game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / game_slug
+    game_dir = GAMES_DIR / game_slug  # Use GAMES_DIR constant
     return {
         'root': game_dir,
         'src': game_dir / "src",
@@ -54,6 +57,3 @@ When responding, always use the appropriate action type:
 
 Your response must always include an action, even if it's "none".
 """
-
-# Update template paths
-TEMPLATE_DIR = BASE_DIR / "games" / "_template"  # Changed from api/templates/game_template

@@ -10,7 +10,13 @@ from pathlib import Path
 import shutil
 import os
 from slugify import slugify as python_slugify
-from .utils import load_json_database, save_json_database, save_lua_database, get_database_paths
+from .utils import (
+    load_json_database, 
+    save_json_database, 
+    save_lua_database, 
+    get_database_paths,
+    ensure_game_directories
+)
 from .storage import FileStorageManager
 from .image_utils import get_asset_description
 from .config import (
@@ -18,7 +24,6 @@ from .config import (
     ASSETS_DIR, 
     THUMBNAILS_DIR, 
     AVATARS_DIR,
-    ensure_game_directories,
     get_game_paths,
     BASE_DIR
 )
@@ -107,51 +112,59 @@ async def create_game_endpoint(request: Request):
         
         logger.info(f"Creating game with title: {data['title']}, slug: {game_slug}")
         
-        # Create game directories from new template
         try:
-            game_paths = ensure_game_directories(game_slug)
-            logger.info(f"Created game directories at: {game_paths['root']}")
+            # Create game directories from new template
+            logger.info("About to call ensure_game_directories")
+            paths = ensure_game_directories(game_slug)
+            logger.info(f"Got paths back: {paths}")
+            
+            if not paths:
+                logger.error("ensure_game_directories returned None")
+                raise ValueError("Failed to create game directories - no paths returned")
+                
+            logger.info(f"Created game directories at: {paths['root']}")
+            
+            with get_db() as db:
+                try:
+                    # Start transaction
+                    db.execute('BEGIN')
+                    
+                    # Create game in database
+                    game_id = create_game(data['title'], game_slug, data['description'])
+                    logger.info(f"Created game in database with ID: {game_id}")
+                    
+                    # Update project.json name
+                    project_file = paths['root'] / "default.project.json"
+                    if project_file.exists():
+                        with open(project_file, 'r') as f:
+                            project_data = json.load(f)
+                        project_data['name'] = data['title']
+                        with open(project_file, 'w') as f:
+                            json.dump(project_data, f, indent=2)
+                        logger.info("Updated project.json")
+                    
+                    # Initialize empty databases
+                    save_lua_database(paths['data'] / "NPCDatabase.lua", {"npcs": []})
+                    save_lua_database(paths['data'] / "AssetDatabase.lua", {"assets": []})
+                    logger.info("Initialized empty databases")
+                    
+                    db.commit()
+                    logger.info("Database transaction committed")
+                    
+                    return JSONResponse({
+                        "id": game_id,
+                        "slug": game_slug,
+                        "message": "Game created successfully"
+                    })
+                    
+                except Exception as e:
+                    db.rollback()
+                    logger.error(f"Database error: {str(e)}")
+                    raise
+                
         except Exception as e:
             logger.error(f"Failed to create game directories: {str(e)}")
             raise
-        
-        with get_db() as db:
-            try:
-                # Start transaction
-                db.execute('BEGIN')
-                
-                # Create game in database
-                game_id = create_game(data['title'], game_slug, data['description'])
-                logger.info(f"Created game in database with ID: {game_id}")
-                
-                # Update project.json name
-                project_file = game_paths['root'] / "default.project.json"
-                if project_file.exists():
-                    with open(project_file, 'r') as f:
-                        project_data = json.load(f)
-                    project_data['name'] = data['title']
-                    with open(project_file, 'w') as f:
-                        json.dump(project_data, f, indent=2)
-                    logger.info("Updated project.json")
-                
-                # Initialize empty databases
-                save_lua_database(game_paths['data'] / "NPCDatabase.lua", {"npcs": []})
-                save_lua_database(game_paths['data'] / "AssetDatabase.lua", {"assets": []})
-                logger.info("Initialized empty databases")
-                
-                db.commit()
-                logger.info("Database transaction committed")
-                
-                return JSONResponse({
-                    "id": game_id,
-                    "slug": game_slug,
-                    "message": "Game created successfully"
-                })
-                
-            except Exception as e:
-                db.rollback()
-                logger.error(f"Database error: {str(e)}")
-                raise
             
     except Exception as e:
         logger.error(f"Error creating game: {str(e)}")

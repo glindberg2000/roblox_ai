@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from typing import Dict, Optional
-from .config import get_game_paths
+from .config import get_game_paths, BASE_DIR, GAMES_DIR
 import os
 import shutil
 import logging
@@ -159,35 +159,26 @@ def sync_game_files(game_slug: str) -> None:
 
 def ensure_game_directories(game_slug: str) -> Dict[str, Path]:
     """Create and return game directory structure"""
+    print("Starting ensure_game_directories")
     try:
-        # Get base directory from config
-        BASE_DIR = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        logger.info(f"BASE_DIR: {BASE_DIR}")
+        logger.info(f"Games directory: {GAMES_DIR}")
+        logger.info(f"Games directory exists: {GAMES_DIR.exists()}")
         
-        # List all directories in games folder to debug
-        games_dir = BASE_DIR / "games"
-        logger.info(f"Contents of {games_dir}:")
-        if games_dir.exists():
-            for item in games_dir.iterdir():
-                logger.info(f"  - {item.name}")
-        else:
-            logger.error(f"Games directory not found at: {games_dir}")
+        # Create GAMES_DIR if it doesn't exist
+        GAMES_DIR.mkdir(parents=True, exist_ok=True)
+        logger.info("Created or verified GAMES_DIR exists")
         
-        game_root = BASE_DIR / "games" / game_slug
+        game_root = GAMES_DIR / game_slug
         logger.info(f"Game root will be: {game_root}")
         
-        # Copy from new template location
-        template_dir = BASE_DIR / "games" / "_template"
+        # Copy from template location
+        template_dir = GAMES_DIR / "_template"
         logger.info(f"Looking for template at: {template_dir}")
+        logger.info(f"Template directory exists: {template_dir.exists()}")
         
         if not template_dir.exists():
-            # Try alternate location
-            template_dir = BASE_DIR / "api" / "templates" / "game_template"
-            logger.info(f"Template not found in games/_template, trying: {template_dir}")
-            
-        if not template_dir.exists():
-            logger.error(f"No template found at either location")
-            raise FileNotFoundError(f"No template found at {template_dir}")
+            logger.error(f"Template directory not found at: {template_dir}")
+            raise FileNotFoundError(f"Template not found at {template_dir}")
             
         logger.info(f"Using template from: {template_dir}")
         
@@ -196,7 +187,10 @@ def ensure_game_directories(game_slug: str) -> Dict[str, Path]:
             shutil.rmtree(game_root)
             
         logger.info(f"Copying template to: {game_root}")
-        shutil.copytree(template_dir, game_root)
+        # Use copytree with ignore_dangling_symlinks=True and dirs_exist_ok=True
+        shutil.copytree(template_dir, game_root, symlinks=False, 
+                       ignore_dangling_symlinks=True, 
+                       dirs_exist_ok=True)
         
         # Define and ensure all required paths exist
         paths = {
@@ -213,9 +207,10 @@ def ensure_game_directories(game_slug: str) -> Dict[str, Path]:
             logger.info(f"Created {path_name} directory at: {path}")
             
         logger.info(f"Successfully created game directories for {game_slug}")
+        logger.info(f"Returning paths dictionary: {paths}")
         return paths
         
     except Exception as e:
         logger.error(f"Error in ensure_game_directories: {str(e)}")
-        logger.error(f"Stack trace:", exc_info=True)
+        logger.error("Stack trace:", exc_info=True)
         raise

@@ -8,13 +8,18 @@ from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
 import logging
 
-# Initialize logging
+# Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()  # Log to console
+    ]
 )
+
+# Create logger for our app
 logger = logging.getLogger("roblox_app")
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 # Load environment variables
 load_dotenv()
@@ -82,7 +87,7 @@ async def serve_players():
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("RobloxAPI app is starting...")
+    logger.info("Starting Roblox API server...")
 
 @app.on_event("shutdown")
 async def shutdown_event():
