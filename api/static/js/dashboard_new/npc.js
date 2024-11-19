@@ -78,7 +78,7 @@ async function fetchAvailableModels() {
     }
 }
 
-// Update the editNPC function with proper form element references
+// Update the editNPC function to properly populate the model selector
 export async function editNPC(npcId) {
     if (!state.currentGame) {
         showNotification('Please select a game first', 'error');
@@ -99,33 +99,34 @@ export async function editNPC(npcId) {
         const data = await response.json();
         const availableModels = data.assets || [];
 
+        if (availableModels.length === 0) {
+            showNotification('No models available. Please add NPC assets first.', 'error');
+            return;
+        }
+
         // Create modal content
         const modalContent = document.createElement('div');
         modalContent.className = 'p-6';
-        
-        // Generate unique IDs for this instance
-        const uniqueId = `edit_${Date.now()}`;
-        
         modalContent.innerHTML = `
             <div class="flex justify-between items-center mb-6">
                 <h2 class="text-xl font-bold text-blue-400">Edit NPC</h2>
             </div>
-            <form id="editNPCForm_${uniqueId}" class="space-y-4">
-                <input type="hidden" name="npcId" value="${escapeHTML(npc.npcId)}">
+            <form id="editNPCForm" class="space-y-4">
+                <input type="hidden" id="editNpcId" value="${npc.npcId}">
                 
                 <div>
                     <label class="block text-sm font-medium mb-1 text-gray-300">Display Name:</label>
-                    <input type="text" name="displayName" value="${escapeHTML(npc.displayName)}" required
+                    <input type="text" id="editNpcDisplayName" value="${npc.displayName || ''}" required
                         class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
                 </div>
 
                 <div>
                     <label class="block text-sm font-medium mb-1 text-gray-300">Model:</label>
-                    <select name="assetId" required
+                    <select id="editNpcModel" required
                         class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
                         ${availableModels.map(model => `
-                            <option value="${escapeHTML(model.assetId)}" ${model.assetId === npc.assetId ? 'selected' : ''}>
-                                ${escapeHTML(model.name)}
+                            <option value="${model.assetId}" ${model.assetId === npc.assetId ? 'selected' : ''}>
+                                ${model.name}
                             </option>
                         `).join('')}
                     </select>
@@ -133,19 +134,19 @@ export async function editNPC(npcId) {
 
                 <div>
                     <label class="block text-sm font-medium mb-1 text-gray-300">Response Radius:</label>
-                    <input type="number" name="responseRadius" value="${npc.responseRadius || 20}" required min="1" max="100"
+                    <input type="number" id="editNpcRadius" value="${npc.responseRadius || 20}" required min="1" max="100"
                         class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
                 </div>
 
                 <div>
                     <label class="block text-sm font-medium mb-1 text-gray-300">System Prompt:</label>
-                    <textarea name="systemPrompt" required rows="4"
-                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">${escapeHTML(npc.systemPrompt || '')}</textarea>
+                    <textarea id="editNpcPrompt" required rows="4"
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">${npc.systemPrompt || ''}</textarea>
                 </div>
 
                 <div>
                     <label class="block text-sm font-medium mb-1 text-gray-300">Abilities:</label>
-                    <div class="grid grid-cols-2 gap-2 bg-dark-700 p-4 rounded-lg">
+                    <div id="editAbilitiesContainer" class="grid grid-cols-2 gap-2 bg-dark-700 p-4 rounded-lg">
                         ${window.ABILITY_CONFIG.map(ability => `
                             <label class="flex items-center space-x-2">
                                 <input type="checkbox" name="abilities" value="${ability.id}"
@@ -175,35 +176,41 @@ export async function editNPC(npcId) {
 
         showModal(modalContent);
 
-        // Reference the form within the modal
-        const form = modalContent.querySelector(`#editNPCForm_${uniqueId}`);
-
         // Debug log form values after render
-        const formValues = {
-            displayName: form.querySelector('[name="displayName"]').value,
-            assetId: form.querySelector('[name="assetId"]').value,
-            responseRadius: form.querySelector('[name="responseRadius"]').value,
-            systemPrompt: form.querySelector('[name="systemPrompt"]').value,
-            abilities: Array.from(form.querySelectorAll('input[name="abilities"]:checked')).map(cb => cb.value)
-        };
-        console.log('Form values after render:', formValues);
+        console.log('Form values after render:', {
+            displayName: document.getElementById('editNpcDisplayName').value,
+            model: document.getElementById('editNpcModel').value,
+            radius: document.getElementById('editNpcRadius').value,
+            prompt: document.getElementById('editNpcPrompt').value
+        });
 
         // Add form submit handler
+        const form = modalContent.querySelector('form');
         form.onsubmit = async (e) => {
             e.preventDefault();
             
+            // Get form values directly from the form
             const formData = {
-                displayName: form.querySelector('[name="displayName"]').value.trim(),
-                assetId: form.querySelector('[name="assetId"]').value,
-                responseRadius: parseInt(form.querySelector('[name="responseRadius"]').value),
-                systemPrompt: form.querySelector('[name="systemPrompt"]').value.trim(),
+                displayName: form.querySelector('#editNpcDisplayName').value.trim(),
+                assetId: form.querySelector('#editNpcModel').value,
+                responseRadius: parseInt(form.querySelector('#editNpcRadius').value) || 20,
+                systemPrompt: form.querySelector('#editNpcPrompt').value.trim(),
                 abilities: Array.from(form.querySelectorAll('input[name="abilities"]:checked')).map(cb => cb.value)
             };
 
-            console.log('Form data before validation:', formData);
+            console.log('Form data before save:', formData);
 
             try {
-                validateNPCData(formData);
+                if (!formData.displayName) {
+                    throw new Error('Display Name is required');
+                }
+                if (!formData.assetId) {
+                    throw new Error('Model selection is required');
+                }
+                if (!formData.systemPrompt) {
+                    throw new Error('System Prompt is required');
+                }
+
                 await saveNPCEdit(npcId, formData);
             } catch (error) {
                 showNotification(error.message, 'error');

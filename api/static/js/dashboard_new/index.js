@@ -19,13 +19,14 @@ async function populateAssetSelector() {
     }
 
     try {
+        // Fetch only NPC type assets
         const response = await fetch(`/api/assets?game_id=${state.currentGame.id}&type=NPC`);
         const data = await response.json();
         
-        const assetSelect = document.getElementById('assetSelect');
+        const assetSelect = document.getElementById('editNpcModel');
         if (assetSelect) {
             // Clear existing options
-            assetSelect.innerHTML = '<option value="">Select an asset...</option>';
+            assetSelect.innerHTML = '<option value="">Select a model...</option>';
             
             // Add options for each asset
             if (data.assets && Array.isArray(data.assets)) {
@@ -36,11 +37,11 @@ async function populateAssetSelector() {
                     assetSelect.appendChild(option);
                 });
             }
-            console.log('Populated asset selector with', data.assets?.length || 0, 'assets');
+            console.log('Populated model selector with', data.assets?.length || 0, 'assets');
         }
     } catch (error) {
-        console.error('Error loading assets for selector:', error);
-        showNotification('Failed to load assets for selection', 'error');
+        console.error('Error loading models for selector:', error);
+        showNotification('Failed to load models for selection', 'error');
     }
 }
 

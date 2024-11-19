@@ -426,71 +426,88 @@ async def list_npcs(game_id: Optional[int] = None):
 async def update_asset(game_id: int, asset_id: str, request: Request):
     try:
         data = await request.json()
-        logger.info(f"=== Updating asset {asset_id} for game {game_id} ===")
+        logger.info(f"Updating asset {asset_id} for game {game_id} with data: {data}")
         
         with get_db() as db:
-            # First get game info
-            cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
-            game = cursor.fetchone()
-            if not game:
-                logger.error(f"Game not found: {game_id}")
-                return JSONResponse({"error": "Game not found"}, status_code=404)
+            try:
+                # First get game info
+                cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
+                game = cursor.fetchone()
+                if not game:
+                    raise HTTPException(status_code=404, detail="Game not found")
                 
-            game_slug = game['slug']
-            logger.info(f"Found game: {game_slug}")
-            
-            # Update asset in database
-            cursor.execute("""
-                UPDATE assets 
-                SET name = ?, description = ?
-                WHERE asset_id = ? AND game_id = ?
-            """, (data['name'], data['description'], asset_id, game_id))
-            
-            if cursor.rowcount == 0:
-                logger.error(f"Asset not found: {asset_id} in game {game_id}")
-                return JSONResponse({"error": "Asset not found"}, status_code=404)
-            
-            # Get all assets for this game to update files
-            cursor.execute("""
-                SELECT asset_id, name, description, type, image_url, tags
-                FROM assets WHERE game_id = ?
-            """, (game_id,))
-            all_assets = cursor.fetchall()
-            
-            # Format assets for Lua
-            formatted_assets = [{
-                "assetId": asset["asset_id"],
-                "name": asset["name"],
-                "description": asset["description"],
-                "type": asset["type"],
-                "imageUrl": asset["image_url"],
-                "tags": json.loads(asset["tags"]) if asset["tags"] else []
-            } for asset in all_assets]
-            
-            # Update JSON and Lua files
-            db_paths = get_database_paths(game_slug)
-            
-            # Save JSON
-            save_json_database(db_paths['asset']['json'], {
-                "assets": formatted_assets
-            })
-            
-            # Save Lua
-            save_lua_database(db_paths['asset']['lua'], {
-                "assets": formatted_assets
-            })
-            
-            logger.info(f"Updated files for game {game_slug}")
-            logger.info(f"JSON: {db_paths['asset']['json']}")
-            logger.info(f"Lua: {db_paths['asset']['lua']}")
-            
-            db.commit()
-            
-            return JSONResponse({"message": "Asset updated successfully"})
+                game_slug = game['slug']
+                
+                # Update asset in database
+                cursor.execute("""
+                    UPDATE assets 
+                    SET name = ?,
+                        description = ?
+                    WHERE game_id = ? AND asset_id = ?
+                    RETURNING *
+                """, (
+                    data['name'],
+                    data['description'],
+                    game_id,
+                    asset_id
+                ))
+                
+                updated = cursor.fetchone()
+                if not updated:
+                    raise HTTPException(status_code=404, detail="Asset not found")
+                
+                # Get all assets for this game to update files
+                cursor.execute("""
+                    SELECT asset_id, name, description, type, image_url, tags
+                    FROM assets WHERE game_id = ?
+                """, (game_id,))
+                all_assets = cursor.fetchall()
+                
+                # Format assets for file generation
+                formatted_assets = [{
+                    "assetId": asset["asset_id"],
+                    "name": asset["name"],
+                    "description": asset["description"],
+                    "type": asset["type"],
+                    "imageUrl": asset["image_url"],
+                    "tags": json.loads(asset["tags"]) if asset["tags"] else []
+                } for asset in all_assets]
+                
+                # Get database paths for this game
+                db_paths = get_database_paths(game_slug)
+                
+                # Save to JSON and Lua files
+                save_json_database(db_paths['asset']['json'], {
+                    "assets": formatted_assets
+                })
+                
+                save_lua_database(db_paths['asset']['lua'], {
+                    "assets": formatted_assets
+                })
+                
+                db.commit()
+                
+                # Format response
+                asset_data = {
+                    "id": updated["id"],
+                    "assetId": updated["asset_id"],
+                    "name": updated["name"],
+                    "description": updated["description"],
+                    "type": updated["type"],
+                    "imageUrl": updated["image_url"],
+                    "tags": json.loads(updated["tags"]) if updated["tags"] else []
+                }
+                
+                return JSONResponse(asset_data)
+                
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Database error updating asset: {str(e)}")
+                raise
             
     except Exception as e:
         logger.error(f"Error updating asset: {str(e)}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/api/npcs/{npc_id}")
 async def get_npc(npc_id: str):
@@ -536,7 +553,7 @@ async def update_npc(npc_id: str, game_id: int, request: Request):
         
         with get_db() as db:
             try:
-                # First verify the NPC exists
+                # First verify the NPC exists and get game info
                 cursor = db.execute("""
                     SELECT n.*, g.slug 
                     FROM npcs n
@@ -549,15 +566,7 @@ async def update_npc(npc_id: str, game_id: int, request: Request):
                     logger.error(f"NPC not found: {npc_id}")
                     raise HTTPException(status_code=404, detail="NPC not found")
                 
-                # Verify that the asset exists
-                cursor.execute("""
-                    SELECT id FROM assets WHERE asset_id = ? AND game_id = ?
-                """, (data['assetId'], game_id))
-                asset = cursor.fetchone()
-
-                if not asset:
-                    logger.error(f"Asset not found: {data['assetId']}")
-                    raise HTTPException(status_code=400, detail="Selected asset does not exist")
+                game_slug = npc['slug']  # Get game slug for file paths
                 
                 # Update NPC in database
                 cursor.execute("""
@@ -578,19 +587,47 @@ async def update_npc(npc_id: str, game_id: int, request: Request):
                     game_id
                 ))
                 
+                # Get all NPCs for this game to update files
+                cursor.execute("""
+                    SELECT n.*, a.name as asset_name
+                    FROM npcs n
+                    LEFT JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
+                    WHERE n.game_id = ?
+                """, (game_id,))
+                all_npcs = cursor.fetchall()
+                
+                # Format NPCs for file generation
+                formatted_npcs = [{
+                    "npcId": npc["npc_id"],
+                    "displayName": npc["display_name"],
+                    "assetId": npc["asset_id"],
+                    "systemPrompt": npc["system_prompt"],
+                    "responseRadius": npc["response_radius"],
+                    "abilities": json.loads(npc["abilities"]) if npc["abilities"] else []
+                } for npc in all_npcs]
+                
+                # Get database paths for this game
+                db_paths = get_database_paths(game_slug)
+                
+                # Save to JSON and Lua files
+                save_json_database(db_paths['npc']['json'], {
+                    "npcs": formatted_npcs
+                })
+                
+                save_lua_database(db_paths['npc']['lua'], {
+                    "npcs": formatted_npcs
+                })
+                
                 db.commit()
                 
-                # Get updated NPC data with LEFT JOIN to handle missing asset
+                # Get updated NPC data for response
                 cursor.execute("""
                     SELECT n.*, a.name as asset_name, a.image_url
                     FROM npcs n
                     LEFT JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
                     WHERE n.id = ? AND n.game_id = ?
                 """, (npc_id, game_id))
-                updated = dict(cursor.fetchone())  # Convert Row to dict
-                
-                if not updated:
-                    raise HTTPException(status_code=404, detail="Updated NPC not found")
+                updated = dict(cursor.fetchone())
                 
                 # Format response
                 npc_data = {
@@ -838,6 +875,78 @@ async def delete_npc(npc_id: str, game_id: int):
         
     except Exception as e:
         logger.error(f"Error deleting NPC: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/api/games/{game_id}/assets/{asset_id}")
+async def delete_asset(game_id: int, asset_id: str):
+    try:
+        logger.info(f"Deleting asset {asset_id} from game {game_id}")
+        
+        with get_db() as db:
+            try:
+                # First get game info
+                cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
+                game = cursor.fetchone()
+                if not game:
+                    raise HTTPException(status_code=404, detail="Game not found")
+                
+                game_slug = game['slug']
+                
+                # Delete any NPCs using this asset
+                cursor.execute("""
+                    DELETE FROM npcs 
+                    WHERE game_id = ? AND asset_id = ?
+                """, (game_id, asset_id))
+                
+                # Delete the asset
+                cursor.execute("""
+                    DELETE FROM assets 
+                    WHERE game_id = ? AND asset_id = ?
+                """, (game_id, asset_id))
+                
+                if cursor.rowcount == 0:
+                    raise HTTPException(status_code=404, detail="Asset not found")
+                
+                # Get all remaining assets to update files
+                cursor.execute("""
+                    SELECT asset_id, name, description, type, image_url, tags
+                    FROM assets WHERE game_id = ?
+                """, (game_id,))
+                all_assets = cursor.fetchall()
+                
+                # Format assets for file generation
+                formatted_assets = [{
+                    "assetId": asset["asset_id"],
+                    "name": asset["name"],
+                    "description": asset["description"],
+                    "type": asset["type"],
+                    "imageUrl": asset["image_url"],
+                    "tags": json.loads(asset["tags"]) if asset["tags"] else []
+                } for asset in all_assets]
+                
+                # Get database paths for this game
+                db_paths = get_database_paths(game_slug)
+                
+                # Save to JSON and Lua files
+                save_json_database(db_paths['asset']['json'], {
+                    "assets": formatted_assets
+                })
+                
+                save_lua_database(db_paths['asset']['lua'], {
+                    "assets": formatted_assets
+                })
+                
+                db.commit()
+                
+                return JSONResponse({"message": "Asset deleted successfully"})
+                
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Database error deleting asset: {str(e)}")
+                raise
+            
+    except Exception as e:
+        logger.error(f"Error deleting asset: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Update the dashboard_new route
