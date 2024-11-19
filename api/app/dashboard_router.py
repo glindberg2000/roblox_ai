@@ -350,74 +350,42 @@ async def list_assets(game_id: Optional[int] = None, type: Optional[str] = None)
         logger.error(f"Error fetching assets: {str(e)}")
         return JSONResponse({"error": f"Failed to fetch assets: {str(e)}"}, status_code=500)
 
+def get_valid_npcs(db, game_id):
+    """Get only valid NPCs (with required fields and valid assets)"""
+    cursor = db.execute("""
+        SELECT n.*, a.name as asset_name, a.image_url
+        FROM npcs n
+        JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
+        WHERE n.game_id = ?
+            AND n.display_name IS NOT NULL 
+            AND n.display_name != ''
+            AND n.asset_id IS NOT NULL 
+            AND n.asset_id != ''
+        ORDER BY n.display_name
+    """, (game_id,))
+    return cursor.fetchall()
+
 @router.get("/api/npcs")
 async def list_npcs(game_id: Optional[int] = None):
     try:
         with get_db() as db:
-            if game_id:
-                cursor = db.execute("""
-                    SELECT DISTINCT
-                        n.id,
-                        n.npc_id,
-                        n.display_name,
-                        n.asset_id,
-                        n.model,
-                        n.system_prompt,
-                        n.response_radius,
-                        n.spawn_position,
-                        n.abilities,
-                        a.name as asset_name,
-                        a.image_url
-                    FROM npcs n
-                    JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
-                    WHERE n.game_id = ?
-                    ORDER BY n.display_name
-                """, (game_id,))
-            else:
-                cursor = db.execute("""
-                    SELECT DISTINCT
-                        n.id,
-                        n.npc_id,
-                        n.display_name,
-                        n.asset_id,
-                        n.model,
-                        n.system_prompt,
-                        n.response_radius,
-                        n.spawn_position,
-                        n.abilities,
-                        a.name as asset_name,
-                        a.image_url,
-                        g.title as game_title
-                    FROM npcs n
-                    JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
-                    JOIN games g ON n.game_id = g.id
-                    ORDER BY n.display_name
-                """)
-            
-            npcs = [dict(row) for row in cursor.fetchall()]
-            logger.info(f"Found {len(npcs)} unique NPCs")
+            npcs = get_valid_npcs(db, game_id)
+            logger.info(f"Found {len(npcs)} valid NPCs")
             
             # Format the response
-            formatted_npcs = []
-            for npc in npcs:
-                npc_data = {
-                    "id": npc["id"],
-                    "npcId": npc["npc_id"],
-                    "displayName": npc["display_name"],
-                    "assetId": npc["asset_id"],
-                    "assetName": npc["asset_name"],
-                    "model": npc["model"],
-                    "systemPrompt": npc["system_prompt"],
-                    "responseRadius": npc["response_radius"],
-                    "spawnPosition": json.loads(npc["spawn_position"]) if npc["spawn_position"] else {},
-                    "abilities": json.loads(npc["abilities"]) if npc["abilities"] else [],
-                    "imageUrl": npc["image_url"],
-                    "gameTitle": npc.get("game_title")
-                }
-                formatted_npcs.append(npc_data)
+            formatted_npcs = [{
+                "id": npc["id"],
+                "npcId": npc["npc_id"],
+                "displayName": npc["display_name"],
+                "assetId": npc["asset_id"],
+                "assetName": npc["asset_name"],
+                "systemPrompt": npc["system_prompt"],
+                "responseRadius": npc["response_radius"],
+                "abilities": json.loads(npc["abilities"]) if npc["abilities"] else [],
+                "imageUrl": npc["image_url"]
+            } for npc in npcs]
             
             return JSONResponse({"npcs": formatted_npcs})
-            
     except Exception as e:
         logger.error(f"Error fetching NPCs: {str(e)}")
         return JSONResponse({"error": "Failed to fetch NPCs"}, status_code=500)
@@ -553,23 +521,8 @@ async def update_npc(npc_id: str, game_id: int, request: Request):
         
         with get_db() as db:
             try:
-                # First verify the NPC exists and get game info
-                cursor = db.execute("""
-                    SELECT n.*, g.slug 
-                    FROM npcs n
-                    JOIN games g ON n.game_id = g.id
-                    WHERE n.id = ? AND n.game_id = ?
-                """, (npc_id, game_id))
-                npc = cursor.fetchone()
-                
-                if not npc:
-                    logger.error(f"NPC not found: {npc_id}")
-                    raise HTTPException(status_code=404, detail="NPC not found")
-                
-                game_slug = npc['slug']  # Get game slug for file paths
-                
                 # Update NPC in database
-                cursor.execute("""
+                cursor = db.execute("""
                     UPDATE npcs 
                     SET display_name = ?,
                         asset_id = ?,
@@ -587,14 +540,8 @@ async def update_npc(npc_id: str, game_id: int, request: Request):
                     game_id
                 ))
                 
-                # Get all NPCs for this game to update files
-                cursor.execute("""
-                    SELECT n.*, a.name as asset_name
-                    FROM npcs n
-                    LEFT JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
-                    WHERE n.game_id = ?
-                """, (game_id,))
-                all_npcs = cursor.fetchall()
+                # Get all valid NPCs for file generation
+                npcs = get_valid_npcs(db, game_id)
                 
                 # Format NPCs for file generation
                 formatted_npcs = [{
@@ -604,7 +551,12 @@ async def update_npc(npc_id: str, game_id: int, request: Request):
                     "systemPrompt": npc["system_prompt"],
                     "responseRadius": npc["response_radius"],
                     "abilities": json.loads(npc["abilities"]) if npc["abilities"] else []
-                } for npc in all_npcs]
+                } for npc in npcs]
+                
+                # Get game slug for file paths
+                cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
+                game = cursor.fetchone()
+                game_slug = game['slug']
                 
                 # Get database paths for this game
                 db_paths = get_database_paths(game_slug)
@@ -621,7 +573,7 @@ async def update_npc(npc_id: str, game_id: int, request: Request):
                 db.commit()
                 
                 # Get updated NPC data for response
-                cursor.execute("""
+                cursor = db.execute("""
                     SELECT n.*, a.name as asset_name, a.image_url
                     FROM npcs n
                     LEFT JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
