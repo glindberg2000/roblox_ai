@@ -3,6 +3,11 @@ from pathlib import Path
 from typing import Dict, Optional
 from .config import get_game_paths
 import os
+import shutil
+import logging
+
+# Set up logger
+logger = logging.getLogger("roblox_app")
 
 def get_database_paths(game_slug: str = "game1") -> Dict[str, Dict[str, Path]]:
     """
@@ -53,53 +58,41 @@ def save_json_database(path: Path, data: dict) -> None:
         print(f"Error saving JSON database to {path}: {e}")
         raise
 
-def save_lua_database(path, data):
-    """Save data as a Lua table"""
-    try:
-        with open(path, 'w') as f:
-            f.write("return {\n")
-            
-            # Write assets if present
-            if "assets" in data:
-                for asset in data.get("assets", []):
-                    f.write("    {\n")
-                    f.write(f'        assetId = "{asset["assetId"]}",\n')
-                    f.write(f'        name = "{asset["name"]}",\n')
-                    f.write(f'        description = "{asset.get("description", "")}",\n')
-                    f.write("    },\n")
-            
-            # Write NPCs if present
-            if "npcs" in data:
-                for npc in data.get("npcs", []):
-                    f.write("    {\n")
-                    f.write(f'        id = "{npc.get("id", "")}",\n')
-                    f.write(f'        displayName = "{npc.get("displayName", "Unknown NPC")}",\n')
-                    f.write(f'        model = "{npc.get("model", "")}",\n')
-                    f.write(f'        responseRadius = {npc.get("responseRadius", 20)},\n')
-                    f.write(f'        assetId = "{npc["assetId"]}",\n')
-                    
-                    # Handle spawnPosition using Vector3.new()
-                    spawn = npc.get("spawnPosition", {})
-                    f.write(f'        spawnPosition = Vector3.new({spawn.get("x", 0)}, {spawn.get("y", 0)}, {spawn.get("z", 0)}),\n')
-                    
-                    # Handle system prompt with [[ ]] for multi-line strings
-                    f.write(f'        system_prompt = [[{npc.get("system_prompt", "")}]],\n')
-                    
-                    # Handle abilities
-                    f.write('        abilities = {\n')
-                    for ability in npc.get("abilities", []):
-                        f.write(f'            "{ability}",\n')
-                    f.write('        },\n')
-                    
-                    # Add shortTermMemory
-                    f.write('        shortTermMemory = {},\n')
-                    
-                    f.write("    },\n")
-            
-            f.write("}\n")
-    except Exception as e:
-        print(f"Error saving Lua database to {path}: {e}")
-        raise
+def format_npc_as_lua(npc):
+    """Format a single NPC entry as Lua table"""
+    # Convert spawn position from JSON to Vector3
+    spawn_pos = json.loads(npc.get('spawn_position', '{"x": 0, "y": 5, "z": 0}'))
+    vector3 = f"Vector3.new({spawn_pos.get('x', 0)}, {spawn_pos.get('y', 5)}, {spawn_pos.get('z', 0)})"
+    
+    # Convert abilities from JSON string to Lua table
+    abilities = json.loads(npc.get('abilities', '[]'))
+    abilities_lua = "{\n            " + ",\n            ".join(f'"{ability}"' for ability in abilities) + "\n        }"
+    
+    # Get model name from asset_id
+    model_name = f"{npc['asset_id']}.rbxm"
+    
+    return f"""    {{
+        id = "{npc['npc_id']}",
+        displayName = "{npc['display_name']}",
+        model = "{model_name}",
+        responseRadius = {npc.get('response_radius', 20)},
+        assetId = "{npc['asset_id']}",
+        spawnPosition = {vector3},
+        system_prompt = [[{npc.get('system_prompt', '')}]],
+        abilities = {abilities_lua},
+        shortTermMemory = {{}},
+    }},\n"""
+
+def save_lua_database(file_path, data):
+    """Save data as Lua module"""
+    if 'npcs' in data:
+        lua_content = "return {\n"
+        for npc in data['npcs']:
+            lua_content += format_npc_as_lua(npc)
+        lua_content += "}\n"
+        
+        with open(file_path, 'w') as f:
+            f.write(lua_content)
 
 def generate_lua_from_db(game_slug: str, db_type: str) -> None:
     """Generate Lua file directly from database data"""
@@ -163,3 +156,66 @@ def sync_game_files(game_slug: str) -> None:
     """Sync both JSON and Lua files from database"""
     generate_lua_from_db(game_slug, 'asset')
     generate_lua_from_db(game_slug, 'npc')
+
+def ensure_game_directories(game_slug: str) -> Dict[str, Path]:
+    """Create and return game directory structure"""
+    try:
+        # Get base directory from config
+        BASE_DIR = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        logger.info(f"BASE_DIR: {BASE_DIR}")
+        
+        # List all directories in games folder to debug
+        games_dir = BASE_DIR / "games"
+        logger.info(f"Contents of {games_dir}:")
+        if games_dir.exists():
+            for item in games_dir.iterdir():
+                logger.info(f"  - {item.name}")
+        else:
+            logger.error(f"Games directory not found at: {games_dir}")
+        
+        game_root = BASE_DIR / "games" / game_slug
+        logger.info(f"Game root will be: {game_root}")
+        
+        # Copy from new template location
+        template_dir = BASE_DIR / "games" / "_template"
+        logger.info(f"Looking for template at: {template_dir}")
+        
+        if not template_dir.exists():
+            # Try alternate location
+            template_dir = BASE_DIR / "api" / "templates" / "game_template"
+            logger.info(f"Template not found in games/_template, trying: {template_dir}")
+            
+        if not template_dir.exists():
+            logger.error(f"No template found at either location")
+            raise FileNotFoundError(f"No template found at {template_dir}")
+            
+        logger.info(f"Using template from: {template_dir}")
+        
+        if game_root.exists():
+            logger.info(f"Removing existing game directory: {game_root}")
+            shutil.rmtree(game_root)
+            
+        logger.info(f"Copying template to: {game_root}")
+        shutil.copytree(template_dir, game_root)
+        
+        # Define and ensure all required paths exist
+        paths = {
+            'root': game_root,
+            'src': game_root / "src",
+            'data': game_root / "src" / "data",
+            'assets': game_root / "src" / "assets",
+            'npcs': game_root / "src" / "assets" / "npcs"
+        }
+        
+        # Create directories if they don't exist
+        for path_name, path in paths.items():
+            path.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Created {path_name} directory at: {path}")
+            
+        logger.info(f"Successfully created game directories for {game_slug}")
+        return paths
+        
+    except Exception as e:
+        logger.error(f"Error in ensure_game_directories: {str(e)}")
+        logger.error(f"Stack trace:", exc_info=True)
+        raise

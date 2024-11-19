@@ -104,120 +104,43 @@ async def create_game_endpoint(request: Request):
     try:
         data = await request.json()
         game_slug = slugify(data['title'])
-        clone_from = data.get('cloneFrom')
         
-        logger.info(f"Creating game with title: {data['title']}, slug: {game_slug}, clone_from: {clone_from}")
+        logger.info(f"Creating game with title: {data['title']}, slug: {game_slug}")
         
-        # Create game directories
-        ensure_game_directories(game_slug)
+        # Create game directories from new template
+        try:
+            game_paths = ensure_game_directories(game_slug)
+            logger.info(f"Created game directories at: {game_paths['root']}")
+        except Exception as e:
+            logger.error(f"Failed to create game directories: {str(e)}")
+            raise
         
         with get_db() as db:
             try:
                 # Start transaction
                 db.execute('BEGIN')
                 
-                # Create game in database first
+                # Create game in database
                 game_id = create_game(data['title'], game_slug, data['description'])
+                logger.info(f"Created game in database with ID: {game_id}")
                 
-                if clone_from:
-                    # Get source game ID
-                    cursor = db.execute("SELECT id FROM games WHERE slug = ?", (clone_from,))
-                    source_game = cursor.fetchone()
-                    if not source_game:
-                        raise HTTPException(status_code=404, detail="Source game not found")
-                    source_game_id = source_game['id']
-                    
-                    # Copy assets
-                    cursor.execute("""
-                        INSERT INTO assets (game_id, asset_id, name, description, type, image_url, tags)
-                        SELECT ?, asset_id, name, description, type, image_url, tags
-                        FROM assets WHERE game_id = ?
-                    """, (game_id, source_game_id))
-                    
-                    # Copy NPCs
-                    cursor.execute("""
-                        SELECT * FROM npcs WHERE game_id = ?
-                    """, (source_game_id,))
-                    source_npcs = cursor.fetchall()
-                    
-                    # Copy NPCs with new IDs
-                    for npc in source_npcs:
-                        new_npc_id = f"npc_{game_id}_{npc['npc_id']}"
-                        cursor.execute("""
-                            INSERT INTO npcs (
-                                game_id, npc_id, asset_id, display_name, model,
-                                system_prompt, response_radius, spawn_position, abilities
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (
-                            game_id,
-                            new_npc_id,
-                            npc['asset_id'],
-                            npc['display_name'],
-                            npc['model'],
-                            npc['system_prompt'],
-                            npc['response_radius'],
-                            npc['spawn_position'],
-                            npc['abilities']
-                        ))
-                    
-                    # Copy files
-                    source_game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / clone_from
-                    target_game_dir = Path(os.path.dirname(BASE_DIR)) / "games" / game_slug
-                    
-                    # Copy directory structure
-                    dirs_to_copy = [
-                        "src/assets/npcs",
-                        "src/assets/unknown",
-                        "src/client",
-                        "src/data",
-                        "src/server",
-                        "src/shared/modules"
-                    ]
-                    
-                    for dir_path in dirs_to_copy:
-                        source_dir = source_game_dir / dir_path
-                        target_dir = target_game_dir / dir_path
-                        
-                        if source_dir.exists():
-                            target_dir.parent.mkdir(parents=True, exist_ok=True)
-                            if target_dir.exists():
-                                shutil.rmtree(target_dir)
-                            shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
-                    
-                    # Copy specific files
-                    files_to_copy = [
-                        "default.project.json",
-                        "src/client/NPCClientHandler.client.lua",
-                        "src/server/AssetInitializer.server.lua",
-                        "src/server/InteractionController.lua",
-                        "src/server/Logger.lua",
-                        "src/server/MainNPCScript.server.lua",
-                        "src/server/NPCConfigurations.lua",
-                        "src/server/NPCSystemInitializer.server.lua",
-                        "src/server/PlayerJoinHandler.server.lua",
-                        "src/shared/modules/AssetModule.lua",
-                        "src/shared/modules/NPCManagerV3.lua"
-                    ]
-                    
-                    for file_path in files_to_copy:
-                        source_file = source_game_dir / file_path
-                        target_file = target_game_dir / file_path
-                        
-                        if source_file.exists():
-                            target_file.parent.mkdir(parents=True, exist_ok=True)
-                            shutil.copy2(source_file, target_file)
-                    
-                    # Update project.json name
-                    project_file = target_game_dir / "default.project.json"
-                    if project_file.exists():
-                        with open(project_file, 'r') as f:
-                            project_data = json.load(f)
-                        project_data['name'] = data['title']
-                        with open(project_file, 'w') as f:
-                            json.dump(project_data, f, indent=2)
+                # Update project.json name
+                project_file = game_paths['root'] / "default.project.json"
+                if project_file.exists():
+                    with open(project_file, 'r') as f:
+                        project_data = json.load(f)
+                    project_data['name'] = data['title']
+                    with open(project_file, 'w') as f:
+                        json.dump(project_data, f, indent=2)
+                    logger.info("Updated project.json")
                 
-                # Commit transaction
+                # Initialize empty databases
+                save_lua_database(game_paths['data'] / "NPCDatabase.lua", {"npcs": []})
+                save_lua_database(game_paths['data'] / "AssetDatabase.lua", {"assets": []})
+                logger.info("Initialized empty databases")
+                
                 db.commit()
+                logger.info("Database transaction committed")
                 
                 return JSONResponse({
                     "id": game_id,
@@ -226,13 +149,9 @@ async def create_game_endpoint(request: Request):
                 })
                 
             except Exception as e:
-                # Rollback transaction on error
                 db.rollback()
-                if "UNIQUE constraint failed" in str(e):
-                    return JSONResponse({
-                        "error": "A game with this name already exists"
-                    }, status_code=400)
-                raise e
+                logger.error(f"Database error: {str(e)}")
+                raise
             
     except Exception as e:
         logger.error(f"Error creating game: {str(e)}")
@@ -905,10 +824,40 @@ async def delete_asset(game_id: int, asset_id: str):
 @router.get("/dashboard/new")
 async def dashboard_new(request: Request):
     """Render the new version of the dashboard"""
+    with get_db() as db:
+        cursor = db.execute("""
+            SELECT id, title, slug, description 
+            FROM games 
+            ORDER BY created_at DESC
+        """)
+        games = cursor.fetchall()
+        
     return templates.TemplateResponse(
         "dashboard_new.html", 
-        {"request": request}  # Jinja2Templates requires the request object
+        {
+            "request": request,
+            "games": games
+        }
     )
+
+@router.get("/api/games/templates")
+async def get_game_templates():
+    """Get list of games available for cloning"""
+    try:
+        with get_db() as db:
+            cursor = db.execute("""
+                SELECT id, title, slug, description 
+                FROM games 
+                ORDER BY created_at DESC
+            """)
+            templates = [dict(row) for row in cursor.fetchall()]
+            
+            logger.info(f"Found {len(templates)} available templates")
+            return JSONResponse({"templates": templates})
+            
+    except Exception as e:
+        logger.error(f"Error fetching templates: {str(e)}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 # ... rest of your existing routes ...
 

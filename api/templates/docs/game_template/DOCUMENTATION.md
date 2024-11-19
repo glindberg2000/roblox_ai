@@ -1,3 +1,719 @@
+# game_template Documentation
+
+## Directory Structure
+
+```
+/home/plato/dev/roblox/api/templates/game_template/
+├── src
+│   ├── assets
+│   │   ├── npcs
+│   │   │   ├── buff.rbxm
+│   │   │   ├── human.rbxm
+│   │   │   ├── luna.rbxm
+│   │   │   ├── old_wizard.rbxm
+│   │   │   ├── pete.rbxm
+│   │   │   ├── seek.rbxm
+│   │   │   └── wizard.rbxm
+│   │   └── unknown
+│   │       └── buff.rbxm
+│   ├── client
+│   │   └── NPCClientHandler.client.lua
+│   ├── data
+│   │   ├── AssetDatabase.json
+│   │   ├── AssetDatabase.lua
+│   │   ├── NPCDatabase.json
+│   │   └── NPCDatabase.lua
+│   ├── server
+│   │   ├── AssetInitializer.server.lua
+│   │   ├── InteractionController.lua
+│   │   ├── Logger.lua
+│   │   ├── MainNPCScript.server.lua
+│   │   ├── NPCConfigurations.lua
+│   │   ├── NPCSystemInitializer.server.lua
+│   │   └── PlayerJoinHandler.server.lua
+│   └── shared
+│       └── modules
+│           ├── AssetModule.lua
+│           └── NPCManagerV3.lua
+└── default.project.json
+```
+
+## Project Configuration
+
+```json
+{
+  "name": "GameTemplate",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "Shared": {
+        "$className": "Folder",
+        "NPCManagerV3": {
+          "$path": "src/shared/modules/NPCManagerV3.lua"
+        },
+        "AssetModule": {
+          "$path": "src/shared/modules/AssetModule.lua"
+        }
+      },
+      "GameData": {
+        "$path": "src/data"
+      }
+    },
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "Assets": {
+        "$className": "Folder",
+        "npcs": {
+          "$path": "src/assets/npcs"
+        }
+      }
+    }
+  }
+}
+```
+
+## Source Files
+
+### Client Scripts
+
+#### src/client/NPCClientHandler.client.lua
+
+```lua
+-- StarterPlayerScripts/NPCClientHandler.client.lua
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local TextChatService = game:GetService("TextChatService")
+
+local NPCChatEvent = ReplicatedStorage:WaitForChild("NPCChatEvent")
+
+NPCChatEvent.OnClientEvent:Connect(function(npcName, message)
+	if message ~= "The interaction has ended." then
+		print("Received NPC message on client: " .. npcName .. " - " .. message)
+
+		-- Display in chat box
+		local textChannel = TextChatService.TextChannels.RBXGeneral
+		if textChannel then
+			textChannel:DisplaySystemMessage(npcName .. ": " .. message)
+		else
+			warn("RBXGeneral text channel not found.")
+		end
+
+		print("NPC Chat Displayed in Chatbox - " .. npcName .. ": " .. message)
+	else
+		print("Interaction ended with " .. npcName)
+	end
+end)
+
+print("NPC Client Chat Handler loaded")
+
+```
+
+### Server Scripts
+
+#### src/server/PlayerJoinHandler.server.lua
+
+```lua
+--PlayerJoinHandler.server.lua
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Folder to store player descriptions in ReplicatedStorage
+local PlayerDescriptionsFolder = ReplicatedStorage:FindFirstChild("PlayerDescriptions")
+	or Instance.new("Folder", ReplicatedStorage)
+PlayerDescriptionsFolder.Name = "PlayerDescriptions"
+
+local API_URL = "https://roblox.ella-ai-care.com/get_player_description"
+
+-- Function to log data (helpful for testing in Roblox Studio)
+local function log(message)
+	print("[PlayerJoinHandler] " .. message)
+end
+
+-- Function to send player ID to an external API and get a description
+local function getPlayerDescriptionFromAPI(userId)
+	local data = { user_id = tostring(userId) }
+
+	-- API call to get the player description
+	local success, response = pcall(function()
+		return HttpService:PostAsync(API_URL, HttpService:JSONEncode(data), Enum.HttpContentType.ApplicationJson)
+	end)
+
+	if success then
+		local parsedResponse = HttpService:JSONDecode(response)
+
+		-- Check if the API response contains a valid description
+		if parsedResponse and parsedResponse.description then
+			log("Received response from API for userId: " .. userId)
+			return parsedResponse.description
+		else
+			log("API response missing 'description' for userId: " .. userId)
+			return "No description available"
+		end
+	else
+		log("Failed to get player description from API for userId: " .. userId .. ". Error: " .. tostring(response))
+		return "Error retrieving description"
+	end
+end
+
+-- Function to store player description in ReplicatedStorage
+local function storePlayerDescription(playerName, description)
+	-- Create or update the player's description in ReplicatedStorage
+	local existingDesc = PlayerDescriptionsFolder:FindFirstChild(playerName)
+	if existingDesc then
+		existingDesc.Value = description
+	else
+		local playerDesc = Instance.new("StringValue")
+		playerDesc.Name = playerName
+		playerDesc.Value = description
+		playerDesc.Parent = PlayerDescriptionsFolder
+	end
+end
+
+-- Event handler for when a player joins the game
+local function onPlayerAdded(player)
+	log("Player joined: " .. player.Name .. " (UserId: " .. player.UserId .. ")")
+
+	-- Get the player's description from the API
+	local description = getPlayerDescriptionFromAPI(player.UserId)
+
+	-- Store the description in ReplicatedStorage
+	if description then
+		storePlayerDescription(player.Name, description)
+		log("Stored description for player: " .. player.Name .. " -> " .. description)
+	else
+		local fallbackDescription = "A player named " .. player.Name
+		storePlayerDescription(player.Name, fallbackDescription)
+		log("Using fallback description for player: " .. player.Name .. " -> " .. fallbackDescription)
+	end
+end
+
+-- Connect the PlayerAdded event to the onPlayerAdded function
+Players.PlayerAdded:Connect(onPlayerAdded)
+
+-- Ensure logs are displayed at server startup
+log("PlayerJoinHandler initialized and waiting for players.")
+
+```
+
+#### src/server/MainNPCScript.server.lua
+
+```lua
+-- ServerScriptService/MainNPCScript.server.lua
+-- At the top of MainNPCScript.server.lua
+local ServerScriptService = game:GetService("ServerScriptService")
+local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
+
+local success, result = pcall(function()
+	return require(ServerScriptService:WaitForChild("InteractionController", 5))
+end)
+
+if success then
+	InteractionController = result
+	print("InteractionController loaded successfully")
+else
+	warn("Failed to load InteractionController:", result)
+	-- Provide a basic implementation to prevent further errors
+	InteractionController = {
+		new = function()
+			return {
+				canInteract = function()
+					return true
+				end,
+				startInteraction = function()
+					return true
+				end,
+				endInteraction = function() end,
+				getInteractingNPC = function()
+					return nil
+				end,
+			}
+		end,
+	}
+end
+
+-- Rest of your MainNPCScript code...
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local ServerScriptService = game:GetService("ServerScriptService")
+
+local Logger = require(ServerScriptService:WaitForChild("Logger"))
+
+-- Move ensureStorage to the top, before NPC initialization
+local function ensureStorage()
+    local ServerStorage = game:GetService("ServerStorage")
+    
+    -- Create Assets/npcs folder structure
+    local Assets = ServerStorage:FindFirstChild("Assets") or 
+                   Instance.new("Folder", ServerStorage)
+    Assets.Name = "Assets"
+    
+    local npcs = Assets:FindFirstChild("npcs") or 
+                 Instance.new("Folder", Assets)
+    npcs.Name = "npcs"
+end
+
+-- Call ensureStorage first
+ensureStorage()
+
+-- Then initialize NPC system
+local NPCManagerV3 = require(ReplicatedStorage:WaitForChild("NPCManagerV3"))
+print("Starting NPC initialization")
+local npcManagerV3 = NPCManagerV3.new()
+print("NPC Manager created")
+
+for npcId, npcData in pairs(npcManagerV3.npcs) do
+	print("NPC spawned: " .. npcData.displayName)
+end
+
+local interactionController = npcManagerV3.interactionController
+
+Logger:log("NPC system V3 initialized")
+
+local function checkPlayerProximity()
+	for _, player in ipairs(Players:GetPlayers()) do
+		local playerPosition = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if playerPosition then
+			for _, npc in pairs(npcManagerV3.npcs) do
+				if npc.model and npc.model.PrimaryPart then
+					local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
+					if distance <= npc.responseRadius and not npc.isInteracting then
+						if interactionController:canInteract(player) then
+							npcManagerV3:handleNPCInteraction(npc, player, "Hello")
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+local function onPlayerChatted(player, message)
+	local playerPosition = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not playerPosition then
+		return
+	end
+
+	local closestNPC, closestDistance = nil, math.huge
+
+	for _, npc in pairs(npcManagerV3.npcs) do
+		if npc.model and npc.model.PrimaryPart then
+			local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
+			if distance <= npc.responseRadius and distance < closestDistance then
+				closestNPC, closestDistance = npc, distance
+			end
+		end
+	end
+
+	if closestNPC then
+		npcManagerV3:handleNPCInteraction(closestNPC, player, message)
+	end
+end
+
+local function setupChatConnections()
+	Players.PlayerAdded:Connect(function(player)
+		player.Chatted:Connect(function(message)
+			onPlayerChatted(player, message)
+		end)
+	end)
+end
+
+setupChatConnections()
+
+local function updateNPCs()
+	while true do
+		checkPlayerProximity()
+		for _, npc in pairs(npcManagerV3.npcs) do
+			npcManagerV3:updateNPCState(npc)
+		end
+		wait(1)
+	end
+end
+
+spawn(updateNPCs)
+
+-- Handle player-initiated interaction ending
+local EndInteractionEvent = Instance.new("RemoteEvent")
+EndInteractionEvent.Name = "EndInteractionEvent"
+EndInteractionEvent.Parent = ReplicatedStorage
+
+EndInteractionEvent.OnServerEvent:Connect(function(player)
+	local interactingNPC = interactionController:getInteractingNPC(player)
+	if interactingNPC then
+		npcManagerV3:endInteraction(interactingNPC, player)
+	end
+end)
+
+Logger:log("NPC system V3 main script running")
+
+```
+
+#### src/server/NPCSystemInitializer.server.lua
+
+```lua
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage = game:GetService("ServerStorage")
+
+-- Initialize storage structure first
+local function ensureStorage()
+	-- Create Assets/npcs folder structure
+	local Assets = ServerStorage:FindFirstChild("Assets") or 
+				   Instance.new("Folder", ServerStorage)
+	Assets.Name = "Assets"
+	
+	local npcs = Assets:FindFirstChild("npcs") or 
+				 Instance.new("Folder", Assets)
+	npcs.Name = "npcs"
+	
+	-- Get list of required models from NPCDatabase
+	local npcDatabase = require(ReplicatedStorage:WaitForChild("NPCDatabaseV3"))
+	
+	-- Scan the npcs folder for available models
+	local availableModels = {}
+	for _, model in ipairs(npcs:GetChildren()) do
+		availableModels[model.Name] = true
+		print("Found model:", model.Name)
+	end
+	
+	-- Check which required models are missing
+	for _, npc in ipairs(npcDatabase.npcs) do
+		if not availableModels[npc.model] then
+			warn(string.format("Missing required model '%s' for NPC: %s", npc.model, npc.displayName))
+		end
+	end
+	
+	return npcs
+end
+
+local npcsFolder = ensureStorage()
+
+-- Initialize events for NPC chat and interaction
+if not ReplicatedStorage:FindFirstChild("NPCChatEvent") then
+	local NPCChatEvent = Instance.new("RemoteEvent")
+	NPCChatEvent.Name = "NPCChatEvent"
+	NPCChatEvent.Parent = ReplicatedStorage
+end
+
+if not ReplicatedStorage:FindFirstChild("EndInteractionEvent") then
+	local EndInteractionEvent = Instance.new("RemoteEvent")
+	EndInteractionEvent.Name = "EndInteractionEvent"
+	EndInteractionEvent.Parent = ReplicatedStorage
+end
+
+print("NPC System initialized. Using V3 system.")
+
+```
+
+#### src/server/NPCConfigurations.lua
+
+```lua
+-- Script Name: NPCConfigurations
+-- Script Location: ServerScriptService
+
+return {
+	{
+		npcId = "eldrin",
+		displayName = "Eldrin the Wise",
+		model = "Eldrin",
+		responseRadius = 20,
+		spawnPosition = Vector3.new(0, 5, 0),
+	},
+	{
+		npcId = "luna",
+		displayName = "Luna the Stargazer",
+		model = "Luna",
+		responseRadius = 15,
+		spawnPosition = Vector3.new(10, 5, 10),
+	},
+}
+
+```
+
+#### src/server/Logger.lua
+
+```lua
+local Logger = {}
+Logger.logs = {}
+Logger.maxBufferSize = 100 -- Set a limit for the buffer
+
+-- Add log entry to buffer
+function Logger.log(message)
+	table.insert(Logger.logs, message)
+
+	-- Send logs when buffer reaches the max size
+	if #Logger.logs >= Logger.maxBufferSize then
+		Logger.flushLogs()
+	end
+end
+
+-- Send logs to heartbeat or external function
+function Logger.flushLogs()
+	-- Implement the logic to send logs via heartbeat or other methods
+	for _, log in ipairs(Logger.logs) do
+		print("Sending log:", log) -- Example: replace this with actual sending logic
+	end
+
+	-- Clear the buffer after sending
+	Logger.logs = {}
+end
+
+-- Optional: Schedule regular log flushing
+function Logger.startLogFlushing(interval)
+	game:GetService("RunService").Heartbeat:Connect(function()
+		Logger.flushLogs()
+	end)
+end
+
+return Logger
+
+```
+
+#### src/server/AssetInitializer.server.lua
+
+```lua
+-- AssetInitializer.server.lua
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Load the AssetDatabase file directly
+local AssetDatabase = require(game:GetService("ServerScriptService").AssetDatabase)
+
+-- Create or get LocalDB in ReplicatedStorage for storing asset descriptions
+local LocalDB = ReplicatedStorage:FindFirstChild("LocalDB") or Instance.new("Folder", ReplicatedStorage)
+LocalDB.Name = "LocalDB"
+
+-- Create a lookup table for assets by name
+local AssetLookup = {}
+
+-- Function to store asset descriptions in ReplicatedStorage
+local function storeAssetDescriptions(assetId, name, description, imageUrl)
+	local assetEntry = LocalDB:FindFirstChild(assetId)
+	if assetEntry then
+		assetEntry:Destroy() -- Remove existing entry to ensure we're updating all fields
+	end
+
+	assetEntry = Instance.new("Folder")
+	assetEntry.Name = assetId
+	assetEntry.Parent = LocalDB
+
+	local nameValue = Instance.new("StringValue")
+	nameValue.Name = "Name"
+	nameValue.Value = name
+	nameValue.Parent = assetEntry
+
+	local descValue = Instance.new("StringValue")
+	descValue.Name = "Description"
+	descValue.Value = description
+	descValue.Parent = assetEntry
+
+	local imageValue = Instance.new("StringValue")
+	imageValue.Name = "ImageUrl"
+	imageValue.Value = imageUrl
+	imageValue.Parent = assetEntry
+
+	-- Add to lookup table
+	AssetLookup[name] = assetId
+
+	print(
+		string.format(
+			"Stored asset: ID: %s, Name: %s, Description: %s",
+			assetId,
+			name,
+			string.sub(description, 1, 50) .. "..."
+		)
+	)
+end
+
+-- Initialize all assets from the local AssetDatabase
+local function initializeAssets()
+	for _, assetData in ipairs(AssetDatabase.assets) do
+		storeAssetDescriptions(assetData.assetId, assetData.name, assetData.description, assetData.imageUrl)
+	end
+end
+
+initializeAssets()
+print("All assets initialized from local database.")
+
+-- Print out all stored assets for verification
+print("Verifying stored assets in LocalDB:")
+for _, assetEntry in ipairs(LocalDB:GetChildren()) do
+	local nameValue = assetEntry:FindFirstChild("Name")
+	local descValue = assetEntry:FindFirstChild("Description")
+	local imageValue = assetEntry:FindFirstChild("ImageUrl")
+
+	if nameValue and descValue and imageValue then
+		print(
+			string.format(
+				"Verified asset: ID: %s, Name: %s, Description: %s",
+				assetEntry.Name,
+				nameValue.Value,
+				string.sub(descValue.Value, 1, 50) .. "..."
+			)
+		)
+	else
+		print(
+			string.format(
+				"Error verifying asset: ID: %s, Name exists: %s, Description exists: %s, ImageUrl exists: %s",
+				assetEntry.Name,
+				tostring(nameValue ~= nil),
+				tostring(descValue ~= nil),
+				tostring(imageValue ~= nil)
+			)
+		)
+	end
+end
+
+-- Function to check a specific asset by name
+local function checkAssetByName(assetName)
+	local assetId = AssetLookup[assetName]
+	if assetId then
+		local assetEntry = LocalDB:FindFirstChild(assetId)
+		if assetEntry then
+			local nameValue = assetEntry:FindFirstChild("Name")
+			local descValue = assetEntry:FindFirstChild("Description")
+			local imageValue = assetEntry:FindFirstChild("ImageUrl")
+
+			print(string.format("Asset check by name: %s", assetName))
+			print("  ID: " .. assetId)
+			print("  Name exists: " .. tostring(nameValue ~= nil))
+			print("  Description exists: " .. tostring(descValue ~= nil))
+			print("  ImageUrl exists: " .. tostring(imageValue ~= nil))
+
+			if nameValue then
+				print("  Name value: " .. nameValue.Value)
+			end
+			if descValue then
+				print("  Description value: " .. string.sub(descValue.Value, 1, 50) .. "...")
+			end
+			if imageValue then
+				print("  ImageUrl value: " .. imageValue.Value)
+			end
+		else
+			print("Asset entry not found for name: " .. assetName)
+		end
+	else
+		print("Asset not found in lookup table: " .. assetName)
+	end
+end
+
+-- Check specific assets by name
+checkAssetByName("Tesla Cybertruck")
+checkAssetByName("Jeep")
+checkAssetByName("Road Sign Stop")
+checkAssetByName("HawaiiClothing Store")
+
+print("Asset initialization complete. AssetModule is now available in ReplicatedStorage.")
+
+```
+
+#### src/server/InteractionController.lua
+
+```lua
+-- ServerScriptService/InteractionController.lua
+
+local InteractionController = {}
+InteractionController.__index = InteractionController
+
+function InteractionController.new()
+    local self = setmetatable({}, InteractionController)
+    self.activeInteractions = {}
+    return self
+end
+
+function InteractionController:startInteraction(player, npc)
+    if self.activeInteractions[player] then
+        return false
+    end
+    self.activeInteractions[player] = {npc = npc, startTime = tick()}
+    return true
+end
+
+function InteractionController:endInteraction(player)
+    self.activeInteractions[player] = nil
+end
+
+function InteractionController:canInteract(player)
+    return not self.activeInteractions[player]
+end
+
+function InteractionController:getInteractingNPC(player)
+    local interaction = self.activeInteractions[player]
+    return interaction and interaction.npc or nil
+end
+
+function InteractionController:getInteractionState(player)
+    local interaction = self.activeInteractions[player]
+    if interaction then
+        return {
+            npc_id = interaction.npc.id,
+            npc_name = interaction.npc.displayName,
+            start_time = interaction.startTime,
+            duration = tick() - interaction.startTime,
+        }
+    end
+    return nil
+end
+
+function InteractionController:startGroupInteraction(players, npc)
+    for _, player in ipairs(players) do
+        self.activeInteractions[player] = {npc = npc, group = players, startTime = tick()}
+    end
+end
+
+function InteractionController:isInGroupInteraction(player)
+    local interaction = self.activeInteractions[player]
+    return interaction and interaction.group ~= nil
+end
+
+function InteractionController:getGroupParticipants(player)
+    local interaction = self.activeInteractions[player]
+    if interaction and interaction.group then
+        return interaction.group
+    end
+    return {player}
+end
+
+return InteractionController
+```
+
+### Shared Scripts
+
+#### src/shared/modules/AssetModule.lua
+
+```lua
+-- src/shared/AssetModule.lua
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalDB = ReplicatedStorage:WaitForChild("LocalDB")
+
+local AssetModule = {}
+
+function AssetModule.GetAssetDataByName(assetName)
+	for _, assetEntry in ipairs(LocalDB:GetChildren()) do
+		local nameValue = assetEntry:FindFirstChild("Name")
+		if nameValue and nameValue.Value == assetName then
+			local descValue = assetEntry:FindFirstChild("Description")
+			local imageValue = assetEntry:FindFirstChild("ImageUrl")
+			if descValue and imageValue then
+				return {
+					id = assetEntry.Name,
+					name = assetName,
+					description = descValue.Value,
+					imageUrl = imageValue.Value,
+				}
+			end
+		end
+	end
+	return nil
+end
+
+return AssetModule
+
+```
+
+#### src/shared/modules/NPCManagerV3.lua
+
+```lua
 -- NPCManagerV3.lua
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -690,3 +1406,25 @@ function NPCManagerV3:getInteractionClusters(player)
 end
 
 return NPCManagerV3
+
+```
+
+### Data Scripts
+
+#### src/data/AssetDatabase.lua
+
+```lua
+return {
+    assets = {}
+}
+
+```
+
+#### src/data/NPCDatabase.lua
+
+```lua
+return {
+    npcs = {}
+}
+
+```

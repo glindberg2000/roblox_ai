@@ -54,3 +54,6 @@ When responding, always use the appropriate action type:
 
 Your response must always include an action, even if it's "none".
 """
+
+# Update template paths
+TEMPLATE_DIR = BASE_DIR / "games" / "_template"  # Changed from api/templates/game_template
