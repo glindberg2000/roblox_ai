@@ -1,8 +1,34 @@
-const ABILITY_CONFIG = {
-    'follow': { icon: 'fas fa-walking', label: 'Follow' },
-    'unfollow': { icon: 'fas fa-stop', label: 'Stop Following' },
-    'inspect': { icon: 'fas fa-search', label: 'Inspect' },
-    'cast_spell': { icon: 'fas fa-magic', label: 'Cast Spell' },
-    'attack': { icon: 'fas fa-fist-raised', label: 'Attack' },
-    'teach': { icon: 'fas fa-chalkboard-teacher', label: 'Teach' }
-};
+const ABILITY_CONFIG = [
+    {
+        id: 'move',
+        name: 'Movement',
+        icon: 'fas fa-walking',
+        description: 'Allows NPC to move around'
+    },
+    {
+        id: 'chat',
+        name: 'Chat',
+        icon: 'fas fa-comments',
+        description: 'Enables conversation with players'
+    },
+    {
+        id: 'trade',
+        name: 'Trading',
+        icon: 'fas fa-exchange-alt',
+        description: 'Allows trading items with players'
+    },
+    {
+        id: 'quest',
+        name: 'Quest Giver',
+        icon: 'fas fa-scroll',
+        description: 'Can give and manage quests'
+    },
+    {
+        id: 'combat',
+        name: 'Combat',
+        icon: 'fas fa-sword',
+        description: 'Enables combat abilities'
+    }
+];
+
+window.ABILITY_CONFIG = ABILITY_CONFIG;

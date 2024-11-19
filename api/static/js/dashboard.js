@@ -129,6 +129,7 @@ async function selectGame(gameSlug) {
 
         const game = await response.json();
         currentGame = game;
+        console.log('Game selected:', currentGame);
 
         // Update current game display
         const display = document.getElementById('currentGameDisplay');

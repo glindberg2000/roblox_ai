@@ -73,6 +73,7 @@ export async function selectGame(gameSlug) {
             window.loadAssets();
         } else if (state.currentTab === 'npcs') {
             window.loadNPCs();
+            window.populateAssetSelector();
         }
 
     } catch (error) {

@@ -1,5 +1,5 @@
 import { showNotification } from './ui.js';
-import { debugLog } from './utils.js';
+import { debugLog, validateNPCData } from './utils.js';
 import { state } from './state.js';
 
 export async function loadNPCs() {
@@ -66,6 +66,19 @@ export async function loadNPCs() {
     }
 }
 
+// Add this function to fetch available models
+async function fetchAvailableModels() {
+    try {
+        const response = await fetch(`/api/assets?game_id=${state.currentGame.id}&type=NPC`);
+        const data = await response.json();
+        return data.assets || [];
+    } catch (error) {
+        console.error('Error fetching models:', error);
+        return [];
+    }
+}
+
+// Update the editNPC function with proper form element references
 export async function editNPC(npcId) {
     if (!state.currentGame) {
         showNotification('Please select a game first', 'error');
@@ -78,113 +91,173 @@ export async function editNPC(npcId) {
         return;
     }
 
-    // Fetch available models (assets)
-    const response = await fetch(`/api/assets?game_id=${state.currentGame.id}&type=NPC`);
-    const data = await response.json();
-    const availableModels = data.assets || [];
+    console.log('NPC data to edit:', npc);
 
-    const modalContent = document.createElement('div');
-    modalContent.className = 'p-6';
-    modalContent.innerHTML = `
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-xl font-bold text-blue-400">Edit NPC</h2>
-        </div>
-        <form id="editNPCForm" class="space-y-4">
-            <input type="hidden" id="editNpcId" value="${npc.npcId}">
-            
-            <div>
-                <label class="block text-sm font-medium mb-1 text-gray-300">Display Name:</label>
-                <input type="text" id="editNpcDisplayName" value="${npc.displayName}" required
-                    class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium mb-1 text-gray-300">Response Radius:</label>
-                <input type="number" id="editNpcRadius" value="${npc.responseRadius || 20}" required min="1" max="100"
-                    class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium mb-1 text-gray-300">System Prompt:</label>
-                <textarea id="editNpcPrompt" required rows="4"
-                    class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">${npc.systemPrompt || ''}</textarea>
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium mb-1 text-gray-300">Abilities:</label>
-                <div id="editAbilitiesContainer" class="grid grid-cols-2 gap-2 bg-dark-700 p-4 rounded-lg">
-                    ${window.ABILITY_CONFIG.map(ability => `
-                        <label class="flex items-center space-x-2">
-                            <input type="checkbox" name="abilities" value="${ability.id}"
-                                ${(npc.abilities || []).includes(ability.id) ? 'checked' : ''}
-                                class="form-checkbox h-4 w-4 text-blue-600">
-                            <span class="text-gray-300">
-                                <i class="${ability.icon}"></i>
-                                ${ability.name}
-                            </span>
-                        </label>
-                    `).join('')}
-                </div>
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium mb-1 text-gray-300">Model:</label>
-                <select id="editNpcModel" required
-                    class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
-                    ${availableModels.map(model => `
-                        <option value="${model.assetId}" ${model.assetId === npc.assetId ? 'selected' : ''}>
-                            ${model.name}
-                        </option>
-                    `).join('')}
-                </select>
-            </div>
-
-            <div class="flex justify-end space-x-3 mt-6">
-                <button type="button" onclick="window.hideModal()" 
-                    class="px-6 py-2 bg-dark-700 text-gray-300 rounded-lg hover:bg-dark-600">
-                    Cancel
-                </button>
-                <button type="submit" 
-                    class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                    Save Changes
-                </button>
-            </div>
-        </form>
-    `;
-
-    showModal(modalContent);
-
-    // Add form submit handler
-    const form = modalContent.querySelector('form');
-    form.onsubmit = async (e) => {
-        e.preventDefault();
-        await saveNPCEdit(npcId);
-    };
-}
-
-export async function saveNPCEdit(npcId) {
+    // Fetch available models first
     try {
-        const form = document.getElementById('editNPCForm');
-        const selectedAbilities = Array.from(
-            form.querySelectorAll('input[name="abilities"]:checked')
-        ).map(checkbox => checkbox.value);
+        const response = await fetch(`/api/assets?game_id=${state.currentGame.id}&type=NPC`);
+        const data = await response.json();
+        const availableModels = data.assets || [];
 
-        const data = {
-            displayName: document.getElementById('editNpcDisplayName').value,
-            responseRadius: parseInt(document.getElementById('editNpcRadius').value),
-            systemPrompt: document.getElementById('editNpcPrompt').value,
-            abilities: selectedAbilities,
-            assetId: state.currentNPCs.find(n => n.npcId === npcId).assetId
+        // Create modal content
+        const modalContent = document.createElement('div');
+        modalContent.className = 'p-6';
+        
+        // Generate unique IDs for this instance
+        const uniqueId = `edit_${Date.now()}`;
+        
+        modalContent.innerHTML = `
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-blue-400">Edit NPC</h2>
+            </div>
+            <form id="editNPCForm_${uniqueId}" class="space-y-4">
+                <input type="hidden" name="npcId" value="${escapeHTML(npc.npcId)}">
+                
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Display Name:</label>
+                    <input type="text" name="displayName" value="${escapeHTML(npc.displayName)}" required
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Model:</label>
+                    <select name="assetId" required
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                        ${availableModels.map(model => `
+                            <option value="${escapeHTML(model.assetId)}" ${model.assetId === npc.assetId ? 'selected' : ''}>
+                                ${escapeHTML(model.name)}
+                            </option>
+                        `).join('')}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Response Radius:</label>
+                    <input type="number" name="responseRadius" value="${npc.responseRadius || 20}" required min="1" max="100"
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">System Prompt:</label>
+                    <textarea name="systemPrompt" required rows="4"
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">${escapeHTML(npc.systemPrompt || '')}</textarea>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Abilities:</label>
+                    <div class="grid grid-cols-2 gap-2 bg-dark-700 p-4 rounded-lg">
+                        ${window.ABILITY_CONFIG.map(ability => `
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" name="abilities" value="${ability.id}"
+                                    ${(npc.abilities || []).includes(ability.id) ? 'checked' : ''}
+                                    class="form-checkbox h-4 w-4 text-blue-600">
+                                <span class="text-gray-300">
+                                    <i class="${ability.icon}"></i>
+                                    ${ability.name}
+                                </span>
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button type="button" onclick="window.hideModal()" 
+                        class="px-6 py-2 bg-dark-700 text-gray-300 rounded-lg hover:bg-dark-600">
+                        Cancel
+                    </button>
+                    <button type="submit" 
+                        class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        `;
+
+        showModal(modalContent);
+
+        // Reference the form within the modal
+        const form = modalContent.querySelector(`#editNPCForm_${uniqueId}`);
+
+        // Debug log form values after render
+        const formValues = {
+            displayName: form.querySelector('[name="displayName"]').value,
+            assetId: form.querySelector('[name="assetId"]').value,
+            responseRadius: form.querySelector('[name="responseRadius"]').value,
+            systemPrompt: form.querySelector('[name="systemPrompt"]').value,
+            abilities: Array.from(form.querySelectorAll('input[name="abilities"]:checked')).map(cb => cb.value)
+        };
+        console.log('Form values after render:', formValues);
+
+        // Add form submit handler
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                displayName: form.querySelector('[name="displayName"]').value.trim(),
+                assetId: form.querySelector('[name="assetId"]').value,
+                responseRadius: parseInt(form.querySelector('[name="responseRadius"]').value),
+                systemPrompt: form.querySelector('[name="systemPrompt"]').value.trim(),
+                abilities: Array.from(form.querySelectorAll('input[name="abilities"]:checked')).map(cb => cb.value)
+            };
+
+            console.log('Form data before validation:', formData);
+
+            try {
+                validateNPCData(formData);
+                await saveNPCEdit(npcId, formData);
+            } catch (error) {
+                showNotification(error.message, 'error');
+            }
         };
 
-        const response = await fetch(`/api/npcs/${npcId}?game_id=${state.currentGame.id}`, {
+    } catch (error) {
+        console.error('Error fetching models:', error);
+        showNotification('Failed to load available models', 'error');
+    }
+}
+
+// Helper function to escape HTML
+function escapeHTML(str) {
+    if (!str) return '';
+    return str.replace(/[&<>'"]/g, (tag) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        "'": '&#39;',
+        '"': '&quot;'
+    }[tag]));
+}
+
+export async function saveNPCEdit(npcId, data) {
+    try {
+        console.log('Saving NPC with data:', data); // Debug log
+
+        // Validate data
+        if (!data.displayName) {
+            throw new Error('Display Name is required');
+        }
+        if (!data.systemPrompt) {
+            throw new Error('System Prompt is required');
+        }
+        if (!data.assetId) {
+            throw new Error('Model selection is required');
+        }
+
+        // Find the NPC to get its database ID
+        const npc = state.currentNPCs.find(n => n.npcId === npcId);
+        if (!npc) {
+            throw new Error('NPC not found');
+        }
+
+        const response = await fetch(`/api/npcs/${npc.id}?game_id=${state.currentGame.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
 
         if (!response.ok) {
-            throw new Error('Failed to update NPC');
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to update NPC');
         }
 
         hideModal();
@@ -192,7 +265,7 @@ export async function saveNPCEdit(npcId) {
         loadNPCs();  // Refresh the list
     } catch (error) {
         console.error('Error saving NPC:', error);
-        showNotification('Failed to save changes', 'error');
+        showNotification(error.message, 'error');
     }
 }
 
@@ -280,3 +353,25 @@ export async function createNPC(event) {
 
 // Add to global window object
 window.createNPC = createNPC;
+
+// Add this function to populate abilities in the create form
+function populateCreateAbilities() {
+    const container = document.getElementById('createAbilitiesCheckboxes');
+    if (container && window.ABILITY_CONFIG) {
+        container.innerHTML = window.ABILITY_CONFIG.map(ability => `
+            <label class="flex items-center space-x-2">
+                <input type="checkbox" name="abilities" value="${ability.id}"
+                    class="form-checkbox h-4 w-4 text-blue-600">
+                <span class="text-gray-300">
+                    <i class="${ability.icon}"></i>
+                    ${ability.name}
+                </span>
+            </label>
+        `).join('');
+    }
+}
+
+// Update the DOMContentLoaded event listener
+document.addEventListener('DOMContentLoaded', () => {
+    populateCreateAbilities();
+});

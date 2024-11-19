@@ -41,3 +41,36 @@ export function validateNPC(data) {
     }
     return true;
 }
+
+export function validateNPCData(data) {
+    // Required fields
+    const required = {
+        displayName: 'Display Name',
+        assetId: 'Model',
+        systemPrompt: 'System Prompt',
+        responseRadius: 'Response Radius'
+    };
+
+    // Check required fields
+    for (const [field, label] of Object.entries(required)) {
+        if (!data[field] || data[field] === '') {
+            throw new Error(`${label} is required`);
+        }
+    }
+
+    // Validate response radius
+    const radius = parseInt(data.responseRadius);
+    if (isNaN(radius) || radius < 1 || radius > 100) {
+        throw new Error('Response Radius must be between 1 and 100');
+    }
+
+    // Validate abilities array
+    if (!Array.isArray(data.abilities)) {
+        throw new Error('Invalid abilities format');
+    }
+
+    return true;
+}
+
+// Make validation function globally available
+window.validateNPCData = validateNPCData;
