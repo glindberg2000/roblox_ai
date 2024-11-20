@@ -1,55 +1,101 @@
+// Immediate execution check - add at very top
+console.log('UNIQUE-ID: Loading index.js version:', '2023-11-20-J');
+
+// Imports
 import { showNotification } from './ui.js';
 import { debugLog } from './utils.js';
 import { state, updateCurrentTab } from './state.js';
 import { loadGames } from './games.js';
 
-console.log('Loading NEW dashboard version');
+// Verify imports loaded
+console.log('UNIQUE-ID: Imports loaded:', {
+    showNotification: typeof showNotification,
+    debugLog: typeof debugLog,
+    state: typeof state,
+    loadGames: typeof loadGames
+});
 
 // Initialize dashboard
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('Initializing dashboard...');
+    console.log('UNIQUE-ID: Dashboard initialization');
     await loadGames();
 });
 
-// Add populateAssetSelector function
+// Enhanced populateAssetSelector with immediate logging
 async function populateAssetSelector() {
+    console.log('UNIQUE-ID: Asset selector population start');
+    console.log('UNIQUE-ID: Current game:', state.currentGame);
+
+    // Immediate DOM check
+    const assetSelect = document.getElementById('assetSelect');
+    console.log('UNIQUE-ID: Asset select element:', {
+        exists: !!assetSelect,
+        id: assetSelect?.id,
+        parent: assetSelect?.parentElement?.id
+    });
+
     if (!state.currentGame) {
-        console.log('No game selected for asset selector');
+        console.log('UNIQUE-ID: No game selected, aborting');
         return;
     }
 
     try {
-        // Fetch only NPC type assets
-        const response = await fetch(`/api/assets?game_id=${state.currentGame.id}&type=NPC`);
-        const data = await response.json();
+        // 1. Fetch assets
+        const url = `/api/assets?game_id=${state.currentGame.id}&type=NPC`;
+        console.log('UNIQUE-ID: Fetching from:', url);
         
-        const assetSelect = document.getElementById('editNpcModel');
-        if (assetSelect) {
-            // Clear existing options
-            assetSelect.innerHTML = '<option value="">Select a model...</option>';
-            
-            // Add options for each asset
-            if (data.assets && Array.isArray(data.assets)) {
-                data.assets.forEach(asset => {
-                    const option = document.createElement('option');
-                    option.value = asset.assetId;
-                    option.textContent = asset.name;
-                    assetSelect.appendChild(option);
-                });
-            }
-            console.log('Populated model selector with', data.assets?.length || 0, 'assets');
+        const response = await fetch(url);
+        const text = await response.text();
+        console.log('UNIQUE-ID: Raw response:', text);
+        
+        const data = JSON.parse(text);
+        console.log('UNIQUE-ID: Parsed response:', data);
+
+        // 2. Verify select element again
+        if (!assetSelect) {
+            console.log('UNIQUE-ID: Asset select still not found after fetch');
+            return;
         }
+
+        // 3. Clear and populate
+        assetSelect.innerHTML = '<option value="">Select a model...</option>';
+        console.log('UNIQUE-ID: Cleared select options');
+
+        let added = 0;
+        if (data.assets && Array.isArray(data.assets)) {
+            data.assets.forEach(asset => {
+                const option = document.createElement('option');
+                option.value = asset.assetId || asset.asset_id;
+                option.textContent = asset.name;
+                assetSelect.appendChild(option);
+                added++;
+                console.log('UNIQUE-ID: Added option:', {value: option.value, text: option.textContent});
+            });
+        }
+
+        console.log('UNIQUE-ID: Final select state:', {
+            optionsAdded: added,
+            totalOptions: assetSelect.options.length,
+            currentValue: assetSelect.value,
+            innerHTML: assetSelect.innerHTML
+        });
+
     } catch (error) {
-        console.error('Error loading models for selector:', error);
-        showNotification('Failed to load models for selection', 'error');
+        console.error('UNIQUE-ID: Error in populateAssetSelector:', error);
     }
 }
 
-// Tab management
+// Enhanced tab management
 window.showTab = function(tabName) {
-    console.log('Showing tab:', tabName);
+    console.log('UNIQUE-ID: Tab change:', {
+        from: state.currentTab,
+        to: tabName,
+        gameId: state.currentGame?.id
+    });
+
     document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
-    document.getElementById(`${tabName}Tab`).classList.remove('hidden');
+    const tabElement = document.getElementById(`${tabName}Tab`);
+    tabElement.classList.remove('hidden');
     updateCurrentTab(tabName);
 
     if (tabName === 'games') {
@@ -57,63 +103,35 @@ window.showTab = function(tabName) {
     } else if (tabName === 'assets' && state.currentGame) {
         window.loadAssets();
     } else if (tabName === 'npcs' && state.currentGame) {
-        window.loadNPCs();
-        populateAssetSelector();
+        // Load NPCs then assets
+        requestAnimationFrame(async () => {
+            try {
+                console.log('UNIQUE-ID: NPC tab initialization');
+                const npcs = await window.loadNPCs();
+                console.log('UNIQUE-ID: NPCs loaded:', npcs);
+                await populateAssetSelector();
+            } catch (error) {
+                console.error('UNIQUE-ID: Error in NPC tab:', error);
+            }
+        });
     }
 };
 
-// Make populateAssetSelector globally available
+// Make functions globally available
 window.populateAssetSelector = populateAssetSelector;
-
-// Single game form submission handler
-window.handleGameSubmit = async function(event) {
-    event.preventDefault();
-    
-    const form = event.target;
-    const title = form.querySelector('[name="title"]').value;
-    const description = form.querySelector('[name="description"]').value;
-    const cloneFrom = form.querySelector('[name="cloneFrom"]').value;
-
+window.loadNPCs = async function() {
+    console.log('UNIQUE-ID: Loading NPCs');
     try {
-        console.log('Creating game with:', { title, description, cloneFrom });
-        
-        const response = await fetch('/api/games', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                title,
-                description,
-                cloneFrom: cloneFrom || null
-            })
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-        }
-
-        const result = await response.json();
-        console.log('Game created:', result);
-        
-        // Refresh the games list
-        await loadGames();
-        
-        // Clear the form
-        form.reset();
-        
-        // Show success message
-        showNotification('Game created successfully!', 'success');
-        
-        // Redirect to the new game
-        window.location.href = `/dashboard/new?game=${result.slug}`;
-        
+        const response = await fetch(`/api/npcs?game_id=${state.currentGame.id}`);
+        const data = await response.json();
+        console.log('UNIQUE-ID: NPCs loaded:', data);
+        return data;
     } catch (error) {
-        console.error('Error creating game:', error);
-        showNotification('Failed to create game: ' + error.message, 'error');
+        console.error('UNIQUE-ID: Error loading NPCs:', error);
+        showNotification('Failed to load NPCs: ' + error.message, 'error');
+        return [];
     }
-}
+};
 
 
 

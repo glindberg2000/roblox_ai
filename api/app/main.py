@@ -67,7 +67,8 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 @app.get("/")
 @app.get("/dashboard")
 async def serve_dashboard(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+    # Redirect to new dashboard
+    return templates.TemplateResponse("dashboard_new.html", {"request": request})
 
 @app.get("/npcs")
 async def serve_npcs():
