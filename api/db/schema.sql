@@ -10,16 +10,14 @@ CREATE TABLE IF NOT EXISTS games (
 -- Assets table
 CREATE TABLE IF NOT EXISTS assets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_id INTEGER NOT NULL,
     asset_id TEXT NOT NULL,
     name TEXT NOT NULL,
     description TEXT,
+    type TEXT NOT NULL,
     image_url TEXT,
-    type TEXT,
-    tags TEXT,  -- JSON array
-    game_id INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (game_id) REFERENCES games(id),
-    UNIQUE(asset_id, game_id)
+    tags TEXT DEFAULT '[]',
+    FOREIGN KEY (game_id) REFERENCES games(id)
 );
 
 -- NPCs table

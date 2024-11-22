@@ -1,7 +1,9 @@
 import json
+import sqlite3
 from pathlib import Path
 from typing import Dict, Optional
 from .config import get_game_paths, BASE_DIR, GAMES_DIR
+from .db import get_db
 import os
 import shutil
 import logging
@@ -58,41 +60,69 @@ def save_json_database(path: Path, data: dict) -> None:
         print(f"Error saving JSON database to {path}: {e}")
         raise
 
-def format_npc_as_lua(npc):
-    """Format a single NPC entry as Lua table"""
-    # Convert spawn position from JSON to Vector3
-    spawn_pos = json.loads(npc.get('spawn_position', '{"x": 0, "y": 5, "z": 0}'))
-    vector3 = f"Vector3.new({spawn_pos.get('x', 0)}, {spawn_pos.get('y', 5)}, {spawn_pos.get('z', 0)})"
-    
-    # Convert abilities from JSON string to Lua table
-    abilities = json.loads(npc.get('abilities', '[]'))
-    abilities_lua = "{\n            " + ",\n            ".join(f'"{ability}"' for ability in abilities) + "\n        }"
-    
-    # Get model name from asset_id
-    model_name = f"{npc['asset_id']}.rbxm"
-    
-    return f"""    {{
-        id = "{npc['npc_id']}",
-        displayName = "{npc['display_name']}",
-        model = "{model_name}",
-        responseRadius = {npc.get('response_radius', 20)},
-        assetId = "{npc['asset_id']}",
-        spawnPosition = {vector3},
-        system_prompt = [[{npc.get('system_prompt', '')}]],
-        abilities = {abilities_lua},
-        shortTermMemory = {{}},
-    }},\n"""
+def format_npc_as_lua(npc: dict, db: sqlite3.Connection) -> str:
+    """Format a single NPC as Lua code"""
+    try:
+        # Handle abilities - could be string or list
+        abilities_raw = npc.get('abilities', '[]')
+        if isinstance(abilities_raw, list):
+            abilities = abilities_raw  # Already a list
+        else:
+            abilities = json.loads(abilities_raw)  # Parse JSON string
+            
+        # Format abilities as Lua table
+        abilities_lua = "{\n" + "".join(f'                "{ability}",\n' for ability in abilities) + "            }"
+            
+        # Handle spawn position - could be string or dict
+        spawn_pos_raw = npc.get('spawnPosition', '{"x": 0, "y": 5, "z": 0}')
+        if isinstance(spawn_pos_raw, dict):
+            spawn_pos = spawn_pos_raw  # Already a dict
+        else:
+            spawn_pos = json.loads(spawn_pos_raw)  # Parse JSON string
+            
+        # Format spawn position as Vector3
+        vector3 = f"Vector3.new({spawn_pos['x']}, {spawn_pos['y']}, {spawn_pos['z']})"
 
-def save_lua_database(file_path, data):
+        # Use the assetId as the model name
+        model = npc['assetId']
+            
+        return f"""        {{
+            id = "{npc['id']}",
+            displayName = "{npc['displayName']}",
+            assetId = "{npc['assetId']}",
+            model = "{model}",
+            systemPrompt = "{npc.get('system_prompt', '')}",
+            responseRadius = {npc.get('responseRadius', 20)},
+            spawnPosition = {vector3},
+            abilities = {abilities_lua},
+            shortTermMemory = {{}}
+        }},\n"""
+    except Exception as e:
+        logger.error(f"Error formatting NPC as Lua: {e}")
+        logger.error(f"NPC data: {npc}")
+        raise
+
+def save_lua_database(file_path, data, db=None):
     """Save data as Lua module"""
-    if 'npcs' in data:
-        lua_content = "return {\n"
-        for npc in data['npcs']:
-            lua_content += format_npc_as_lua(npc)
-        lua_content += "}\n"
-        
-        with open(file_path, 'w') as f:
-            f.write(lua_content)
+    try:
+        if 'npcs' in data:
+            lua_content = "return {\n    npcs = {\n"  # Start with npcs table
+            for npc in data['npcs']:
+                lua_content += format_npc_as_lua(npc, db)
+            lua_content += "    }\n"  # Close npcs table
+            lua_content += "}\n"  # Close return table
+            
+            logger.info(f"Generated Lua content:\n{lua_content}")
+            
+            with open(file_path, 'w') as f:
+                f.write(lua_content)
+                
+            logger.info(f"Successfully wrote Lua file to: {file_path}")
+            
+    except Exception as e:
+        logger.error(f"Error saving Lua database: {e}")
+        logger.error(f"Data: {data}")
+        raise
 
 def generate_lua_from_db(game_slug: str, db_type: str) -> None:
     """Generate Lua file directly from database data"""
@@ -137,7 +167,7 @@ def generate_lua_from_db(game_slug: str, db_type: str) -> None:
             """, (game_id,))
             npcs = [dict(row) for row in cursor.fetchall()]
             
-            # Generate Lua file
+            # Generate Lua file - pass db connection
             save_lua_database(db_paths['npc']['lua'], {
                 "npcs": [{
                     "id": npc["npc_id"],
@@ -150,7 +180,7 @@ def generate_lua_from_db(game_slug: str, db_type: str) -> None:
                     "abilities": json.loads(npc.get("abilities", "[]")),
                     "shortTermMemory": []
                 } for npc in npcs]
-            })
+            }, db)  # Pass the db connection here
 
 def sync_game_files(game_slug: str) -> None:
     """Sync both JSON and Lua files from database"""
