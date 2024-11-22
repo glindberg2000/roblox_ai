@@ -159,12 +159,34 @@ window.loadNPCs = async function() {
 
                     // Add event listeners
                     const editBtn = npcCard.querySelector('.edit-npc-btn');
+                    const deleteBtn = npcCard.querySelector('.delete-npc-btn');
+
                     editBtn.addEventListener('click', () => {
                         console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Edit clicked for NPC:', npc.npcId);
-                        // Make editNPC globally available
                         window.editNPC = editNPC;
-                        // Call editNPC directly
                         editNPC(npc.npcId);
+                    });
+
+                    deleteBtn.addEventListener('click', async () => {
+                        console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Delete clicked for NPC:', npc.npcId);
+                        if (confirm(`Are you sure you want to delete NPC "${npc.displayName}"?`)) {
+                            try {
+                                const response = await fetch(`/api/npcs/${npc.npcId}?game_id=${state.currentGame.id}`, {
+                                    method: 'DELETE'
+                                });
+
+                                if (!response.ok) {
+                                    const error = await response.json();
+                                    throw new Error(error.detail || 'Failed to delete NPC');
+                                }
+
+                                showNotification('NPC deleted successfully', 'success');
+                                loadNPCs();  // Refresh the list
+                            } catch (error) {
+                                console.error('Error deleting NPC:', error);
+                                showNotification(error.message, 'error');
+                            }
+                        }
                     });
 
                     npcList.appendChild(npcCard);

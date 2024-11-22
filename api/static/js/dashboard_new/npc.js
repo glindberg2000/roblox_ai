@@ -32,6 +32,15 @@ export async function editNPC(npcId) {
         const availableModels = await fetchAvailableModels();
         console.log('Available models:', availableModels);
 
+        // Parse spawn position - handle both string and object formats
+        let spawnPosition;
+        if (typeof npc.spawnPosition === 'string') {
+            spawnPosition = JSON.parse(npc.spawnPosition);
+        } else {
+            spawnPosition = npc.spawnPosition || { x: 0, y: 5, z: 0 };
+        }
+        console.log('Parsed spawn position:', spawnPosition);
+
         // Create modal content
         const modalContent = document.createElement('div');
         modalContent.className = 'p-6';
@@ -72,6 +81,25 @@ export async function editNPC(npcId) {
                         class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">${npc.systemPrompt || ''}</textarea>
                 </div>
 
+                <!-- Add spawn position fields -->
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Spawn X:</label>
+                        <input type="number" id="editNpcSpawnX" value="${spawnPosition.x}" step="0.1"
+                            class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Spawn Y:</label>
+                        <input type="number" id="editNpcSpawnY" value="${spawnPosition.y}" step="0.1"
+                            class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Spawn Z:</label>
+                        <input type="number" id="editNpcSpawnZ" value="${spawnPosition.z}" step="0.1"
+                            class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                    </div>
+                </div>
+
                 <div>
                     <label class="block text-sm font-medium mb-1 text-gray-300">Abilities:</label>
                     <div id="editAbilitiesContainer" class="grid grid-cols-2 gap-2 bg-dark-700 p-4 rounded-lg">
@@ -105,7 +133,7 @@ export async function editNPC(npcId) {
         // Show modal
         showModal(modalContent);
 
-        // Add form submit handler
+        // Update form submit handler to include spawn position
         const form = modalContent.querySelector('form');
         if (form) {
             form.onsubmit = async (e) => {
@@ -117,13 +145,18 @@ export async function editNPC(npcId) {
                     assetId: form.querySelector('#editNpcModel').value,
                     responseRadius: parseInt(form.querySelector('#editNpcRadius').value) || 20,
                     systemPrompt: form.querySelector('#editNpcPrompt').value.trim(),
-                    abilities: Array.from(form.querySelectorAll('input[name="abilities"]:checked')).map(cb => cb.value)
+                    abilities: Array.from(form.querySelectorAll('input[name="abilities"]:checked')).map(cb => cb.value),
+                    // Add spawn position
+                    spawnPosition: {
+                        x: parseFloat(form.querySelector('#editNpcSpawnX').value) || 0,
+                        y: parseFloat(form.querySelector('#editNpcSpawnY').value) || 5,
+                        z: parseFloat(form.querySelector('#editNpcSpawnZ').value) || 0
+                    }
                 };
 
                 console.log('Form data before save:', formData);
 
                 try {
-                    // Get the UUID from the hidden input
                     const npcUuid = form.querySelector('#editNpcId').value;
                     console.log('Using NPC UUID for save:', npcUuid);
                     await saveNPCEdit(npcUuid, formData);
@@ -140,7 +173,7 @@ export async function editNPC(npcId) {
 
 export async function saveNPCEdit(npcId, data) {
     try {
-        console.log('NPC.js v2023-11-22-C: Saving NPC with data:', {
+        console.log('NPC.js v2023-11-22-D: Saving NPC with data:', {
             npcId,
             gameId: state.currentGame.id,
             data
@@ -153,13 +186,20 @@ export async function saveNPCEdit(npcId, data) {
             throw new Error(`NPC not found: ${npcId}`);
         }
 
-        console.log('Found NPC to update:', npc);
+        // Format spawn position as expected by backend
+        const formattedData = {
+            ...data,
+            // Convert spawn position to JSON string
+            spawn_position: JSON.stringify(data.spawnPosition)
+        };
+
+        console.log('Formatted data for backend:', formattedData);
 
         // Use npcId (UUID) in the API call
         const response = await fetch(`/api/npcs/${npcId}?game_id=${state.currentGame.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+            body: JSON.stringify(formattedData)
         });
 
         if (!response.ok) {
@@ -176,6 +216,67 @@ export async function saveNPCEdit(npcId, data) {
     }
 }
 
-// Make functions globally available
+// Add this function to populate abilities in the create form
+function populateCreateAbilities() {
+    const container = document.getElementById('createAbilitiesContainer');
+    if (container && window.ABILITY_CONFIG) {
+        container.innerHTML = window.ABILITY_CONFIG.map(ability => `
+            <label class="flex items-center space-x-2">
+                <input type="checkbox" name="abilities" value="${ability.id}"
+                    class="form-checkbox h-4 w-4 text-blue-600">
+                <span class="text-gray-300">
+                    <i class="${ability.icon}"></i>
+                    ${ability.name}
+                </span>
+            </label>
+        `).join('');
+    }
+}
+
+// Call this when the page loads
+document.addEventListener('DOMContentLoaded', () => {
+    populateCreateAbilities();
+});
+
+// Make function globally available
 window.editNPC = editNPC;
 window.saveNPCEdit = saveNPCEdit;
+window.populateCreateAbilities = populateCreateAbilities;
+
+export async function createNPC(event) {
+    event.preventDefault();
+    
+    try {
+        const form = event.target;
+        const formData = new FormData(form);
+        formData.set('game_id', state.currentGame.id);
+
+        // Get abilities
+        const abilities = Array.from(form.querySelectorAll('input[name="abilities"]:checked'))
+            .map(cb => cb.value);
+        formData.set('abilities', JSON.stringify(abilities));
+
+        const response = await fetch('/api/npcs', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to create NPC');
+        }
+
+        showNotification('NPC created successfully', 'success');
+        form.reset();
+        loadNPCs();  // Refresh the list
+
+    } catch (error) {
+        console.error('Error creating NPC:', error);
+        showNotification(error.message, 'error');
+    }
+
+    return false;  // Prevent form submission
+}
+
+// Make function globally available
+window.createNPC = createNPC;

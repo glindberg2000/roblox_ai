@@ -461,7 +461,8 @@ async def update_npc(npc_id: str, game_id: int, request: Request):
                         asset_id = ?,
                         system_prompt = ?,
                         response_radius = ?,
-                        abilities = ?
+                        abilities = ?,
+                        spawn_position = ?
                     WHERE npc_id = ? AND game_id = ?
                     RETURNING *
                 """, (
@@ -470,6 +471,7 @@ async def update_npc(npc_id: str, game_id: int, request: Request):
                     data.get('systemPrompt', ''),
                     data.get('responseRadius', 20),
                     json.dumps(data.get('abilities', [])),
+                    data.get('spawn_position', '{"x": 0, "y": 5, "z": 0}'),
                     npc_id,
                     game_id
                 ))
@@ -641,28 +643,30 @@ async def create_npc(
     try:
         logger.info(f"Creating NPC for game {game_id}")
         
-        # Create spawn position JSON
-        spawn_position = json.dumps({
-            "x": spawnX,
-            "y": spawnY,
-            "z": spawnZ
-        })
-        
-        # Validate abilities JSON
-        try:
-            abilities_list = json.loads(abilities)
-            if not isinstance(abilities_list, list):
-                abilities = "[]"
-        except:
-            abilities = "[]"
-        
+        # Get game info first
         with get_db() as db:
-            # First check if game exists
             cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
             game = cursor.fetchone()
             if not game:
                 raise HTTPException(status_code=404, detail="Game not found")
-
+            
+            game_slug = game['slug']  # Get game_slug here
+            
+            # Create spawn position JSON
+            spawn_position = json.dumps({
+                "x": spawnX,
+                "y": spawnY,
+                "z": spawnZ
+            })
+            
+            # Validate abilities JSON
+            try:
+                abilities_list = json.loads(abilities)
+                if not isinstance(abilities_list, list):
+                    abilities = "[]"
+            except:
+                abilities = "[]"
+            
             # Generate a unique NPC ID
             npc_id = str(uuid.uuid4())
             
@@ -687,15 +691,16 @@ async def create_npc(
                 system_prompt,
                 responseRadius,
                 spawn_position,
-                abilities  # Use the abilities JSON string
+                abilities
             ))
             db_id = cursor.fetchone()['id']
-            db.commit()
-            
-            logger.info(f"NPC created successfully with ID: {db_id}")
             
             # Update Lua files
             save_lua_database(game_slug, db)
+            
+            db.commit()
+            
+            logger.info(f"NPC created successfully with ID: {db_id}")
             
             return JSONResponse({
                 "id": db_id,
