@@ -41,6 +41,7 @@ from .database import (
 )
 import uuid
 from fastapi.templating import Jinja2Templates
+import sqlite3
 
 logger = logging.getLogger("roblox_app")
 router = APIRouter()
@@ -356,34 +357,8 @@ async def update_asset(game_id: int, asset_id: str, request: Request):
                 if not updated:
                     raise HTTPException(status_code=404, detail="Asset not found")
                 
-                # Get all assets for this game to update files
-                cursor.execute("""
-                    SELECT asset_id, name, description, type, image_url, tags
-                    FROM assets WHERE game_id = ?
-                """, (game_id,))
-                all_assets = cursor.fetchall()
-                
-                # Format assets for file generation
-                formatted_assets = [{
-                    "assetId": asset["asset_id"],
-                    "name": asset["name"],
-                    "description": asset["description"],
-                    "type": asset["type"],
-                    "imageUrl": asset["image_url"],
-                    "tags": json.loads(asset["tags"]) if asset["tags"] else []
-                } for asset in all_assets]
-                
-                # Get database paths for this game
-                db_paths = get_database_paths(game_slug)
-                
-                # Save to JSON and Lua files
-                save_json_database(db_paths['asset']['json'], {
-                    "assets": formatted_assets
-                })
-                
-                save_lua_database(db_paths['asset']['lua'], {
-                    "assets": formatted_assets
-                })
+                # Update Lua files - pass game_slug instead of file path
+                save_lua_database(game_slug, db)
                 
                 db.commit()
                 
@@ -410,129 +385,128 @@ async def update_asset(game_id: int, asset_id: str, request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/api/npcs/{npc_id}")
-async def get_npc(npc_id: str):
+async def get_npc(npc_id: str, game_id: int):
+    """Get a single NPC by ID"""
     try:
+        logger.info(f"Fetching NPC {npc_id} for game {game_id}")
+        
         with get_db() as db:
+            # Get NPC with asset info
             cursor = db.execute("""
-                SELECT n.*, a.name as asset_name, a.image_url,
-                       n.system_prompt as personality
+                SELECT n.*, a.name as asset_name, a.image_url
                 FROM npcs n
-                JOIN assets a ON n.asset_id = a.asset_id
-                WHERE n.id = ?
-            """, (npc_id,))
+                LEFT JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
+                WHERE n.npc_id = ? AND n.game_id = ?
+            """, (npc_id, game_id))
+            
             npc = cursor.fetchone()
-            
             if not npc:
-                return JSONResponse({"error": "NPC not found"}, status_code=404)
+                logger.error(f"NPC not found: {npc_id}")
+                raise HTTPException(status_code=404, detail="NPC not found")
             
-            # Format NPC data
+            # Format response
             npc_data = {
                 "id": npc["id"],
                 "npcId": npc["npc_id"],
                 "displayName": npc["display_name"],
                 "assetId": npc["asset_id"],
                 "assetName": npc["asset_name"],
-                "model": npc["model"],
-                "personality": npc["system_prompt"],
                 "systemPrompt": npc["system_prompt"],
                 "responseRadius": npc["response_radius"],
                 "spawnPosition": json.loads(npc["spawn_position"]) if npc["spawn_position"] else {},
                 "abilities": json.loads(npc["abilities"]) if npc["abilities"] else [],
                 "imageUrl": npc["image_url"]
             }
+            
+            logger.info(f"Found NPC: {npc_data}")
             return JSONResponse(npc_data)
+            
     except Exception as e:
         logger.error(f"Error fetching NPC: {str(e)}")
-        return JSONResponse({"error": "Failed to fetch NPC"}, status_code=500)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/api/npcs/{npc_id}")
 async def update_npc(npc_id: str, game_id: int, request: Request):
+    """Update an NPC"""
     try:
         data = await request.json()
-        logger.info(f"Updating NPC {npc_id} with data: {data}")
+        logger.info(f"Updating NPC {npc_id} for game {game_id}")
+        logger.info(f"Update data: {data}")
         
         with get_db() as db:
             try:
-                # Update NPC in database
+                # Get game info first
+                cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
+                game = cursor.fetchone()
+                if not game:
+                    logger.error(f"Game not found: {game_id}")
+                    raise HTTPException(status_code=404, detail="Game not found")
+                
+                game_slug = game['slug']
+                
+                # Verify NPC exists
                 cursor = db.execute("""
+                    SELECT npc_id FROM npcs 
+                    WHERE npc_id = ? AND game_id = ?
+                """, (npc_id, game_id))
+                
+                if not cursor.fetchone():
+                    logger.error(f"NPC not found: {npc_id}")
+                    raise HTTPException(status_code=404, detail="NPC not found")
+                
+                # Update NPC
+                cursor.execute("""
                     UPDATE npcs 
                     SET display_name = ?,
                         asset_id = ?,
                         system_prompt = ?,
                         response_radius = ?,
                         abilities = ?
-                    WHERE id = ? AND game_id = ?
+                    WHERE npc_id = ? AND game_id = ?
+                    RETURNING *
                 """, (
                     data['displayName'],
                     data['assetId'],
-                    data['systemPrompt'],
-                    data['responseRadius'],
-                    json.dumps(data['abilities']),
+                    data.get('systemPrompt', ''),
+                    data.get('responseRadius', 20),
+                    json.dumps(data.get('abilities', [])),
                     npc_id,
                     game_id
                 ))
                 
-                # Get all valid NPCs for file generation
-                npcs = get_valid_npcs(db, game_id)
+                updated = cursor.fetchone()
+                if not updated:
+                    logger.error("NPC update failed - no rows returned")
+                    raise HTTPException(status_code=500, detail="Failed to update NPC")
                 
-                # Format NPCs for file generation
-                formatted_npcs = [{
-                    "npcId": npc["npc_id"],
-                    "displayName": npc["display_name"],
-                    "assetId": npc["asset_id"],
-                    "systemPrompt": npc["system_prompt"],
-                    "responseRadius": npc["response_radius"],
-                    "abilities": json.loads(npc["abilities"]) if npc["abilities"] else []
-                } for npc in npcs]
+                logger.info(f"Updated NPC: {updated}")
                 
-                # Get game slug for file paths
-                cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
-                game = cursor.fetchone()
-                game_slug = game['slug']
-                
-                # Get database paths for this game
-                db_paths = get_database_paths(game_slug)
-                
-                # Save to JSON and Lua files
-                save_json_database(db_paths['npc']['json'], {
-                    "npcs": formatted_npcs
-                })
-                
-                save_lua_database(db_paths['npc']['lua'], {
-                    "npcs": formatted_npcs
-                })
+                # Update Lua files
+                save_lua_database(game_slug, db)
                 
                 db.commit()
                 
-                # Get updated NPC data for response
-                cursor = db.execute("""
-                    SELECT n.*, a.name as asset_name, a.image_url
-                    FROM npcs n
-                    LEFT JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
-                    WHERE n.id = ? AND n.game_id = ?
-                """, (npc_id, game_id))
-                updated = dict(cursor.fetchone())
-                
-                # Format response
-                npc_data = {
+                return JSONResponse({
                     "id": updated["id"],
                     "npcId": updated["npc_id"],
                     "displayName": updated["display_name"],
                     "assetId": updated["asset_id"],
-                    "assetName": updated["asset_name"] if "asset_name" in updated else None,
                     "systemPrompt": updated["system_prompt"],
                     "responseRadius": updated["response_radius"],
-                    "abilities": json.loads(updated["abilities"]) if updated["abilities"] else [],
-                    "imageUrl": updated["image_url"] if "image_url" in updated else None
-                }
+                    "abilities": json.loads(updated["abilities"]) if updated["abilities"] else []
+                })
                 
-                return JSONResponse(npc_data)
-                
-            except Exception as e:
+            except sqlite3.Error as e:
                 db.rollback()
                 logger.error(f"Database error updating NPC: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Error updating NPC: {str(e)}")
                 raise
             
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error updating NPC: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -634,6 +608,9 @@ async def create_asset(
             db_id = cursor.fetchone()['id']
             db.commit()
             
+            # Update Lua files
+            save_lua_database(game_slug, db)
+            
             return JSONResponse({
                 "id": db_id,
                 "asset_id": asset_id,
@@ -717,6 +694,9 @@ async def create_npc(
             
             logger.info(f"NPC created successfully with ID: {db_id}")
             
+            # Update Lua files
+            save_lua_database(game_slug, db)
+            
             return JSONResponse({
                 "id": db_id,
                 "npc_id": npc_id,
@@ -735,7 +715,7 @@ async def delete_npc(npc_id: str, game_id: int):
         logger.info(f"Deleting NPC {npc_id} from game {game_id}")
         
         with get_db() as db:
-            # Get NPC info first
+            # Get NPC and game info first
             cursor = db.execute("""
                 SELECT n.*, g.slug 
                 FROM npcs n
@@ -747,6 +727,8 @@ async def delete_npc(npc_id: str, game_id: int):
             if not npc:
                 raise HTTPException(status_code=404, detail="NPC not found")
             
+            game_slug = npc['slug']  # Get slug from joined query
+            
             # Delete the database entry
             cursor.execute("""
                 DELETE FROM npcs 
@@ -755,7 +737,10 @@ async def delete_npc(npc_id: str, game_id: int):
             
             db.commit()
             
-        return JSONResponse({"message": "NPC deleted successfully"})
+            # Update Lua files with game_slug
+            save_lua_database(game_slug, db)
+            
+            return JSONResponse({"message": "NPC deleted successfully"})
         
     except Exception as e:
         logger.error(f"Error deleting NPC: {str(e)}")
@@ -791,37 +776,10 @@ async def delete_asset(game_id: int, asset_id: str):
                 if cursor.rowcount == 0:
                     raise HTTPException(status_code=404, detail="Asset not found")
                 
-                # Get all remaining assets to update files
-                cursor.execute("""
-                    SELECT asset_id, name, description, type, image_url, tags
-                    FROM assets WHERE game_id = ?
-                """, (game_id,))
-                all_assets = cursor.fetchall()
-                
-                # Format assets for file generation
-                formatted_assets = [{
-                    "assetId": asset["asset_id"],
-                    "name": asset["name"],
-                    "description": asset["description"],
-                    "type": asset["type"],
-                    "imageUrl": asset["image_url"],
-                    "tags": json.loads(asset["tags"]) if asset["tags"] else []
-                } for asset in all_assets]
-                
-                # Get database paths for this game
-                db_paths = get_database_paths(game_slug)
-                
-                # Save to JSON and Lua files
-                save_json_database(db_paths['asset']['json'], {
-                    "assets": formatted_assets
-                })
-                
-                save_lua_database(db_paths['asset']['lua'], {
-                    "assets": formatted_assets
-                })
+                # Update Lua files
+                save_lua_database(game_slug, db)
                 
                 db.commit()
-                
                 return JSONResponse({"message": "Asset deleted successfully"})
                 
             except Exception as e:

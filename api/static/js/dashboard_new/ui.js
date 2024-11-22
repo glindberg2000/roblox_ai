@@ -18,21 +18,20 @@ export function showNotification(message, type = 'info') {
 }
 
 export function showModal(content) {
+    console.log('UI.JS: showModal called with content:', content);
+    
     const backdrop = document.createElement('div');
     backdrop.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+    console.log('UI.JS: Created backdrop');
 
     const modal = document.createElement('div');
     modal.className = 'bg-dark-900 rounded-lg shadow-xl max-w-2xl w-full mx-4';
+    console.log('UI.JS: Created modal');
 
-    const closeButton = document.createElement('button');
-    closeButton.className = 'absolute top-4 right-4 text-gray-400 hover:text-white';
-    closeButton.innerHTML = '<i class="fas fa-times"></i>';
-    closeButton.onclick = hideModal;
-
-    modal.appendChild(closeButton);
     modal.appendChild(content);
     backdrop.appendChild(modal);
     document.body.appendChild(backdrop);
+    console.log('UI.JS: Added modal to DOM');
 
     document.body.style.overflow = 'hidden';
 }

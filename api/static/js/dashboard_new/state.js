@@ -1,10 +1,13 @@
-// Centralized state management
-export const state = {
+// Create singleton state
+const state = {
     currentGame: null,
     currentTab: 'games',
     currentAssets: [],
     currentNPCs: []
 };
+
+// Export single instance
+export { state };
 
 // State update functions
 export function updateCurrentGame(game) {

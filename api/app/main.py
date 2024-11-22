@@ -67,24 +67,8 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 @app.get("/")
 @app.get("/dashboard")
 async def serve_dashboard(request: Request):
-    # Redirect to new dashboard
+    """Serve the dashboard"""
     return templates.TemplateResponse("dashboard_new.html", {"request": request})
-
-@app.get("/npcs")
-async def serve_npcs():
-    npcs_path = TEMPLATES_DIR / "npcs.html"
-    if not npcs_path.exists():
-        logger.error(f"NPCs file not found at {npcs_path}")
-        raise HTTPException(status_code=404, detail=f"NPCs file not found")
-    return FileResponse(str(npcs_path))
-
-@app.get("/players")
-async def serve_players():
-    players_path = TEMPLATES_DIR / "players.html"
-    if not players_path.exists():
-        logger.error(f"Players file not found at {players_path}")
-        raise HTTPException(status_code=404, detail=f"Players file not found")
-    return FileResponse(str(players_path))
 
 @app.on_event("startup")
 async def startup_event():
@@ -101,4 +85,16 @@ async def internal_error_handler(request: Request, exc: Exception):
         status_code=500,
         content={"detail": "Internal server error", "error": str(exc)}
     )
+
+# Debug the static file serving
+logger.info(f"Static files being served from: {STATIC_DIR}")
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# Add cache control middleware
+@app.middleware("http")
+async def add_cache_control_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 

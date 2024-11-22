@@ -60,7 +60,7 @@ def save_json_database(path: Path, data: dict) -> None:
         print(f"Error saving JSON database to {path}: {e}")
         raise
 
-def format_npc_as_lua(npc: dict, db: sqlite3.Connection) -> str:
+def format_npc_as_lua(npc: dict, db: sqlite3.Connection = None) -> str:
     """Format a single NPC as Lua code"""
     try:
         # Handle abilities - could be string or list
@@ -74,7 +74,7 @@ def format_npc_as_lua(npc: dict, db: sqlite3.Connection) -> str:
         abilities_lua = "{\n" + "".join(f'                "{ability}",\n' for ability in abilities) + "            }"
             
         # Handle spawn position - could be string or dict
-        spawn_pos_raw = npc.get('spawnPosition', '{"x": 0, "y": 5, "z": 0}')
+        spawn_pos_raw = npc.get('spawn_position', '{"x": 0, "y": 5, "z": 0}')
         if isinstance(spawn_pos_raw, dict):
             spawn_pos = spawn_pos_raw  # Already a dict
         else:
@@ -84,15 +84,18 @@ def format_npc_as_lua(npc: dict, db: sqlite3.Connection) -> str:
         vector3 = f"Vector3.new({spawn_pos['x']}, {spawn_pos['y']}, {spawn_pos['z']})"
 
         # Use the assetId as the model name
-        model = npc['assetId']
+        model = npc['asset_id']
+        display_name = npc['display_name']
             
         return f"""        {{
-            id = "{npc['id']}",
-            displayName = "{npc['displayName']}",
-            assetId = "{npc['assetId']}",
+            id = "{npc['npc_id']}",
+            displayName = "{display_name}",
+            name = "{display_name}",
+            assetId = "{model}",
             model = "{model}",
-            systemPrompt = "{npc.get('system_prompt', '')}",
-            responseRadius = {npc.get('responseRadius', 20)},
+            modelName = "{display_name}",
+            system_prompt = "{npc.get('system_prompt', '')}", 
+            responseRadius = {npc.get('response_radius', 20)},
             spawnPosition = {vector3},
             abilities = {abilities_lua},
             shortTermMemory = {{}}
@@ -102,26 +105,76 @@ def format_npc_as_lua(npc: dict, db: sqlite3.Connection) -> str:
         logger.error(f"NPC data: {npc}")
         raise
 
-def save_lua_database(file_path, data, db=None):
-    """Save data as Lua module"""
+def format_asset_as_lua(asset):
+    """Format single asset as Lua table entry"""
+    return f"""        {{
+            assetId = "{asset['asset_id']}", 
+            name = "{asset['name']}", 
+            description = "{asset['description']}", 
+        }},"""
+
+def save_lua_database(game_slug: str, db: sqlite3.Connection) -> None:
+    """Save both NPC and Asset Lua databases for a game"""
+    logger.info(f"Generating Lua databases for game: {game_slug}")
+    
     try:
-        if 'npcs' in data:
-            lua_content = "return {\n    npcs = {\n"  # Start with npcs table
-            for npc in data['npcs']:
-                lua_content += format_npc_as_lua(npc, db)
-            lua_content += "    }\n"  # Close npcs table
-            lua_content += "}\n"  # Close return table
+        # Get game ID
+        cursor = db.execute("SELECT id FROM games WHERE slug = ?", (game_slug,))
+        game = cursor.fetchone()
+        if not game:
+            raise ValueError(f"Game {game_slug} not found")
             
-            logger.info(f"Generated Lua content:\n{lua_content}")
+        game_id = game['id']
+        db_paths = get_database_paths(game_slug)
+        
+        # Generate Asset Database
+        cursor = db.execute("""
+            SELECT asset_id, name, description
+            FROM assets 
+            WHERE game_id = ?
+            ORDER BY name
+        """, (game_id,))
+        assets = cursor.fetchall()
+        
+        asset_lua = "return {\n    assets = {\n"
+        for asset in assets:
+            asset_lua += format_asset_as_lua(dict(asset))
+        asset_lua += "\n    },\n}"
+        
+        with open(db_paths['asset']['lua'], 'w') as f:
+            f.write(asset_lua)
+            logger.info(f"Wrote asset database to {db_paths['asset']['lua']}")
             
-            with open(file_path, 'w') as f:
-                f.write(lua_content)
-                
-            logger.info(f"Successfully wrote Lua file to: {file_path}")
+        # Generate NPC Database - Updated query to include all required fields
+        cursor = db.execute("""
+            SELECT 
+                n.npc_id,
+                n.display_name,
+                n.asset_id,
+                n.system_prompt,
+                n.response_radius,
+                n.spawn_position,
+                n.abilities,
+                a.name as asset_name
+            FROM npcs n
+            LEFT JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
+            WHERE n.game_id = ?
+            ORDER BY n.display_name
+        """, (game_id,))
+        npcs = cursor.fetchall()
+        
+        npc_lua = "return {\n    npcs = {\n"
+        for npc in npcs:
+            npc_data = dict(npc)
+            npc_lua += format_npc_as_lua(npc_data, db)
+        npc_lua += "\n    },\n}"
+        
+        with open(db_paths['npc']['lua'], 'w') as f:
+            f.write(npc_lua)
+            logger.info(f"Wrote NPC database to {db_paths['npc']['lua']}")
             
     except Exception as e:
-        logger.error(f"Error saving Lua database: {e}")
-        logger.error(f"Data: {data}")
+        logger.error(f"Error saving Lua databases: {str(e)}")
         raise
 
 def generate_lua_from_db(game_slug: str, db_type: str) -> None:
@@ -147,16 +200,7 @@ def generate_lua_from_db(game_slug: str, db_type: str) -> None:
             assets = [dict(row) for row in cursor.fetchall()]
             
             # Generate Lua file
-            save_lua_database(db_paths['asset']['lua'], {
-                "assets": [{
-                    "assetId": asset["asset_id"],
-                    "name": asset["name"],
-                    "description": asset.get("description", ""),
-                    "type": asset.get("type", "unknown"),
-                    "imageUrl": asset.get("image_url", ""),
-                    "tags": json.loads(asset.get("tags", "[]"))
-                } for asset in assets]
-            })
+            save_lua_database(game_slug, db)
             
         elif db_type == 'npc':
             # Get NPCs from database
@@ -168,19 +212,7 @@ def generate_lua_from_db(game_slug: str, db_type: str) -> None:
             npcs = [dict(row) for row in cursor.fetchall()]
             
             # Generate Lua file - pass db connection
-            save_lua_database(db_paths['npc']['lua'], {
-                "npcs": [{
-                    "id": npc["npc_id"],
-                    "displayName": npc["display_name"],
-                    "assetId": npc["asset_id"],
-                    "model": npc.get("model", ""),
-                    "system_prompt": npc.get("system_prompt", ""),
-                    "responseRadius": npc.get("response_radius", 20),
-                    "spawnPosition": json.loads(npc.get("spawn_position", "{}")),
-                    "abilities": json.loads(npc.get("abilities", "[]")),
-                    "shortTermMemory": []
-                } for npc in npcs]
-            }, db)  # Pass the db connection here
+            save_lua_database(game_slug, db)
 
 def sync_game_files(game_slug: str) -> None:
     """Sync both JSON and Lua files from database"""
