@@ -43,6 +43,7 @@ return {
             "move", 
             "chat", 
             "trade", 
+            "quest", 
             "combat", 
         }, 
             shortTermMemory = {}, 

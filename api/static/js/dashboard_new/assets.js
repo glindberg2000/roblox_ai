@@ -65,97 +65,106 @@ export async function editAsset(assetId) {
         return;
     }
 
-    const asset = state.currentAssets.find(a => a.assetId === assetId);
-    if (!asset) {
-        showNotification('Asset not found', 'error');
-        return;
-    }
+    try {
+        // Fetch the asset directly from the API instead of state
+        const response = await fetch(`/api/assets?game_id=${state.currentGame.id}&asset_id=${assetId}`);
+        const data = await response.json();
+        const asset = data.assets?.[0];  // Get first asset from response
 
-    console.log('Editing asset:', asset); // Debug log
-
-    const modalContent = document.createElement('div');
-    modalContent.className = 'p-6';
-    modalContent.innerHTML = `
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-xl font-bold text-blue-400">Edit Asset</h2>
-        </div>
-        <form class="space-y-4">
-            <input type="hidden" name="assetId" value="${asset.assetId}">
-            
-            <div>
-                <label class="block text-sm font-medium mb-1 text-gray-300">Name:</label>
-                <input type="text" name="name" value="${escapeHTML(asset.name)}" required
-                    class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
-            </div>
-
-            <div>
-                <div class="flex items-center space-x-2 mb-1">
-                    <label class="block text-sm font-medium text-gray-300">Current Image:</label>
-                    <span class="text-sm text-gray-400">${asset.assetId}</span>
-                </div>
-                <img src="${asset.imageUrl}" alt="${escapeHTML(asset.name)}"
-                    class="w-full h-48 object-contain rounded-lg border border-dark-600 bg-dark-700 mb-4">
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium mb-1 text-gray-300">Description:</label>
-                <textarea name="description" required rows="4"
-                    class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">${escapeHTML(asset.description || '')}</textarea>
-            </div>
-
-            <div class="flex justify-end space-x-3 mt-6">
-                <button type="button" onclick="window.hideModal()" 
-                    class="px-6 py-2 bg-dark-700 text-gray-300 rounded-lg hover:bg-dark-600">
-                    Cancel
-                </button>
-                <button type="submit" 
-                    class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                    Save Changes
-                </button>
-            </div>
-        </form>
-    `;
-
-    showModal(modalContent);
-
-    // Add form submit handler
-    const form = modalContent.querySelector('form');
-    form.onsubmit = async (e) => {
-        e.preventDefault();
-        
-        // Get form values using form.elements
-        const name = form.elements['name'].value.trim();
-        const description = form.elements['description'].value.trim();
-
-        console.log('Form values:', { name, description }); // Debug log
-
-        // Validate
-        if (!name) {
-            showNotification('Name is required', 'error');
+        if (!asset) {
+            showNotification('Asset not found', 'error');
             return;
         }
 
-        try {
-            const response = await fetch(`/api/games/${state.currentGame.id}/assets/${asset.assetId}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ name, description })
-            });
+        console.log('Editing asset:', asset); // Debug log
 
-            if (!response.ok) {
-                throw new Error('Failed to update asset');
+        const modalContent = document.createElement('div');
+        modalContent.className = 'p-6';
+        modalContent.innerHTML = `
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-blue-400">Edit Asset</h2>
+            </div>
+            <form class="space-y-4">
+                <input type="hidden" name="assetId" value="${asset.assetId}">
+                
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Name:</label>
+                    <input type="text" name="name" value="${escapeHTML(asset.name)}" required
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                </div>
+
+                <div>
+                    <div class="flex items-center space-x-2 mb-1">
+                        <label class="block text-sm font-medium text-gray-300">Current Image:</label>
+                        <span class="text-sm text-gray-400">${asset.assetId}</span>
+                    </div>
+                    <img src="${asset.imageUrl}" alt="${escapeHTML(asset.name)}"
+                        class="w-full h-48 object-contain rounded-lg border border-dark-600 bg-dark-700 mb-4">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Description:</label>
+                    <textarea name="description" required rows="4"
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">${escapeHTML(asset.description || '')}</textarea>
+                </div>
+
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button type="button" onclick="window.hideModal()" 
+                        class="px-6 py-2 bg-dark-700 text-gray-300 rounded-lg hover:bg-dark-600">
+                        Cancel
+                    </button>
+                    <button type="submit" 
+                        class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        `;
+
+        showModal(modalContent);
+
+        // Add form submit handler
+        const form = modalContent.querySelector('form');
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            
+            // Get form values using form.elements
+            const name = form.elements['name'].value.trim();
+            const description = form.elements['description'].value.trim();
+
+            console.log('Form values:', { name, description }); // Debug log
+
+            // Validate
+            if (!name) {
+                showNotification('Name is required', 'error');
+                return;
             }
 
-            hideModal();
-            showNotification('Asset updated successfully', 'success');
-            loadAssets();  // Refresh the list
-        } catch (error) {
-            console.error('Error saving asset:', error);
-            showNotification('Failed to save changes', 'error');
-        }
-    };
+            try {
+                const response = await fetch(`/api/games/${state.currentGame.id}/assets/${asset.assetId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name, description })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to update asset');
+                }
+
+                hideModal();
+                showNotification('Asset updated successfully', 'success');
+                loadAssets();  // Refresh the list
+            } catch (error) {
+                console.error('Error saving asset:', error);
+                showNotification('Failed to save changes', 'error');
+            }
+        };
+    } catch (error) {
+        console.error('Error editing asset:', error);
+        showNotification('Failed to load asset data', 'error');
+    }
 }
 
 export async function saveAssetEdit(assetId) {
