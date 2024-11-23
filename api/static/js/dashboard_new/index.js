@@ -132,7 +132,23 @@ window.loadNPCs = async function() {
                     const npcCard = document.createElement('div');
                     npcCard.className = 'bg-dark-800 p-6 rounded-xl shadow-xl border border-dark-700 hover:border-blue-500 transition-colors duration-200';
                     
-                    // Create card content
+                    // Parse spawn position
+                    let spawnPos;
+                    try {
+                        spawnPos = typeof npc.spawnPosition === 'string' ? 
+                            JSON.parse(npc.spawnPosition) : 
+                            npc.spawnPosition || { x: 0, y: 5, z: 0 };
+                    } catch (e) {
+                        console.error('Error parsing spawn position:', e);
+                        spawnPos = { x: 0, y: 5, z: 0 };
+                    }
+
+                    // Format abilities with icons
+                    const abilityIcons = (npc.abilities || []).map(abilityId => {
+                        const ability = window.ABILITY_CONFIG.find(a => a.id === abilityId);
+                        return ability ? `<i class="${ability.icon}" title="${ability.name}"></i>` : '';
+                    }).join(' ');
+                    
                     npcCard.innerHTML = `
                         <div class="aspect-w-16 aspect-h-9 mb-4">
                             <img src="${npc.imageUrl || ''}" 
@@ -145,7 +161,12 @@ window.loadNPCs = async function() {
                         <p class="text-sm mb-4 h-20 overflow-y-auto text-gray-300">${npc.systemPrompt || 'No personality defined'}</p>
                         <div class="text-sm text-gray-400 mb-4">
                             <div>Response Radius: ${npc.responseRadius}m</div>
-                            <div>Abilities: ${(npc.abilities || []).join(', ') || 'None'}</div>
+                            <div class="grid grid-cols-3 gap-1 mb-2">
+                                <div>X: ${spawnPos.x.toFixed(2)}</div>
+                                <div>Y: ${spawnPos.y.toFixed(2)}</div>
+                                <div>Z: ${spawnPos.z.toFixed(2)}</div>
+                            </div>
+                            <div class="text-xl space-x-2">${abilityIcons}</div>
                         </div>
                         <div class="flex space-x-2">
                             <button class="edit-npc-btn flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
