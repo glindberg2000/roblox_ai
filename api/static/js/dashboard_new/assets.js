@@ -4,60 +4,58 @@ import { state } from './state.js';
 
 export async function loadAssets() {
     if (!state.currentGame) {
-        const assetList = document.getElementById('assetList');
-        assetList.innerHTML = '<p class="text-gray-400 text-center p-4">Please select a game first</p>';
+        console.warn('No game selected');
         return;
     }
 
     try {
-        debugLog('Loading assets for game', {
-            gameId: state.currentGame.id,
-            gameSlug: state.currentGame.slug
-        });
-
         const response = await fetch(`/api/assets?game_id=${state.currentGame.id}`);
         const data = await response.json();
-        state.currentAssets = data.assets;
-        debugLog('Loaded Assets', state.currentAssets);
-
+        
         const assetList = document.getElementById('assetList');
+        if (!assetList) return;
+        
         assetList.innerHTML = '';
-
-        if (!state.currentAssets || state.currentAssets.length === 0) {
-            assetList.innerHTML = '<p class="text-gray-400 text-center p-4">No assets found for this game</p>';
-            return;
+        
+        if (data.assets && data.assets.length > 0) {
+            data.assets.forEach(asset => {
+                const assetCard = document.createElement('div');
+                assetCard.className = 'bg-dark-800 p-6 rounded-xl shadow-xl border border-dark-700 hover:border-blue-500 transition-colors duration-200';
+                assetCard.innerHTML = `
+                    <div class="aspect-w-16 aspect-h-9 mb-4">
+                        <img src="${asset.imageUrl || ''}" 
+                             alt="${asset.name}" 
+                             class="w-full h-32 object-contain rounded-lg bg-dark-700 p-2">
+                    </div>
+                    <h3 class="font-bold text-lg mb-2 text-gray-100">${asset.name}</h3>
+                    <p class="text-sm text-gray-400 mb-2">ID: ${asset.assetId}</p>
+                    <p class="text-sm text-gray-400 mb-4">${asset.description || 'No description'}</p>
+                    <div class="flex space-x-2">
+                        <button onclick="editAsset('${asset.assetId}')" 
+                                class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                            Edit
+                        </button>
+                        <button onclick="deleteAsset('${asset.assetId}')"
+                                class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                            Delete
+                        </button>
+                    </div>
+                `;
+                assetList.appendChild(assetCard);
+            });
+        } else {
+            assetList.innerHTML = '<p class="text-gray-400">No assets found</p>';
         }
-
-        state.currentAssets.forEach(asset => {
-            const assetCard = document.createElement('div');
-            assetCard.className = 'bg-dark-800 p-6 rounded-xl shadow-xl border border-dark-700 hover:border-blue-500 transition-colors duration-200';
-            assetCard.innerHTML = `
-                <div class="aspect-w-16 aspect-h-9 mb-4">
-                    <img src="${asset.imageUrl}" 
-                         alt="${asset.name}" 
-                         class="w-full h-32 object-contain rounded-lg bg-dark-700 p-2">
-                </div>
-                <h3 class="font-bold text-lg truncate text-gray-100">${asset.name}</h3>
-                <p class="text-sm text-gray-400 mb-2">ID: ${asset.assetId}</p>
-                <p class="text-sm mb-4 h-20 overflow-y-auto text-gray-300">${asset.description || 'No description'}</p>
-                <div class="flex space-x-2">
-                    <button onclick="window.editAsset('${asset.assetId}')" 
-                            class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200">
-                        Edit
-                    </button>
-                    <button onclick="window.deleteAsset('${asset.assetId}')" 
-                            class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200">
-                        Delete
-                    </button>
-                </div>
-            `;
-            assetList.appendChild(assetCard);
-        });
+        
+        // Update game ID in asset form
+        const gameIdInput = document.getElementById('assetFormGameId');
+        if (gameIdInput) {
+            gameIdInput.value = state.currentGame.id;
+        }
+        
     } catch (error) {
         console.error('Error loading assets:', error);
         showNotification('Failed to load assets', 'error');
-        const assetList = document.getElementById('assetList');
-        assetList.innerHTML = '<p class="text-red-400 text-center p-4">Error loading assets</p>';
     }
 }
 

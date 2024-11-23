@@ -16,6 +16,20 @@ return {
         }, 
             shortTermMemory = {}, 
         },        {
+            id = "e43613f0-cc70-4e98-9b61-2a39fecfa443", 
+            displayName = "Goldie", 
+            name = "Goldie", 
+            assetId = "4446576906", 
+            model = "4446576906", 
+            modelName = "Goldie", 
+            system_prompt = "i'm golden", 
+            responseRadius = 20, 
+            spawnPosition = Vector3.new(5.0, 5.0, 5.0), 
+            abilities = {
+            "chat", 
+        }, 
+            shortTermMemory = {}, 
+        },        {
             id = "0544b51c-1009-4231-ac6e-053626135ed4", 
             displayName = "Noobster", 
             name = "Noobster", 
@@ -63,20 +77,6 @@ return {
             abilities = {
             "move", 
             "chat", 
-        }, 
-            shortTermMemory = {}, 
-        },        {
-            id = "24505913-0631-4221-b74c-36f1af4a13e8", 
-            displayName = "Pill", 
-            name = "Pill", 
-            assetId = "4446576906", 
-            model = "4446576906", 
-            modelName = "Pill", 
-            system_prompt = "I look like a pill", 
-            responseRadius = 20, 
-            spawnPosition = Vector3.new(2.0, 2.0, 2.0), 
-            abilities = {
-            "combat", 
         }, 
             shortTermMemory = {}, 
         },

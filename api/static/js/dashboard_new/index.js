@@ -226,6 +226,51 @@ console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Checking global functions:', {
     loadNPCs: typeof window.loadNPCs
 });
 
+// Tab switching function
+function switchTab(tabName) {
+    // Hide all tab content
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.add('hidden');
+    });
+    
+    // Show selected tab
+    const selectedTab = document.getElementById(`${tabName}Tab`);
+    if (selectedTab) {
+        selectedTab.classList.remove('hidden');
+    }
+    
+    // Update state
+    state.currentSection = tabName;
+}
+
+// Initialize navigation
+document.addEventListener('DOMContentLoaded', () => {
+    // Set up navigation click handlers
+    const navButtons = {
+        'nav-games': 'games',
+        'nav-assets': 'assets',
+        'nav-npcs': 'npcs',
+        'nav-players': 'players'
+    };
+    
+    Object.entries(navButtons).forEach(([buttonId, tabName]) => {
+        const button = document.getElementById(buttonId);
+        if (button) {
+            button.addEventListener('click', () => {
+                if (!button.disabled || tabName === 'games') {
+                    switchTab(tabName);
+                }
+            });
+        }
+    });
+    
+    // Start with games tab
+    switchTab('games');
+});
+
+// Export for use in other modules
+export { switchTab };
+
 
 
 

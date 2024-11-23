@@ -58,6 +58,24 @@ export function closeNPCEditModal() {
     }
 }
 
+export function initializeTooltips() {
+    const tooltipContent = "Please select a game first";
+    
+    // Add tooltip attributes to disabled nav items
+    ['nav-assets', 'nav-npcs', 'nav-players'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.setAttribute('title', tooltipContent);
+            // Optional: Add more sophisticated tooltip library initialization here
+        }
+    });
+}
+
+// Call this in your main initialization
+document.addEventListener('DOMContentLoaded', () => {
+    initializeTooltips();
+});
+
 // Make modal functions globally available
 window.showModal = showModal;
 window.hideModal = hideModal;

@@ -93,28 +93,31 @@
                     <!-- Will be populated by JS -->
                 </div>
             </div>
-            <div class="flex space-x-4">
-                <button onclick="showTab('games')"
-                    class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-lg">
-                    <i class="fas fa-gamepad"></i> Games
+            <nav class="flex space-x-4 mb-6">
+                <button id="nav-games" 
+                        class="px-4 py-2 rounded-lg bg-dark-700 text-gray-100 hover:bg-dark-600 transition-colors">
+                    Games
                 </button>
-                <button onclick="showTab('assets')"
-                    class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-lg">
+                <button id="nav-assets" 
+                        class="px-4 py-2 rounded-lg bg-dark-700 text-gray-400 hover:bg-dark-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled>
                     Assets
                 </button>
-                <button onclick="showTab('npcs')"
-                    class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-lg">
+                <button id="nav-npcs" 
+                        class="px-4 py-2 rounded-lg bg-dark-700 text-gray-400 hover:bg-dark-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled>
                     NPCs
                 </button>
-                <button onclick="showTab('players')"
-                    class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-lg">
+                <button id="nav-players" 
+                        class="px-4 py-2 rounded-lg bg-dark-700 text-gray-400 hover:bg-dark-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled>
                     Players
                 </button>
-            </div>
+            </nav>
         </div>
 
         <!-- Asset Tab -->
-        <div id="assetsTab" class="tab-content">
+        <div id="assetsTab" class="tab-content hidden">
             <div class="mb-8 bg-dark-800 p-6 rounded-xl shadow-xl">
                 <h2 class="text-2xl font-bold mb-4 text-blue-400">Add New Asset</h2>
                 <form id="assetForm" class="space-y-4" enctype="multipart/form-data" onsubmit="createAsset(event)">
@@ -241,9 +244,9 @@
 
         <!-- Games Tab -->
         <div id="gamesTab" class="tab-content">
-            <div>
+            <div class="mb-8">
                 <h2 class="text-2xl font-bold mb-4 text-blue-400">Game List</h2>
-                <div id="games-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <div id="games-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <!-- Games will be loaded here -->
                 </div>
             </div>
