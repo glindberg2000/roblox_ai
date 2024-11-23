@@ -110,11 +110,12 @@ async def create_game_endpoint(request: Request):
     try:
         data = await request.json()
         game_slug = slugify(data['title'])
+        clone_from = data.get('cloneFrom')  # Get the source game slug if cloning
         
-        logger.info(f"Creating game with title: {data['title']}, slug: {game_slug}")
+        logger.info(f"Creating game with title: {data['title']}, slug: {game_slug}, clone from: {clone_from}")
         
         try:
-            # Create game directories from new template
+            # Create game directories from template
             logger.info("About to call ensure_game_directories")
             paths = ensure_game_directories(game_slug)
             logger.info(f"Got paths back: {paths}")
@@ -134,6 +135,74 @@ async def create_game_endpoint(request: Request):
                     game_id = create_game(data['title'], game_slug, data['description'])
                     logger.info(f"Created game in database with ID: {game_id}")
                     
+                    # If cloning from another game
+                    if clone_from:
+                        logger.info(f"Cloning data from game: {clone_from}")
+                        
+                        # Get source game ID
+                        cursor = db.execute("SELECT id FROM games WHERE slug = ?", (clone_from,))
+                        source_game = cursor.fetchone()
+                        if not source_game:
+                            raise ValueError(f"Source game {clone_from} not found")
+                        
+                        source_game_id = source_game['id']
+                        
+                        # Clone assets
+                        logger.info("Cloning assets...")
+                        db.execute("""
+                            INSERT INTO assets (
+                                game_id, asset_id, name, description, image_url, type, tags
+                            )
+                            SELECT 
+                                ?, asset_id, name, description, image_url, type, tags
+                            FROM assets 
+                            WHERE game_id = ?
+                        """, (game_id, source_game_id))
+                        
+                        # Clone NPCs with new IDs
+                        logger.info("Cloning NPCs...")
+                        cursor = db.execute("""
+                            SELECT 
+                                display_name, asset_id, model,
+                                system_prompt, response_radius, spawn_x, spawn_y, spawn_z,
+                                abilities
+                            FROM npcs 
+                            WHERE game_id = ?
+                        """, (source_game_id,))
+                        
+                        npcs = cursor.fetchall()
+                        for npc in npcs:
+                            new_npc_id = str(uuid.uuid4())  # Generate new unique ID
+                            db.execute("""
+                                INSERT INTO npcs (
+                                    game_id, npc_id, display_name, asset_id, model,
+                                    system_prompt, response_radius, spawn_x, spawn_y, spawn_z,
+                                    abilities
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                game_id,
+                                new_npc_id,
+                                npc['display_name'],
+                                npc['asset_id'],
+                                npc['model'],
+                                npc['system_prompt'],
+                                npc['response_radius'],
+                                npc['spawn_x'],
+                                npc['spawn_y'],
+                                npc['spawn_z'],
+                                npc['abilities']
+                            ))
+                        
+                        # Copy asset files
+                        source_paths = get_game_paths(clone_from)
+                        if source_paths['assets'].exists():
+                            shutil.copytree(
+                                source_paths['assets'], 
+                                paths['assets'],
+                                dirs_exist_ok=True
+                            )
+                            logger.info("Copied asset files")
+                    
                     # Update project.json name
                     project_file = paths['root'] / "default.project.json"
                     if project_file.exists():
@@ -144,10 +213,9 @@ async def create_game_endpoint(request: Request):
                             json.dump(project_data, f, indent=2)
                         logger.info("Updated project.json")
                     
-                    # Initialize empty databases
-                    save_lua_database(paths['data'] / "NPCDatabase.lua", {"npcs": []})
-                    save_lua_database(paths['data'] / "AssetDatabase.lua", {"assets": []})
-                    logger.info("Initialized empty databases")
+                    # Initialize/update Lua databases
+                    save_lua_database(game_slug, db)
+                    logger.info("Generated Lua databases")
                     
                     db.commit()
                     logger.info("Database transaction committed")

@@ -1,0 +1,57 @@
+{
+  "name": "EllaAIRobloxGame",
+  "tree": {
+    "$className": "DataModel",
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "Assets": {
+        "$className": "Folder",
+        "npcs": {
+          "$path": "src/assets/npcs"
+        }
+      }
+    },
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "NPCManagerV3": {
+        "$path": "src/shared/NPCManagerV3.lua"
+      },
+      "NPCDatabaseV3": {
+        "$path": "src/data/NPCDatabase.lua"
+      }
+    },
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "NPCSystemInitializer": {
+        "$path": "src/server/NPCSystemInitializer.server.lua"
+      },
+      "MainNPCScript": {
+        "$path": "src/server/MainNPCScript.server.lua"
+      },
+      "PlayerJoinHandler": {
+        "$path": "src/server/PlayerJoinHandler.server.lua"
+      },
+      "Logger": {
+        "$path": "src/server/Logger.lua"
+      },
+      "InteractionController": {
+        "$path": "src/server/InteractionController.lua"
+      },
+      "AssetInitializer": {
+        "$path": "src/server/AssetInitializer.server.lua"
+      },
+      "AssetDatabase": {
+        "$path": "src/data/AssetDatabase.lua"
+      }
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "NPCClientHandler": {
+          "$path": "src/client/NPCClientHandler.client.lua"
+        }
+      }
+    }
+  }
+}

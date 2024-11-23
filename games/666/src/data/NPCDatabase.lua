@@ -1,0 +1,57 @@
+return {
+    {
+        id = "luna_stargazer",
+        displayName = "Luna the Stargazer",
+        model = "R6",
+        responseRadius = 26,
+        assetId = "14768974964",
+        spawnPosition = Vector3.new(10, 5, 10),
+        system_prompt = [[I am Luna the Stargazer, a mysterious and knowledgeable character who loves to observe the stars.]],
+        abilities = {
+            "follow",
+            "inspect",
+        },
+        shortTermMemory = {},
+    },
+    {
+        id = "officer_egg",
+        displayName = "Officer Egg",
+        model = "R6",
+        responseRadius = 20,
+        assetId = "4613203451",
+        spawnPosition = Vector3.new(0, 0, 0),
+        system_prompt = [[I am Officer Egg, a diligent law enforcement officer who maintains order.]],
+        abilities = {
+            "move",
+            "chat",
+        },
+        shortTermMemory = {},
+    },
+    {
+        id = "pete_kid",
+        displayName = "Pete the Kid",
+        model = "R6",
+        responseRadius = 10,
+        assetId = "7315192066",
+        spawnPosition = Vector3.new(0, 0, 0),
+        system_prompt = [[I am Pete the Kid, a playful young character who likes to follow people around.]],
+        abilities = {
+            "follow",
+            "unfollow",
+        },
+        shortTermMemory = {},
+    },
+    {
+        id = "pete_salesman",
+        displayName = "Pete the Salesman",
+        model = "R6",
+        responseRadius = 20,
+        assetId = "111993324387868",
+        spawnPosition = Vector3.new(0, 0, 0),
+        system_prompt = [[I am Pete the Salesman, a charismatic merchant always ready to chat about my wares.]],
+        abilities = {
+            "chat",
+        },
+        shortTermMemory = {},
+    },
+}

@@ -42,6 +42,10 @@ function createGameCard(game) {
                     class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                 Select
             </button>
+            <button onclick="editGame('${game.slug}')"
+                    class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                Edit
+            </button>
             <button onclick="deleteGame('${game.slug}')"
                     class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
                 Delete
@@ -172,12 +176,92 @@ export async function deleteGame(gameSlug) {
     }
 }
 
+// Add edit game function
+export async function editGame(gameSlug) {
+    try {
+        const game = await fetch(`/api/games/${gameSlug}`).then(r => r.json());
+        
+        const modalContent = document.createElement('div');
+        modalContent.className = 'p-6';
+        modalContent.innerHTML = `
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-blue-400">Edit Game</h2>
+            </div>
+            <form id="editGameForm" class="space-y-4">
+                <input type="hidden" name="gameSlug" value="${game.slug}">
+                
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Title:</label>
+                    <input type="text" name="title" value="${game.title}" required
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Description:</label>
+                    <textarea name="description" required rows="4"
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">${game.description || ''}</textarea>
+                </div>
+
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button type="button" onclick="window.hideModal()" 
+                        class="px-6 py-2 bg-dark-700 text-gray-300 rounded-lg hover:bg-dark-600">
+                        Cancel
+                    </button>
+                    <button type="submit" 
+                        class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        `;
+
+        showModal(modalContent);
+
+        // Add form submit handler
+        const form = modalContent.querySelector('form');
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(form);
+            const data = {
+                title: formData.get('title'),
+                description: formData.get('description')
+            };
+
+            try {
+                const response = await fetch(`/api/games/${game.slug}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to update game');
+                }
+
+                hideModal();
+                showNotification('Game updated successfully', 'success');
+                loadGames();
+            } catch (error) {
+                console.error('Error updating game:', error);
+                showNotification(error.message, 'error');
+            }
+        };
+    } catch (error) {
+        console.error('Error editing game:', error);
+        showNotification('Failed to load game data', 'error');
+    }
+}
+
 // Make all functions globally available
 window.selectGame = selectGame;
 window.loadGames = loadGames;
 window.handleGameSubmit = handleGameSubmit;
 window.deleteGame = deleteGame;
 window.populateCloneSelector = populateCloneSelector;
+window.editGame = editGame;
 
 // Add this function
 function populateCloneSelector(games) {
