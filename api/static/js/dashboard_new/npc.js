@@ -179,23 +179,14 @@ export async function saveNPCEdit(npcId, data) {
             data
         });
 
-        // Find NPC to verify we have the correct ID
-        const npc = state.currentNPCs.find(n => n.npcId === npcId);
-        if (!npc) {
-            console.error('Available NPCs:', state.currentNPCs);
-            throw new Error(`NPC not found: ${npcId}`);
-        }
-
-        // Format spawn position as expected by backend
+        // Send data directly without additional serialization
         const formattedData = {
-            ...data,
-            // Convert spawn position to JSON string
-            spawn_position: JSON.stringify(data.spawnPosition)
+            ...data
+            // No spawn_position field, just use spawnPosition object
         };
 
         console.log('Formatted data for backend:', formattedData);
 
-        // Use npcId (UUID) in the API call
         const response = await fetch(`/api/npcs/${npcId}?game_id=${state.currentGame.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },

@@ -433,8 +433,9 @@ async def update_npc(npc_id: str, game_id: int, request: Request):
         logger.info(f"Updating NPC {npc_id} for game {game_id}")
         logger.info(f"Update data: {data}")
         
-        # Handle spawn position - use spawnPosition field directly
-        spawn_position = json.dumps(data.get('spawnPosition', {"x": 0, "y": 5, "z": 0}))
+        # Single serialization point for spawn position
+        spawn_position = json.dumps(data['spawnPosition'])
+        logger.info(f"Serialized spawn position: {spawn_position}")
         
         with get_db() as db:
             # Get game info first
@@ -445,8 +446,8 @@ async def update_npc(npc_id: str, game_id: int, request: Request):
             
             game_slug = game['slug']
             
-            # Update NPC
-            cursor = db.execute("""
+            # 1. Update NPC in database
+            cursor.execute("""
                 UPDATE npcs 
                 SET display_name = ?,
                     asset_id = ?,
@@ -455,29 +456,39 @@ async def update_npc(npc_id: str, game_id: int, request: Request):
                     abilities = ?,
                     spawn_position = ?
                 WHERE npc_id = ? AND game_id = ?
-                RETURNING *
             """, (
                 data['displayName'],
                 data['assetId'],
                 data.get('systemPrompt', ''),
                 data.get('responseRadius', 20),
                 json.dumps(data.get('abilities', [])),
-                spawn_position,
+                spawn_position,  # Use serialized spawn position
                 npc_id,
                 game_id
             ))
+            
+            # 2. Commit the database changes immediately
+            db.commit()
+            logger.info("Database changes committed")
+            
+            # 3. Read back the updated data from database
+            cursor = db.execute("""
+                SELECT *
+                FROM npcs
+                WHERE npc_id = ? AND game_id = ?
+            """, (npc_id, game_id))
             
             updated = cursor.fetchone()
             if not updated:
                 logger.error("NPC update failed - no rows returned")
                 raise HTTPException(status_code=404, detail="NPC not found")
             
-            logger.info(f"Updated NPC: {updated}")
+            logger.info(f"Verified updated NPC in database: {updated}")
             
-            # Update Lua files
+            # 4. Now update Lua files using data from database
             save_lua_database(game_slug, db)
             
-            # Format response
+            # 5. Format response using verified database data
             response_data = {
                 "id": updated["id"],
                 "npcId": updated["npc_id"],
@@ -486,7 +497,7 @@ async def update_npc(npc_id: str, game_id: int, request: Request):
                 "systemPrompt": updated["system_prompt"],
                 "responseRadius": updated["response_radius"],
                 "abilities": json.loads(updated["abilities"]) if updated["abilities"] else [],
-                "spawnPosition": json.loads(spawn_position)
+                "spawnPosition": json.loads(updated["spawn_position"])  # Parse for frontend
             }
             
             return JSONResponse(response_data)
