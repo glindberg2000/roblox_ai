@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import json
 from .config import SQLITE_DB_PATH
-from .utils import get_database_paths, save_lua_database
+from .paths import get_database_paths
 
 @contextmanager
 def get_db():

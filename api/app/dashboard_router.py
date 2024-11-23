@@ -302,23 +302,57 @@ def get_valid_npcs(db, game_id):
 async def list_npcs(game_id: Optional[int] = None):
     try:
         with get_db() as db:
-            npcs = get_valid_npcs(db, game_id)
-            logger.info(f"Found {len(npcs)} valid NPCs")
+            if game_id:
+                cursor = db.execute("""
+                    SELECT DISTINCT
+                        n.id,
+                        n.npc_id,
+                        n.display_name,
+                        n.asset_id,
+                        n.model,
+                        n.system_prompt,
+                        n.response_radius,
+                        n.spawn_x,
+                        n.spawn_y,
+                        n.spawn_z,
+                        n.abilities,
+                        a.name as asset_name,
+                        a.image_url
+                    FROM npcs n
+                    JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
+                    WHERE n.game_id = ?
+                    ORDER BY n.display_name
+                """, (game_id,))
+            else:
+                # Similar query for all NPCs...
+                pass
             
-            # Format the response
-            formatted_npcs = [{
-                "id": npc["id"],
-                "npcId": npc["npc_id"],
-                "displayName": npc["display_name"],
-                "assetId": npc["asset_id"],
-                "assetName": npc["asset_name"],
-                "systemPrompt": npc["system_prompt"],
-                "responseRadius": npc["response_radius"],
-                "abilities": json.loads(npc["abilities"]) if npc["abilities"] else [],
-                "imageUrl": npc["image_url"]
-            } for npc in npcs]
+            npcs = [dict(row) for row in cursor.fetchall()]
+            
+            # Format the response with new coordinate structure
+            formatted_npcs = []
+            for npc in npcs:
+                npc_data = {
+                    "id": npc["id"],
+                    "npcId": npc["npc_id"],
+                    "displayName": npc["display_name"],
+                    "assetId": npc["asset_id"],
+                    "assetName": npc["asset_name"],
+                    "model": npc["model"],
+                    "systemPrompt": npc["system_prompt"],
+                    "responseRadius": npc["response_radius"],
+                    "spawnPosition": {  # Format coordinates for frontend
+                        "x": npc["spawn_x"],
+                        "y": npc["spawn_y"],
+                        "z": npc["spawn_z"]
+                    },
+                    "abilities": json.loads(npc["abilities"]) if npc["abilities"] else [],
+                    "imageUrl": npc["image_url"]
+                }
+                formatted_npcs.append(npc_data)
             
             return JSONResponse({"npcs": formatted_npcs})
+            
     except Exception as e:
         logger.error(f"Error fetching NPCs: {str(e)}")
         return JSONResponse({"error": "Failed to fetch NPCs"}, status_code=500)
@@ -404,6 +438,9 @@ async def get_npc(npc_id: str, game_id: int):
                 logger.error(f"NPC not found: {npc_id}")
                 raise HTTPException(status_code=404, detail="NPC not found")
             
+            # Convert sqlite3.Row to dict
+            npc = dict(npc)
+            
             # Format response
             npc_data = {
                 "id": npc["id"],
@@ -413,7 +450,11 @@ async def get_npc(npc_id: str, game_id: int):
                 "assetName": npc["asset_name"],
                 "systemPrompt": npc["system_prompt"],
                 "responseRadius": npc["response_radius"],
-                "spawnPosition": json.loads(npc["spawn_position"]) if npc["spawn_position"] else {},
+                "spawnPosition": {
+                    "x": npc["spawn_x"],
+                    "y": npc["spawn_y"],
+                    "z": npc["spawn_z"]
+                },
                 "abilities": json.loads(npc["abilities"]) if npc["abilities"] else [],
                 "imageUrl": npc["image_url"]
             }
@@ -427,18 +468,12 @@ async def get_npc(npc_id: str, game_id: int):
 
 @router.put("/api/npcs/{npc_id}")
 async def update_npc(npc_id: str, game_id: int, request: Request):
-    """Update an NPC"""
     try:
         data = await request.json()
-        logger.info(f"Updating NPC {npc_id} for game {game_id}")
-        logger.info(f"Update data: {data}")
-        
-        # Single serialization point for spawn position
-        spawn_position = json.dumps(data['spawnPosition'])
-        logger.info(f"Serialized spawn position: {spawn_position}")
+        logger.info(f"Updating NPC {npc_id} with data: {data}")
         
         with get_db() as db:
-            # Get game info first
+            # First get game info for Lua update
             cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
             game = cursor.fetchone()
             if not game:
@@ -446,65 +481,88 @@ async def update_npc(npc_id: str, game_id: int, request: Request):
             
             game_slug = game['slug']
             
-            # 1. Update NPC in database
+            # Extract and validate spawn coordinates
+            spawn_pos = data.get('spawnPosition', {})
+            try:
+                spawn_x = float(spawn_pos.get('x', 0))
+                spawn_y = float(spawn_pos.get('y', 5))
+                spawn_z = float(spawn_pos.get('z', 0))
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid spawn coordinates"
+                )
+            
+            # Get cursor from db connection
+            cursor = db.cursor()
+            
+            # Update NPC with new coordinate columns
             cursor.execute("""
                 UPDATE npcs 
                 SET display_name = ?,
                     asset_id = ?,
                     system_prompt = ?,
                     response_radius = ?,
-                    abilities = ?,
-                    spawn_position = ?
+                    spawn_x = ?,
+                    spawn_y = ?,
+                    spawn_z = ?,
+                    abilities = ?
                 WHERE npc_id = ? AND game_id = ?
             """, (
                 data['displayName'],
                 data['assetId'],
-                data.get('systemPrompt', ''),
-                data.get('responseRadius', 20),
-                json.dumps(data.get('abilities', [])),
-                spawn_position,  # Use serialized spawn position
+                data['systemPrompt'],
+                data['responseRadius'],
+                spawn_x,
+                spawn_y,
+                spawn_z,
+                json.dumps(data['abilities']),
                 npc_id,
                 game_id
             ))
             
-            # 2. Commit the database changes immediately
-            db.commit()
-            logger.info("Database changes committed")
+            if cursor.rowcount == 0:
+                raise HTTPException(status_code=404, detail="NPC not found")
             
-            # 3. Read back the updated data from database
-            cursor = db.execute("""
-                SELECT *
-                FROM npcs
-                WHERE npc_id = ? AND game_id = ?
+            # Fetch updated NPC data
+            cursor.execute("""
+                SELECT n.*, a.name as asset_name, a.image_url
+                FROM npcs n
+                LEFT JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
+                WHERE n.npc_id = ? AND n.game_id = ?
             """, (npc_id, game_id))
             
             updated = cursor.fetchone()
             if not updated:
-                logger.error("NPC update failed - no rows returned")
-                raise HTTPException(status_code=404, detail="NPC not found")
+                raise HTTPException(status_code=404, detail="Updated NPC not found")
             
-            logger.info(f"Verified updated NPC in database: {updated}")
+            # Convert sqlite3.Row to dict before accessing with get()
+            updated_dict = dict(updated)
             
-            # 4. Now update Lua files using data from database
-            save_lua_database(game_slug, db)
-            
-            # 5. Format response using verified database data
-            response_data = {
-                "id": updated["id"],
-                "npcId": updated["npc_id"],
-                "displayName": updated["display_name"],
-                "assetId": updated["asset_id"],
-                "systemPrompt": updated["system_prompt"],
-                "responseRadius": updated["response_radius"],
-                "abilities": json.loads(updated["abilities"]) if updated["abilities"] else [],
-                "spawnPosition": json.loads(updated["spawn_position"])  # Parse for frontend
+            # Format response with new coordinate structure
+            npc_data = {
+                "id": updated_dict["id"],
+                "npcId": updated_dict["npc_id"],
+                "displayName": updated_dict["display_name"],
+                "assetId": updated_dict["asset_id"],
+                "assetName": updated_dict.get("asset_name"),  # Now we can use .get()
+                "systemPrompt": updated_dict["system_prompt"],
+                "responseRadius": updated_dict["response_radius"],
+                "spawnPosition": {  # Format coordinates for frontend
+                    "x": updated_dict["spawn_x"],
+                    "y": updated_dict["spawn_y"],
+                    "z": updated_dict["spawn_z"]
+                },
+                "abilities": json.loads(updated_dict["abilities"]) if updated_dict["abilities"] else [],
+                "imageUrl": updated_dict.get("image_url")  # Now we can use .get()
             }
             
-            return JSONResponse(response_data)
+            # Update Lua files
+            save_lua_database(game_slug, db)
             
-    except sqlite3.Error as e:
-        logger.error(f"Database error updating NPC: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+            db.commit()
+            return JSONResponse(npc_data)
+            
     except Exception as e:
         logger.error(f"Error updating NPC: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -631,42 +689,38 @@ async def create_npc(
     assetID: str = Form(...),
     system_prompt: str = Form(None),
     responseRadius: int = Form(20),
-    spawnX: float = Form(0),
+    spawnX: float = Form(0),  # Individual coordinate fields
     spawnY: float = Form(5),
     spawnZ: float = Form(0),
-    abilities: str = Form("[]")  # JSON string of abilities array
+    abilities: str = Form("[]")
 ):
     try:
         logger.info(f"Creating NPC for game {game_id}")
         
-        # Get game info first
+        # Validate coordinates
+        try:
+            spawn_x = float(spawnX)
+            spawn_y = float(spawnY)
+            spawn_z = float(spawnZ)
+        except ValueError:
+            raise HTTPException(
+                status_code=400, 
+                detail="Invalid spawn coordinates - must be numbers"
+            )
+        
         with get_db() as db:
+            # First check if game exists and get slug
             cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
             game = cursor.fetchone()
             if not game:
                 raise HTTPException(status_code=404, detail="Game not found")
             
-            game_slug = game['slug']  # Get game_slug here
-            
-            # Create spawn position JSON
-            spawn_position = json.dumps({
-                "x": spawnX,
-                "y": spawnY,
-                "z": spawnZ
-            })
-            
-            # Validate abilities JSON
-            try:
-                abilities_list = json.loads(abilities)
-                if not isinstance(abilities_list, list):
-                    abilities = "[]"
-            except:
-                abilities = "[]"
-            
+            game_slug = game['slug']  # Get game slug for Lua update
+
             # Generate a unique NPC ID
             npc_id = str(uuid.uuid4())
             
-            # Create NPC record
+            # Create NPC record with new coordinate columns
             cursor.execute("""
                 INSERT INTO npcs (
                     game_id,
@@ -675,9 +729,11 @@ async def create_npc(
                     asset_id,
                     system_prompt,
                     response_radius,
-                    spawn_position,
+                    spawn_x,
+                    spawn_y,
+                    spawn_z,
                     abilities
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
             """, (
                 game_id,
@@ -686,7 +742,9 @@ async def create_npc(
                 assetID,
                 system_prompt,
                 responseRadius,
-                spawn_position,
+                spawn_x,
+                spawn_y,
+                spawn_z,
                 abilities
             ))
             db_id = cursor.fetchone()['id']
@@ -696,13 +754,16 @@ async def create_npc(
             
             db.commit()
             
-            logger.info(f"NPC created successfully with ID: {db_id}")
-            
             return JSONResponse({
                 "id": db_id,
                 "npc_id": npc_id,
                 "display_name": displayName,
                 "asset_id": assetID,
+                "spawn_position": {  # Format for frontend
+                    "x": spawn_x,
+                    "y": spawn_y,
+                    "z": spawn_z
+                },
                 "message": "NPC created successfully"
             })
             

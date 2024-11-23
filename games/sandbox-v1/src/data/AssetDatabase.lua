@@ -2,8 +2,8 @@ return {
     assets = {
         {
             assetId = "4446576906",
-            name = "Noob",
-            description = "This roid with a blocky character with a simplistic design. It has a round yellow head with a cheerful smile, paired with blue short sleeves and green pants. The character's arms are short and rectangular, emphasizing the iconic Roblox aesthetic. The overall appearance is playful and cartoonish, typical of Roblox avatars.",
+            name = "Noob2",
+            description = "The Roblox asset features a simple, blocky character design. It has a round, yellow head with a cheerful smile, and a blue short-sleeved shirt. The arms are wide and yellow, while the legs are green, creating a bright, colorful appearance. The character embodies a playful, cartoonish style typical of Roblox avatars.",
         },
         {
             assetId = "7315192066",

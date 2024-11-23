@@ -7,36 +7,10 @@ from .db import get_db
 import os
 import shutil
 import logging
+from .paths import get_database_paths
 
 # Set up logger
 logger = logging.getLogger("roblox_app")
-
-def get_database_paths(game_slug: str = "game1") -> Dict[str, Dict[str, Path]]:
-    """
-    Get paths to database files for a specific game
-    
-    Args:
-        game_slug (str): The game identifier (e.g., "game1", "game2")
-        
-    Returns:
-        Dict containing paths to JSON and Lua database files
-    """
-    game_paths = get_game_paths(game_slug)
-    data_dir = game_paths['data']
-    
-    # Ensure the data directory exists
-    data_dir.mkdir(parents=True, exist_ok=True)
-    
-    return {
-        'asset': {
-            'json': data_dir / 'AssetDatabase.json',
-            'lua': data_dir / 'AssetDatabase.lua'
-        },
-        'npc': {
-            'json': data_dir / 'NPCDatabase.json',
-            'lua': data_dir / 'NPCDatabase.lua'
-        }
-    }
 
 def load_json_database(path: Path) -> dict:
     """Load a JSON database file"""
@@ -60,7 +34,7 @@ def save_json_database(path: Path, data: dict) -> None:
         print(f"Error saving JSON database to {path}: {e}")
         raise
 
-def format_npc_as_lua(npc: dict, db: sqlite3.Connection = None) -> str:
+def format_npc_as_lua(npc: dict, db=None) -> str:
     """Format a single NPC as Lua code"""
     try:
         # Handle abilities - could be string or list
@@ -73,15 +47,8 @@ def format_npc_as_lua(npc: dict, db: sqlite3.Connection = None) -> str:
         # Format abilities as Lua table with proper indentation
         abilities_lua = "{\n" + "".join(f'            "{ability}", \n' for ability in abilities) + "        }"
             
-        # Handle spawn position - could be string or dict
-        spawn_pos_raw = npc.get('spawn_position', '{"x": 0, "y": 5, "z": 0}')
-        if isinstance(spawn_pos_raw, dict):
-            spawn_pos = spawn_pos_raw  # Already a dict
-        else:
-            spawn_pos = json.loads(spawn_pos_raw)  # Parse JSON string
-            
-        # Format spawn position as Vector3
-        vector3 = f"Vector3.new({spawn_pos['x']}, {spawn_pos['y']}, {spawn_pos['z']})"
+        # Use new coordinate columns directly
+        vector3 = f"Vector3.new({npc['spawn_x']}, {npc['spawn_y']}, {npc['spawn_z']})"
 
         # Use the assetId as the model name
         model = npc['asset_id']
@@ -149,7 +116,7 @@ def save_lua_database(game_slug: str, db: sqlite3.Connection) -> None:
             f.write(asset_lua)
             logger.info(f"Wrote asset database to {db_paths['asset']['lua']}")
 
-        # Generate NPC Database
+        # Generate NPC Database - Include new coordinate columns
         cursor = db.execute("""
             SELECT 
                 npc_id,
@@ -157,7 +124,9 @@ def save_lua_database(game_slug: str, db: sqlite3.Connection) -> None:
                 asset_id,
                 system_prompt,
                 response_radius,
-                spawn_position,
+                spawn_x,
+                spawn_y,
+                spawn_z,
                 abilities
             FROM npcs 
             WHERE game_id = ?
@@ -168,8 +137,8 @@ def save_lua_database(game_slug: str, db: sqlite3.Connection) -> None:
         # Format and save NPCs
         npc_lua = "return {\n    npcs = {\n"
         for npc in npcs:
-            npc_lua += format_npc_as_lua(dict(npc), db)
-        npc_lua += "    },\n}"
+            npc_lua += format_npc_as_lua(dict(npc))
+        npc_lua += "\n    },\n}"
         
         with open(db_paths['npc']['lua'], 'w', encoding='utf-8') as f:
             f.write(npc_lua)
