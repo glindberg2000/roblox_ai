@@ -17,9 +17,9 @@ api/db/*.sqlite
 api/db/*.sqlite3
 
 # Storage directories
-api/storage/
-api/stored_images/
-api/stored_asset_images/
+# api/storage/
+# api/stored_images/
+# api/stored_asset_images/
 
 # Private assets backup
 roblox_private_assets/
@@ -39,6 +39,6 @@ htmlcov/
 
 # Add to .gitignore
 *.backup
-games/*/
+# games/*/
 *.patch
 generate_problem_doc.py
