@@ -433,82 +433,67 @@ async def update_npc(npc_id: str, game_id: int, request: Request):
         logger.info(f"Updating NPC {npc_id} for game {game_id}")
         logger.info(f"Update data: {data}")
         
+        # Handle spawn position - use spawnPosition field directly
+        spawn_position = json.dumps(data.get('spawnPosition', {"x": 0, "y": 5, "z": 0}))
+        
         with get_db() as db:
-            try:
-                # Get game info first
-                cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
-                game = cursor.fetchone()
-                if not game:
-                    logger.error(f"Game not found: {game_id}")
-                    raise HTTPException(status_code=404, detail="Game not found")
-                
-                game_slug = game['slug']
-                
-                # Verify NPC exists
-                cursor = db.execute("""
-                    SELECT npc_id FROM npcs 
-                    WHERE npc_id = ? AND game_id = ?
-                """, (npc_id, game_id))
-                
-                if not cursor.fetchone():
-                    logger.error(f"NPC not found: {npc_id}")
-                    raise HTTPException(status_code=404, detail="NPC not found")
-                
-                # Update NPC
-                cursor.execute("""
-                    UPDATE npcs 
-                    SET display_name = ?,
-                        asset_id = ?,
-                        system_prompt = ?,
-                        response_radius = ?,
-                        abilities = ?,
-                        spawn_position = ?
-                    WHERE npc_id = ? AND game_id = ?
-                    RETURNING *
-                """, (
-                    data['displayName'],
-                    data['assetId'],
-                    data.get('systemPrompt', ''),
-                    data.get('responseRadius', 20),
-                    json.dumps(data.get('abilities', [])),
-                    data.get('spawn_position', '{"x": 0, "y": 5, "z": 0}'),
-                    npc_id,
-                    game_id
-                ))
-                
-                updated = cursor.fetchone()
-                if not updated:
-                    logger.error("NPC update failed - no rows returned")
-                    raise HTTPException(status_code=500, detail="Failed to update NPC")
-                
-                logger.info(f"Updated NPC: {updated}")
-                
-                # Update Lua files
-                save_lua_database(game_slug, db)
-                
-                db.commit()
-                
-                return JSONResponse({
-                    "id": updated["id"],
-                    "npcId": updated["npc_id"],
-                    "displayName": updated["display_name"],
-                    "assetId": updated["asset_id"],
-                    "systemPrompt": updated["system_prompt"],
-                    "responseRadius": updated["response_radius"],
-                    "abilities": json.loads(updated["abilities"]) if updated["abilities"] else []
-                })
-                
-            except sqlite3.Error as e:
-                db.rollback()
-                logger.error(f"Database error updating NPC: {str(e)}")
-                raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-            except Exception as e:
-                db.rollback()
-                logger.error(f"Error updating NPC: {str(e)}")
-                raise
+            # Get game info first
+            cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
+            game = cursor.fetchone()
+            if not game:
+                raise HTTPException(status_code=404, detail="Game not found")
             
-    except HTTPException:
-        raise
+            game_slug = game['slug']
+            
+            # Update NPC
+            cursor = db.execute("""
+                UPDATE npcs 
+                SET display_name = ?,
+                    asset_id = ?,
+                    system_prompt = ?,
+                    response_radius = ?,
+                    abilities = ?,
+                    spawn_position = ?
+                WHERE npc_id = ? AND game_id = ?
+                RETURNING *
+            """, (
+                data['displayName'],
+                data['assetId'],
+                data.get('systemPrompt', ''),
+                data.get('responseRadius', 20),
+                json.dumps(data.get('abilities', [])),
+                spawn_position,
+                npc_id,
+                game_id
+            ))
+            
+            updated = cursor.fetchone()
+            if not updated:
+                logger.error("NPC update failed - no rows returned")
+                raise HTTPException(status_code=404, detail="NPC not found")
+            
+            logger.info(f"Updated NPC: {updated}")
+            
+            # Update Lua files
+            save_lua_database(game_slug, db)
+            
+            # Format response
+            response_data = {
+                "id": updated["id"],
+                "npcId": updated["npc_id"],
+                "displayName": updated["display_name"],
+                "assetId": updated["asset_id"],
+                "systemPrompt": updated["system_prompt"],
+                "responseRadius": updated["response_radius"],
+                "abilities": json.loads(updated["abilities"]) if updated["abilities"] else [],
+                "spawnPosition": json.loads(spawn_position)
+            }
+            
+            return JSONResponse(response_data)
+            
+    except sqlite3.Error as e:
+        logger.error(f"Database error updating NPC: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     except Exception as e:
         logger.error(f"Error updating NPC: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

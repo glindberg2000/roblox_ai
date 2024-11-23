@@ -119,8 +119,6 @@ def format_asset_as_lua(asset: dict) -> str:
 
 def save_lua_database(game_slug: str, db: sqlite3.Connection) -> None:
     """Save both NPC and Asset Lua databases for a game"""
-    logger.info(f"=== UTILS.PY: Starting Lua generation for {game_slug} ===")
-    
     try:
         # Get game ID
         cursor = db.execute("SELECT id FROM games WHERE slug = ?", (game_slug,))
@@ -131,8 +129,6 @@ def save_lua_database(game_slug: str, db: sqlite3.Connection) -> None:
         game_id = game['id']
         db_paths = get_database_paths(game_slug)
         
-        logger.info(f"Writing to paths: {db_paths}")
-        
         # Generate Asset Database
         cursor = db.execute("""
             SELECT asset_id, name, description
@@ -142,26 +138,42 @@ def save_lua_database(game_slug: str, db: sqlite3.Connection) -> None:
         """, (game_id,))
         assets = cursor.fetchall()
         
-        logger.info(f"Found {len(assets)} assets to format")
-        
-        # Format like NPCs
+        # Format and save assets
         asset_lua = "return {\n    assets = {\n"
         for asset in assets:
             formatted = format_asset_as_lua(dict(asset))
-            logger.info(f"Formatted asset: {asset['name']}")
-            logger.info(f"Output:\n{formatted}")
             asset_lua += formatted
         asset_lua += "    },\n}"
         
-        # Write with same settings as NPCs
-        asset_path = db_paths['asset']['lua']
-        logger.info(f"Writing asset Lua to: {asset_path}")
-        logger.info(f"Final output:\n{asset_lua}")
-        
-        with open(asset_path, 'w') as f:
+        with open(db_paths['asset']['lua'], 'w', encoding='utf-8') as f:
             f.write(asset_lua)
-            
-        logger.info("=== Finished generating Lua files ===")
+            logger.info(f"Wrote asset database to {db_paths['asset']['lua']}")
+
+        # Generate NPC Database
+        cursor = db.execute("""
+            SELECT 
+                npc_id,
+                display_name,
+                asset_id,
+                system_prompt,
+                response_radius,
+                spawn_position,
+                abilities
+            FROM npcs 
+            WHERE game_id = ?
+            ORDER BY display_name
+        """, (game_id,))
+        npcs = cursor.fetchall()
+        
+        # Format and save NPCs
+        npc_lua = "return {\n    npcs = {\n"
+        for npc in npcs:
+            npc_lua += format_npc_as_lua(dict(npc), db)
+        npc_lua += "    },\n}"
+        
+        with open(db_paths['npc']['lua'], 'w', encoding='utf-8') as f:
+            f.write(npc_lua)
+            logger.info(f"Wrote NPC database to {db_paths['npc']['lua']}")
             
     except Exception as e:
         logger.error(f"Error saving Lua databases: {str(e)}")
