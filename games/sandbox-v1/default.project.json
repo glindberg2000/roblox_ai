@@ -18,6 +18,12 @@
       },
       "NPCDatabaseV3": {
         "$path": "src/data/NPCDatabase.lua"
+      },
+      "Shared": {
+        "$className": "Folder",
+        "AnimationManager": {
+          "$path": "src/shared/AnimationManager.lua"
+        }
       }
     },
     "ServerScriptService": {

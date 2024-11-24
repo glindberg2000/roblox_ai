@@ -1,6 +1,8 @@
 -- NPCManagerV3.lua
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local AnimationManager = require(ReplicatedStorage.Shared.AnimationManager)
+
 local ServerStorage = game:GetService("ServerStorage")
 local Players = game:GetService("Players")
 
@@ -90,7 +92,8 @@ function NPCManagerV3:createNPC(npcData)
 	-- Ensure the model has a PrimaryPart
 	npcModel.PrimaryPart = humanoidRootPart
 
-
+	-- Apply animations
+	AnimationManager:applyAnimations(humanoid)
 
 	local npc = {
 		model = npcModel,
@@ -432,6 +435,13 @@ function NPCManagerV3:startFollowing(npc, player)
 	npc.isFollowing = true
 	npc.followTarget = player
 	npc.followStartTime = tick()
+
+	-- Play walk animation
+	local humanoid = npc.model:FindFirstChild("Humanoid")
+	if humanoid then
+		AnimationManager:playAnimation(humanoid, "walk")
+	end
+	
 	self:log(
 		"Follow state set for "
 			.. npc.displayName
@@ -472,13 +482,11 @@ function NPCManagerV3:stopFollowing(npc)
 	npc.followTarget = nil
 	npc.followStartTime = nil
 
-	-- Actively stop the NPC's movement
-	local humanoid = npc.model:FindFirstChildOfClass("Humanoid")
+	-- Stop movement and animations
+	local humanoid = npc.model:FindFirstChild("Humanoid")
 	if humanoid then
 		humanoid:MoveTo(npc.model.PrimaryPart.Position)
-		humanoid.WalkSpeed = 0 -- Temporarily set walk speed to 0
-		wait(0.5) -- Wait a short time
-		humanoid.WalkSpeed = 16 -- Reset to default walk speed
+		AnimationManager:stopAnimations(humanoid)
 	end
 
 	self:log(npc.displayName .. " stopped following and movement halted")
@@ -487,13 +495,22 @@ end
 function NPCManagerV3:updateNPCState(npc)
 	self:updateNPCVision(npc)
 
+	local humanoid = npc.model:FindFirstChild("Humanoid")
+
 	if npc.isFollowing then
 		self:updateFollowing(npc)
+		if humanoid then
+			AnimationManager:playAnimation(humanoid, "walk")
+		end
 	elseif npc.isInteracting then
 		if npc.interactingPlayer and not self:isPlayerInRange(npc, npc.interactingPlayer) then
 			self:endInteraction(npc, npc.interactingPlayer)
 		end
 	elseif not npc.isMoving then
+		-- Trigger idle animation if the NPC is not moving or following
+		if humanoid then
+			AnimationManager:playAnimation(humanoid, "idle")
+		end
 		self:randomWalk(npc)
 	end
 end
@@ -560,12 +577,21 @@ function NPCManagerV3:randomWalk(npc)
 
 		npc.isMoving = true
 		print(npc.displayName .. " starting random walk to " .. tostring(targetPosition))
-		humanoid:MoveTo(targetPosition)
 
-		task.spawn(function()
-			task.wait(5) -- Wait for 5 seconds or adjust as needed
+		-- Play walk animation
+		AnimationManager:playAnimation(humanoid, "walk")
+
+		humanoid:MoveTo(targetPosition)
+		humanoid.MoveToFinished:Connect(function(reached)
 			npc.isMoving = false
-			print(npc.displayName .. " finished random walk")
+			if reached then
+				print(npc.displayName .. " reached destination.")
+			else
+				print(npc.displayName .. " failed to reach destination.")
+			end
+
+			-- Stop walk animation after reaching
+			AnimationManager:stopAnimations(humanoid)
 		end)
 	else
 		print(npc.displayName .. " cannot perform random walk (no Humanoid)")

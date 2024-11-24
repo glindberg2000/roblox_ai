@@ -9,7 +9,7 @@ return {
             modelName = "Diamond", 
             system_prompt = "I'm sharp", 
             responseRadius = 20, 
-            spawnPosition = Vector3.new(8.0, 8.0, 8.0), 
+            spawnPosition = Vector3.new(8.0, 18.0, -12.0), 
             abilities = {
             "move", 
             "chat", 
@@ -24,7 +24,7 @@ return {
             modelName = "Goldie", 
             system_prompt = "i'm golden", 
             responseRadius = 20, 
-            spawnPosition = Vector3.new(5.0, 5.0, 5.0), 
+            spawnPosition = Vector3.new(10.0, 18.0, -12.0), 
             abilities = {
             "chat", 
         }, 
@@ -38,7 +38,7 @@ return {
             modelName = "Noobster", 
             system_prompt = "you're clueless but also useful....", 
             responseRadius = 20, 
-            spawnPosition = Vector3.new(6.0, 6.0, 6.0), 
+            spawnPosition = Vector3.new(6.0, 18.0, -12.0), 
             abilities = {
             "move", 
             "chat", 
@@ -54,11 +54,10 @@ return {
             assetId = "7315192066", 
             model = "7315192066", 
             modelName = "Oscar", 
-            system_prompt = "you look for adventures", 
+            system_prompt = "You are Oscar, Pets' twin brother. you look for adventures.", 
             responseRadius = 20, 
-            spawnPosition = Vector3.new(0.0, 5.0, 0.0), 
+            spawnPosition = Vector3.new(0.0, 18.0, -6.0), 
             abilities = {
-            "move", 
             "chat", 
             "trade", 
             "quest", 
@@ -74,7 +73,7 @@ return {
             modelName = "Pete", 
             system_prompt = "You like to talk about merch you're selling. Valterpoop aka KrushKen is your boss so you keep an eye out for him or his dad greggytheegg.", 
             responseRadius = 20, 
-            spawnPosition = Vector3.new(4.0, 2.0, 0.0), 
+            spawnPosition = Vector3.new(12.0, 18.0, -12.0), 
             abilities = {
             "move", 
             "chat", 
