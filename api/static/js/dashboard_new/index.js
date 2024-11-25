@@ -24,88 +24,75 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Enhanced populateAssetSelector with unique logging
 async function populateAssetSelector() {
-    console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Asset selector population start');
-    console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Current game:', state.currentGame);
-
-    // Immediate DOM check
-    const assetSelect = document.getElementById('assetSelect');
-    console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Asset select element:', {
-        exists: !!assetSelect,
-        id: assetSelect?.id,
-        parent: assetSelect?.parentElement?.id
+    console.log('populateAssetSelector called', {
+        currentGame: state.currentGame,
+        currentTab: state.currentTab
     });
 
     if (!state.currentGame) {
-        console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: No game selected, aborting');
+        console.warn('No game selected, cannot populate asset selector');
         return;
     }
 
     try {
-        // 1. Fetch assets
-        const url = `/api/assets?game_id=${state.currentGame.id}&type=NPC`;
-        console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Fetching from:', url);
+        // Fetch assets for the current game
+        const url = `/api/assets?game_id=${state.currentGame.id}`;
+        console.log('Fetching assets from:', url);
         
         const response = await fetch(url);
-        const text = await response.text();
-        console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Raw response:', text);
-        
-        const data = JSON.parse(text);
-        console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Parsed response:', data);
+        const data = await response.json();
+        console.log('Received assets:', data);
 
-        // 2. Verify select element again
+        // Find and populate the selector
+        const assetSelect = document.getElementById('assetSelect');
         if (!assetSelect) {
-            console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Asset select still not found after fetch');
+            console.error('Asset select element not found in DOM');
             return;
         }
 
-        // 3. Clear and populate
+        // Clear and populate the selector
         assetSelect.innerHTML = '<option value="">Select a model...</option>';
-        console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Cleared select options');
-
-        let added = 0;
         if (data.assets && Array.isArray(data.assets)) {
             data.assets.forEach(asset => {
                 const option = document.createElement('option');
                 option.value = asset.assetId || asset.asset_id;
                 option.textContent = asset.name;
                 assetSelect.appendChild(option);
-                added++;
-                console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Added option:', {value: option.value, text: option.textContent});
             });
+            console.log(`Added ${data.assets.length} options to asset selector`);
         }
-
-        console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Final select state:', {
-            optionsAdded: added,
-            totalOptions: assetSelect.options.length,
-            currentValue: assetSelect.value,
-            innerHTML: assetSelect.innerHTML
-        });
-
     } catch (error) {
-        console.error('DASHBOARD-NEW-INDEX-2023-11-22-A: Error in populateAssetSelector:', error);
+        console.error('Error populating asset selector:', error);
+        throw error; // Propagate error for handling in switchTab
     }
 }
 
 // Enhanced tab management with unique logging
 window.showTab = function(tabName) {
-    console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Tab Change', {
+    console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Tab Change:', {
         from: state.currentTab,
         to: tabName,
         gameId: state.currentGame?.id
     });
 
+    // Hide all tabs
     document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
     const tabElement = document.getElementById(`${tabName}Tab`);
     tabElement.classList.remove('hidden');
     updateCurrentTab(tabName);
 
+    // Load content based on tab
     if (tabName === 'games') {
         loadGames();
     } else if (tabName === 'assets' && state.currentGame) {
         window.loadAssets();
     } else if (tabName === 'npcs' && state.currentGame) {
+        // First load NPCs, then populate the asset selector
         window.loadNPCs().then(() => {
-            populateAssetSelector();
+            window.populateAssetSelector();
+            console.log('NPCs loaded and asset selector populated');
+        }).catch(error => {
+            console.error('Error loading NPCs:', error);
         });
     }
 };
@@ -228,6 +215,11 @@ console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Checking global functions:', {
 
 // Tab switching function
 function switchTab(tabName) {
+    console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Switching to tab:', tabName, {
+        currentGame: state.currentGame,
+        currentTab: state.currentTab
+    });
+
     // Hide all tab content
     document.querySelectorAll('.tab-content').forEach(tab => {
         tab.classList.add('hidden');
@@ -241,6 +233,31 @@ function switchTab(tabName) {
     
     // Update state
     state.currentSection = tabName;
+    updateCurrentTab(tabName);
+
+    // Load content based on the tab
+    if (tabName === 'games') {
+        loadGames();
+    } else if (tabName === 'assets' && state.currentGame) {
+        window.loadAssets();
+    } else if (tabName === 'npcs' && state.currentGame) {
+        console.log('Loading NPCs tab content...');
+        
+        // First load NPCs
+        window.loadNPCs()
+            .then(() => {
+                console.log('NPCs loaded, populating asset selector...');
+                // Then populate the asset selector
+                return populateAssetSelector();
+            })
+            .then(() => {
+                console.log('Asset selector populated successfully');
+            })
+            .catch(error => {
+                console.error('Error in NPC tab initialization:', error);
+                showNotification('Error loading NPC data', 'error');
+            });
+    }
 }
 
 // Initialize navigation
@@ -268,7 +285,11 @@ document.addEventListener('DOMContentLoaded', () => {
     switchTab('games');
 });
 
-// Export for use in other modules
+// Make functions globally available
+window.switchTab = switchTab;
+window.populateAssetSelector = populateAssetSelector;
+
+// Export for module use
 export { switchTab };
 
 

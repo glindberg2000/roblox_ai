@@ -70,8 +70,6 @@ export async function selectGame(gameSlug) {
         
         // Update state
         state.currentGame = gameData;
-        
-        // Update navigation state
         updateNavigationState();
         
         // Update display
@@ -80,16 +78,13 @@ export async function selectGame(gameSlug) {
             display.textContent = `Current Game: ${gameData.title}`;
         }
         
-        // Load assets and NPCs
+        // Load initial data without forcing tab switch
         if (window.loadAssets) {
             await window.loadAssets();
         }
         if (window.loadNPCs) {
             await window.loadNPCs();
         }
-        
-        // Switch to assets tab
-        switchTab('assets');
         
         showNotification('Game selected successfully', 'success');
         
