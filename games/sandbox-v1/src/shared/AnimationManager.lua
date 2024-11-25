@@ -3,6 +3,7 @@ local AnimationManager = {}
 local animations = {
     walk = "rbxassetid://180426354", -- Replace with your walk animation asset ID
     jump = "rbxassetid://125750702", -- Replace with your jump animation asset ID
+    idle = "rbxassetid://507766388", -- Replace with your idle animation asset ID
 }
 
 -- Table to store animations per humanoid
