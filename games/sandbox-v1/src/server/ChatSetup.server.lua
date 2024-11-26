@@ -1,9 +1,22 @@
 local ChatService = game:GetService("Chat")
+local ServerScriptService = game:GetService("ServerScriptService")
+local Logger = require(ServerScriptService:WaitForChild("Logger"))
+
+Logger:log("SYSTEM", "Setting up chat service")
 
 -- Example: Enabling chat (if needed)
 if ChatService then
-    ChatService:ChatVersion("TextChatService") -- Use appropriate API methods for enabling TextChat
-    print("Chat setup completed.")
+    local success, result = pcall(function()
+        ChatService:ChatVersion("TextChatService")
+    end)
+    
+    if success then
+        Logger:log("SYSTEM", "Chat service initialized successfully")
+    else
+        Logger:log("ERROR", string.format("Unable to initialize chat service: %s", tostring(result)))
+    end
 else
-    warn("Chat service not available.")
+    Logger:log("ERROR", "Unable to get Chat service: service not available")
 end
+
+Logger:log("SYSTEM", "Chat setup completed")

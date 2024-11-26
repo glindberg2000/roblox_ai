@@ -1,5 +1,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
+local Logger = require(ServerScriptService:WaitForChild("Logger"))
 
 -- Initialize storage structure first
 local function ensureStorage()
@@ -19,13 +21,14 @@ local function ensureStorage()
 	local availableModels = {}
 	for _, model in ipairs(npcs:GetChildren()) do
 		availableModels[model.Name] = true
-		print("Found model:", model.Name)
+		Logger:log("ASSET", string.format("Found model: %s", model.Name))
 	end
 	
 	-- Check which required models are missing
 	for _, npc in ipairs(npcDatabase.npcs) do
 		if not availableModels[npc.model] then
-			warn(string.format("Missing required model '%s' for NPC: %s", npc.model, npc.displayName))
+			Logger:log("ERROR", string.format("Missing required model '%s' for NPC: %s", 
+				npc.model, npc.displayName))
 		end
 	end
 	
@@ -39,12 +42,14 @@ if not ReplicatedStorage:FindFirstChild("NPCChatEvent") then
 	local NPCChatEvent = Instance.new("RemoteEvent")
 	NPCChatEvent.Name = "NPCChatEvent"
 	NPCChatEvent.Parent = ReplicatedStorage
+	Logger:log("SYSTEM", "Created NPCChatEvent")
 end
 
 if not ReplicatedStorage:FindFirstChild("EndInteractionEvent") then
 	local EndInteractionEvent = Instance.new("RemoteEvent")
 	EndInteractionEvent.Name = "EndInteractionEvent"
 	EndInteractionEvent.Parent = ReplicatedStorage
+	Logger:log("SYSTEM", "Created EndInteractionEvent")
 end
 
-print("NPC System initialized. Using V3 system.")
+Logger:log("SYSTEM", "NPC System initialized. Using V3 system.")

@@ -2,6 +2,7 @@
 -- At the top of MainNPCScript.server.lua
 local ServerScriptService = game:GetService("ServerScriptService")
 local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
+local Logger = require(ServerScriptService:WaitForChild("Logger"))
 
 local success, result = pcall(function()
 	return require(ServerScriptService:WaitForChild("InteractionController", 5))
@@ -9,9 +10,9 @@ end)
 
 if success then
 	InteractionController = result
-	print("InteractionController loaded successfully")
+	Logger:log("SYSTEM", "InteractionController loaded successfully")
 else
-	warn("Failed to load InteractionController:", result)
+	Logger:log("ERROR", "Failed to load InteractionController: " .. tostring(result))
 	-- Provide a basic implementation to prevent further errors
 	InteractionController = {
 		new = function()
@@ -50,6 +51,8 @@ local function ensureStorage()
     local npcs = Assets:FindFirstChild("npcs") or 
                  Instance.new("Folder", Assets)
     npcs.Name = "npcs"
+    
+    Logger:log("SYSTEM", "Storage structure verified")
 end
 
 -- Call ensureStorage first
@@ -57,17 +60,17 @@ ensureStorage()
 
 -- Then initialize NPC system
 local NPCManagerV3 = require(ReplicatedStorage:WaitForChild("NPCManagerV3"))
-print("Starting NPC initialization")
+Logger:log("SYSTEM", "Starting NPC initialization")
 local npcManagerV3 = NPCManagerV3.new()
-print("NPC Manager created")
+Logger:log("SYSTEM", "NPC Manager created")
 
 for npcId, npcData in pairs(npcManagerV3.npcs) do
-	print("NPC spawned: " .. npcData.displayName)
+	Logger:log("STATE", string.format("NPC spawned: %s", npcData.displayName))
 end
 
 local interactionController = npcManagerV3.interactionController
 
-Logger:log("NPC system V3 initialized")
+Logger:log("SYSTEM", "NPC system V3 initialized")
 
 local function checkPlayerProximity()
 	for _, player in ipairs(Players:GetPlayers()) do
@@ -78,6 +81,8 @@ local function checkPlayerProximity()
 					local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
 					if distance <= npc.responseRadius and not npc.isInteracting then
 						if interactionController:canInteract(player) then
+							Logger:log("INTERACTION", string.format("Auto-interaction triggered for %s with %s", 
+								npc.displayName, player.Name))
 							npcManagerV3:handleNPCInteraction(npc, player, "Hello")
 						end
 					end
@@ -88,8 +93,11 @@ local function checkPlayerProximity()
 end
 
 local function onPlayerChatted(player, message)
+	Logger:log("INTERACTION", string.format("Player %s chatted: %s", player.Name, message))
+	
 	local playerPosition = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	if not playerPosition then
+		Logger:log("ERROR", string.format("Cannot process chat for %s: Character not found", player.Name))
 		return
 	end
 
@@ -105,12 +113,16 @@ local function onPlayerChatted(player, message)
 	end
 
 	if closestNPC then
+		Logger:log("INTERACTION", string.format("Routing chat from %s to NPC %s", 
+			player.Name, closestNPC.displayName))
 		npcManagerV3:handleNPCInteraction(closestNPC, player, message)
 	end
 end
 
 local function setupChatConnections()
+	Logger:log("SYSTEM", "Setting up chat connections")
 	Players.PlayerAdded:Connect(function(player)
+		Logger:log("STATE", string.format("Setting up chat connection for player: %s", player.Name))
 		player.Chatted:Connect(function(message)
 			onPlayerChatted(player, message)
 		end)
@@ -120,6 +132,7 @@ end
 setupChatConnections()
 
 local function updateNPCs()
+	Logger:log("SYSTEM", "Starting NPC update loop")
 	while true do
 		checkPlayerProximity()
 		for _, npc in pairs(npcManagerV3.npcs) do
@@ -139,8 +152,10 @@ EndInteractionEvent.Parent = ReplicatedStorage
 EndInteractionEvent.OnServerEvent:Connect(function(player)
 	local interactingNPC = interactionController:getInteractingNPC(player)
 	if interactingNPC then
+		Logger:log("INTERACTION", string.format("Player %s manually ended interaction with %s", 
+			player.Name, interactingNPC.displayName))
 		npcManagerV3:endInteraction(interactingNPC, player)
 	end
 end)
 
-Logger:log("NPC system V3 main script running")
+Logger:log("SYSTEM", "NPC system V3 main script running")

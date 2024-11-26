@@ -1,13 +1,37 @@
 -- NPCManagerV3.lua
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local AnimationManager = require(ReplicatedStorage.Shared.AnimationManager)
-
 local ServerStorage = game:GetService("ServerStorage")
 local Players = game:GetService("Players")
-
 local ServerScriptService = game:GetService("ServerScriptService")
+local ChatService = game:GetService("Chat")
+
+local AnimationManager = require(ReplicatedStorage.Shared.AnimationManager)
 local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
+
+-- Initialize Logger
+local Logger
+local function initializeLogger()
+    local success, result = pcall(function()
+        if game:GetService("RunService"):IsServer() then
+            return require(ServerScriptService:WaitForChild("Logger"))
+        else
+            return require(ReplicatedStorage:WaitForChild("Logger"))
+        end
+    end)
+
+    if success then
+        Logger = result
+    else
+        Logger = {
+            log = function(_, category, message)
+                print(string.format("[%s] %s", category, message))
+            end
+        }
+    end
+end
+
+initializeLogger()
 
 local NPCManagerV3 = {}
 NPCManagerV3.__index = NPCManagerV3
@@ -46,79 +70,83 @@ NPCChatEvent.Name = "NPCChatEvent"
 NPCChatEvent.Parent = ReplicatedStorage
 
 function NPCManagerV3.new()
-	local self = setmetatable({}, NPCManagerV3)
-	self.npcs = {}
-	self.responseCache = {}
-	self.interactionController = InteractionController.new()
-	self:loadNPCDatabase()
-	return self
+    local self = setmetatable({}, NPCManagerV3)
+    self.npcs = {}
+    self.responseCache = {}
+    self.interactionController = InteractionController.new()
+    Logger:log("SYSTEM", "Initializing NPCManagerV3")
+    self:loadNPCDatabase()
+    return self
 end
 
 function NPCManagerV3:loadNPCDatabase()
-	local npcDatabase = require(ReplicatedStorage:WaitForChild("NPCDatabaseV3"))
-	print("Loading NPCs from database:", #npcDatabase.npcs)
-	for _, npcData in ipairs(npcDatabase.npcs) do
-		self:createNPC(npcData)
-	end
+    local npcDatabase = require(ReplicatedStorage:WaitForChild("NPCDatabaseV3"))
+    Logger:log("SYSTEM", string.format("Loading NPCs from database: %d NPCs found", #npcDatabase.npcs))
+    
+    for _, npcData in ipairs(npcDatabase.npcs) do
+        self:createNPC(npcData)
+    end
 end
 
 function NPCManagerV3:createNPC(npcData)
-	print("Creating NPC:", npcData.displayName)
-	if not workspace:FindFirstChild("NPCs") then
-		Instance.new("Folder", workspace).Name = "NPCs"
-	end
+    Logger:log("NPC", string.format("Creating NPC: %s", npcData.displayName))
+    
+    if not workspace:FindFirstChild("NPCs") then
+        Instance.new("Folder", workspace).Name = "NPCs"
+        Logger:log("SYSTEM", "Created NPCs folder in workspace")
+    end
 
-	local model = ServerStorage.Assets.npcs:FindFirstChild(npcData.model)
-	if not model then
-		warn("Model not found for NPC: " .. npcData.displayName)
-		return
-	end
+    local model = ServerStorage.Assets.npcs:FindFirstChild(npcData.model)
+    if not model then
+        Logger:log("ERROR", string.format("Model not found for NPC: %s", npcData.displayName))
+        return
+    end
 
-	local npcModel = model:Clone()
-	npcModel.Name = npcData.displayName
-	npcModel.Parent = workspace.NPCs
+    local npcModel = model:Clone()
+    npcModel.Name = npcData.displayName
+    npcModel.Parent = workspace.NPCs
 
-	-- Check for necessary parts
-	local humanoidRootPart = npcModel:FindFirstChild("HumanoidRootPart")
-	local humanoid = npcModel:FindFirstChildOfClass("Humanoid")
-	local head = npcModel:FindFirstChild("Head")
+    -- Check for necessary parts
+    local humanoidRootPart = npcModel:FindFirstChild("HumanoidRootPart")
+    local humanoid = npcModel:FindFirstChildOfClass("Humanoid")
+    local head = npcModel:FindFirstChild("Head")
 
-	if not humanoidRootPart or not humanoid or not head then
-		warn("NPC model " .. npcData.displayName .. " is missing essential parts. Skipping creation.")
-		npcModel:Destroy()
-		return
-	end
+    if not humanoidRootPart or not humanoid or not head then
+        Logger:log("ERROR", string.format("NPC model %s is missing essential parts. Skipping creation.", npcData.displayName))
+        npcModel:Destroy()
+        return
+    end
 
-	-- Ensure the model has a PrimaryPart
-	npcModel.PrimaryPart = humanoidRootPart
+    -- Ensure the model has a PrimaryPart
+    npcModel.PrimaryPart = humanoidRootPart
 
-	-- Apply animations
-	AnimationManager:applyAnimations(humanoid)
+    -- Apply animations
+    AnimationManager:applyAnimations(humanoid)
 
-	local npc = {
-		model = npcModel,
-		id = npcData.id,
-		displayName = npcData.displayName,
-		responseRadius = npcData.responseRadius,
-		system_prompt = npcData.system_prompt,
-		lastResponseTime = 0,
-		isMoving = false,
-		isInteracting = false,
-		isFollowing = false,
-		followTarget = nil,
-		followStartTime = 0,
-		memory = {},
-		visibleEntities = {},
-		interactingPlayer = nil,
-		shortTermMemory = {},
-	}
+    local npc = {
+        model = npcModel,
+        id = npcData.id,
+        displayName = npcData.displayName,
+        responseRadius = npcData.responseRadius,
+        system_prompt = npcData.system_prompt,
+        lastResponseTime = 0,
+        isMoving = false,
+        isInteracting = false,
+        isFollowing = false,
+        followTarget = nil,
+        followStartTime = 0,
+        memory = {},
+        visibleEntities = {},
+        interactingPlayer = nil,
+        shortTermMemory = {},
+    }
 
-	-- Position the NPC
-	humanoidRootPart.CFrame = CFrame.new(npcData.spawnPosition)
+    -- Position the NPC
+    humanoidRootPart.CFrame = CFrame.new(npcData.spawnPosition)
 
-	self:setupClickDetector(npc)
-	self.npcs[npc.id] = npc
-	print("V3 NPC added: " .. npc.displayName .. ", Total NPCs: " .. self:getNPCCount())
+    self:setupClickDetector(npc)
+    self.npcs[npc.id] = npc
+    Logger:log("NPC", string.format("NPC added: %s (Total NPCs: %d)", npc.displayName, self:getNPCCount()))
 end
 
 function NPCManagerV3:getNPCCount()
@@ -149,37 +177,51 @@ function NPCManagerV3:setupClickDetector(npc)
 end
 
 function NPCManagerV3:handleNPCInteraction(npc, player, message)
-	if self.interactionController:isInGroupInteraction(player) then
-		self:handleGroupInteraction(npc, player, message)
-		return
-	end
+    Logger:log("INTERACTION", string.format("Handling interaction: %s with %s - Message: %s",
+        npc.displayName,
+        player.Name,
+        message
+    ))
 
-	if not self.interactionController:canInteract(player) then
-		local interactingNPC = self.interactionController:getInteractingNPC(player)
-		if interactingNPC ~= npc then
-			return -- Player is interacting with another NPC
-		end
-	else
-		if not self.interactionController:startInteraction(player, npc) then
-			return -- Failed to start interaction
-		end
-	end
+    if self.interactionController:isInGroupInteraction(player) then
+        Logger:log("INTERACTION", string.format("Group interaction detected for %s", player.Name))
+        self:handleGroupInteraction(npc, player, message)
+        return
+    end
 
-	local currentTime = tick()
-	if currentTime - npc.lastResponseTime < RESPONSE_COOLDOWN then
-		return
-	end
+    if not self.interactionController:canInteract(player) then
+        local interactingNPC = self.interactionController:getInteractingNPC(player)
+        if interactingNPC ~= npc then
+            Logger:log("INTERACTION", string.format("Player %s is already interacting with another NPC", player.Name))
+            return
+        end
+    else
+        if not self.interactionController:startInteraction(player, npc) then
+            Logger:log("ERROR", string.format("Failed to start interaction between %s and %s", npc.displayName, player.Name))
+            return
+        end
+    end
 
-	npc.isInteracting = true
-	npc.interactingPlayer = player
+    local currentTime = tick()
+    if currentTime - npc.lastResponseTime < RESPONSE_COOLDOWN then
+        Logger:log("INTERACTION", string.format("Interaction cooldown for %s (%.1f seconds remaining)", 
+            npc.displayName, 
+            RESPONSE_COOLDOWN - (currentTime - npc.lastResponseTime)
+        ))
+        return
+    end
 
-	local response = self:getResponseFromAI(npc, player, message)
-	if response then
-		npc.lastResponseTime = currentTime
-		self:processAIResponse(npc, player, response)
-	else
-		self:endInteraction(npc, player)
-	end
+    npc.isInteracting = true
+    npc.interactingPlayer = player
+
+    local response = self:getResponseFromAI(npc, player, message)
+    if response then
+        npc.lastResponseTime = currentTime
+        self:processAIResponse(npc, player, response)
+    else
+        Logger:log("ERROR", string.format("Failed to get AI response for %s", npc.displayName))
+        self:endInteraction(npc, player)
+    end
 end
 
 function NPCManagerV3:handleGroupInteraction(npc, player, message)
@@ -263,29 +305,40 @@ function NPCManagerV3:log(message)
 end
 
 function NPCManagerV3:processAIResponse(npc, player, response)
-	print("Processing AI response for " .. npc.displayName .. ":")
-	print(HttpService:JSONEncode(response))
+    Logger:log("RESPONSE", string.format("Processing AI response for %s: %s",
+        npc.displayName,
+        HttpService:JSONEncode(response)
+    ))
 
-	if response.action and response.action.type == "stop_interacting" then
-		print("Stopping interaction as per AI response")
-		self:endInteraction(npc, player)
-		return
-	end
+    if response.action and response.action.type == "stop_interacting" then
+        Logger:log("ACTION", string.format("Stopping interaction for %s as per AI response", npc.displayName))
+        self:endInteraction(npc, player)
+        return
+    end
 
-	if response.message then
-		print("Displaying message: " .. response.message)
-		self:displayMessage(npc, response.message, player)
-	end
+    if response.message then
+        Logger:log("CHAT", string.format("Displaying message from %s: %s",
+            npc.displayName,
+            response.message
+        ))
+        self:displayMessage(npc, response.message, player)
+    end
 
-	if response.action then
-		print("Executing action: " .. HttpService:JSONEncode(response.action))
-		self:executeAction(npc, player, response.action)
-	end
+    if response.action then
+        Logger:log("ACTION", string.format("Executing action for %s: %s",
+            npc.displayName,
+            HttpService:JSONEncode(response.action)
+        ))
+        self:executeAction(npc, player, response.action)
+    end
 
-	if response.internal_state then
-		print("Updating internal state: " .. HttpService:JSONEncode(response.internal_state))
-		self:updateInternalState(npc, response.internal_state)
-	end
+    if response.internal_state then
+        Logger:log("STATE", string.format("Updating internal state for %s: %s",
+            npc.displayName,
+            HttpService:JSONEncode(response.internal_state)
+        ))
+        self:updateInternalState(npc, response.internal_state)
+    end
 end
 
 function NPCManagerV3:endInteraction(npc, player)
@@ -321,94 +374,102 @@ local function getAssetData(assetName)
 end
 
 function NPCManagerV3:updateNPCVision(npc)
-	print("Updating vision for " .. npc.displayName)
-	npc.visibleEntities = {}
-	local npcPosition = npc.model.PrimaryPart.Position
+    Logger:log("VISION", string.format("Updating vision for %s", npc.displayName))
+    npc.visibleEntities = {}
+    local npcPosition = npc.model.PrimaryPart.Position
 
-	-- Detect players
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-			local distance = (player.Character.HumanoidRootPart.Position - npcPosition).Magnitude
-			if distance <= VISION_RANGE then
-				table.insert(npc.visibleEntities, {
-					type = "player",
-					name = player.Name,
-					distance = distance,
-				})
-				print(npc.displayName .. " sees player: " .. player.Name .. " at distance: " .. distance)
-			end
-		end
-	end
+    -- Detect players
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local distance = (player.Character.HumanoidRootPart.Position - npcPosition).Magnitude
+            if distance <= VISION_RANGE then
+                table.insert(npc.visibleEntities, {
+                    type = "player",
+                    name = player.Name,
+                    distance = distance,
+                })
+                Logger:log("VISION", string.format("%s sees player: %s at distance: %.2f",
+                    npc.displayName,
+                    player.Name,
+                    distance
+                ))
+            end
+        end
+    end
 
-	-- Detect objects and fetch descriptions from AssetDatabase
-	-- Detect objects and fetch descriptions from AssetDatabase
-	local detectedObjects = {}
-	for _, object in ipairs(workspace:GetChildren()) do
-		if object:IsA("Model") and object ~= npc.model then
-			local primaryPart = object.PrimaryPart or object:FindFirstChildWhichIsA("BasePart")
-			if primaryPart then
-				local distance = (primaryPart.Position - npcPosition).Magnitude
-				if distance <= VISION_RANGE then
-					-- Fetch asset data from the AssetDatabase
-					local assetData = getAssetData(object.Name)
-					if assetData then
-						local key = object.Name .. "_" .. assetData.assetId
-						if not detectedObjects[key] then
-							detectedObjects[key] = true
-							table.insert(npc.visibleEntities, {
-								type = "object",
-								name = assetData.name,
-								objectType = assetData.description, -- Use description as the object type
-								distance = distance,
-								imageUrl = assetData.imageUrl, -- Optionally include the image URL
-							})
-							print(
-								npc.displayName
-									.. " sees object: "
-									.. assetData.name
-									.. " (Description: "
-									.. assetData.description
-									.. ") at distance: "
-									.. distance
-							)
-						end
-					else
-						-- If asset data is not found, fall back to default behavior
-						local key = object.Name .. "_Unknown"
-						if not detectedObjects[key] then
-							detectedObjects[key] = true
-							table.insert(npc.visibleEntities, {
-								type = "object",
-								name = object.Name,
-								objectType = "Unknown",
-								distance = distance,
-							})
-							print(
-								npc.displayName
-									.. " sees object: "
-									.. object.Name
-									.. " (Type: Unknown) at distance: "
-									.. distance
-							)
-						end
-					end
-				end
-			end
-		end
-	end
+    -- Detect objects and fetch descriptions from AssetDatabase
+    local detectedObjects = {}
+    for _, object in ipairs(workspace:GetChildren()) do
+        if object:IsA("Model") and object ~= npc.model then
+            local primaryPart = object.PrimaryPart or object:FindFirstChildWhichIsA("BasePart")
+            if primaryPart then
+                local distance = (primaryPart.Position - npcPosition).Magnitude
+                if distance <= VISION_RANGE then
+                    -- Fetch asset data from the AssetDatabase
+                    local assetData = getAssetData(object.Name)
+                    if assetData then
+                        local key = object.Name .. "_" .. assetData.assetId
+                        if not detectedObjects[key] then
+                            detectedObjects[key] = true
+                            table.insert(npc.visibleEntities, {
+                                type = "object",
+                                name = assetData.name,
+                                objectType = assetData.description,
+                                distance = distance,
+                                imageUrl = assetData.imageUrl,
+                            })
+                            Logger:log("VISION", string.format("%s sees object: %s (Description: %s) at distance: %.2f",
+                                npc.displayName,
+                                assetData.name,
+                                assetData.description,
+                                distance
+                            ))
+                        end
+                    else
+                        -- If asset data is not found, fall back to default behavior
+                        local key = object.Name .. "_Unknown"
+                        if not detectedObjects[key] then
+                            detectedObjects[key] = true
+                            table.insert(npc.visibleEntities, {
+                                type = "object",
+                                name = object.Name,
+                                objectType = "Unknown",
+                                distance = distance,
+                            })
+                            Logger:log("VISION", string.format("%s sees object: %s (Type: Unknown) at distance: %.2f",
+                                npc.displayName,
+                                object.Name,
+                                distance
+                            ))
+                        end
+                    end
+                end
+            end
+        end
+    end
 
-	print(npc.displayName .. " vision update complete. Visible entities: " .. #npc.visibleEntities)
+    Logger:log("VISION", string.format("%s vision update complete. Visible entities: %d",
+        npc.displayName,
+        #npc.visibleEntities
+    ))
 end
 
-local ChatService = game:GetService("Chat")
-
--- In the displayMessage function:
 function NPCManagerV3:displayMessage(npc, message, player)
-	-- Display chat bubble
-	ChatService:Chat(npc.model.Head, message, Enum.ChatColor.Blue)
+    Logger:log("CHAT", string.format("NPC %s sending message to %s: %s", 
+        npc.displayName,
+        player and player.Name or "all players",
+        message
+    ))
 
-	-- Fire event to display in chat box
-	NPCChatEvent:FireClient(player, npc.displayName, message)
+    -- Display chat bubble
+    ChatService:Chat(npc.model.Head, message, Enum.ChatColor.Blue)
+
+    -- Fire event to display in chat box
+    if player then
+        NPCChatEvent:FireClient(player, npc.displayName, message)
+    else
+        NPCChatEvent:FireAllClients(npc.displayName, message)
+    end
 end
 
 function NPCManagerV3:executeAction(npc, player, action)
@@ -564,38 +625,41 @@ function NPCManagerV3:updateFollowing(npc)
 end
 
 function NPCManagerV3:randomWalk(npc)
-	if npc.isInteracting or npc.isMoving then
-		print(npc.displayName .. " cannot perform random walk (interacting or moving)")
-		return
-	end
+    if npc.isInteracting or npc.isMoving then
+        Logger:log("MOVEMENT", string.format("%s cannot perform random walk (interacting or moving)", npc.displayName))
+        return
+    end
 
-	local humanoid = npc.model:FindFirstChild("Humanoid")
-	if humanoid then
-		local currentPosition = npc.model.PrimaryPart.Position
-		local randomOffset = Vector3.new(math.random(-5, 5), 0, math.random(-5, 5))
-		local targetPosition = currentPosition + randomOffset
+    local humanoid = npc.model:FindFirstChild("Humanoid")
+    if humanoid then
+        local currentPosition = npc.model.PrimaryPart.Position
+        local randomOffset = Vector3.new(math.random(-5, 5), 0, math.random(-5, 5))
+        local targetPosition = currentPosition + randomOffset
 
-		npc.isMoving = true
-		print(npc.displayName .. " starting random walk to " .. tostring(targetPosition))
+        npc.isMoving = true
+        Logger:log("MOVEMENT", string.format("%s starting random walk to %s", 
+            npc.displayName, 
+            tostring(targetPosition)
+        ))
 
-		-- Play walk animation
-		AnimationManager:playAnimation(humanoid, "walk")
+        -- Play walk animation
+        AnimationManager:playAnimation(humanoid, "walk")
 
-		humanoid:MoveTo(targetPosition)
-		humanoid.MoveToFinished:Connect(function(reached)
-			npc.isMoving = false
-			if reached then
-				print(npc.displayName .. " reached destination.")
-			else
-				print(npc.displayName .. " failed to reach destination.")
-			end
+        humanoid:MoveTo(targetPosition)
+        humanoid.MoveToFinished:Connect(function(reached)
+            npc.isMoving = false
+            if reached then
+                Logger:log("MOVEMENT", string.format("%s reached destination", npc.displayName))
+            else
+                Logger:log("MOVEMENT", string.format("%s failed to reach destination", npc.displayName))
+            end
 
-			-- Stop walk animation after reaching
-			AnimationManager:stopAnimations(humanoid)
-		end)
-	else
-		print(npc.displayName .. " cannot perform random walk (no Humanoid)")
-	end
+            -- Stop walk animation after reaching
+            AnimationManager:stopAnimations(humanoid)
+        end)
+    else
+        Logger:log("ERROR", string.format("%s cannot perform random walk (no Humanoid)", npc.displayName))
+    end
 end
 
 function NPCManagerV3:getPerceptionData(npc)
