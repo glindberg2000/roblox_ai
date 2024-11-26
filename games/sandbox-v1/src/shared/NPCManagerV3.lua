@@ -22,13 +22,31 @@ local function initializeLogger()
 
     if success then
         Logger = result
+        Logger:log("SYSTEM", "Logger initialized successfully")
     else
+        -- Create a fallback logger with basic functionality
         Logger = {
             log = function(_, category, message)
                 print(string.format("[%s] %s", category, message))
+            end,
+            error = function(_, message)
+                warn("[ERROR] " .. message)
+            end,
+            warn = function(_, message)
+                warn("[WARN] " .. message)
+            end,
+            debug = function(_, message)
+                print("[DEBUG] " .. message)
             end
         }
+        
+        -- Log the initialization failure using the fallback logger
+        Logger:error(string.format("Failed to initialize logger: %s. Using fallback logger.", tostring(result)))
     end
+
+    -- Log the environment information
+    local environment = game:GetService("RunService"):IsServer() and "Server" or "Client"
+    Logger:log("SYSTEM", string.format("Running in %s environment", environment))
 end
 
 initializeLogger()
@@ -301,7 +319,10 @@ function NPCManagerV3:getResponseFromAI(npc, player, message)
 end
 
 function NPCManagerV3:log(message)
-	print("[NPCManagerV3] " .. os.date("%Y-%m-%d %H:%M:%S") .. ": " .. message)
+    Logger:log("NPCManagerV3", string.format("%s: %s", 
+        os.date("%Y-%m-%d %H:%M:%S"),
+        message
+    ))
 end
 
 function NPCManagerV3:processAIResponse(npc, player, response)
