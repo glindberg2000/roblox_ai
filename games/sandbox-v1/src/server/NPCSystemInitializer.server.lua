@@ -2,6 +2,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local Logger = require(ServerScriptService:WaitForChild("Logger"))
+local NPCManagerV3 = require(ReplicatedStorage:WaitForChild("NPCManagerV3"))
 
 -- Initialize storage structure first
 local function ensureStorage()
@@ -53,3 +54,7 @@ if not ReplicatedStorage:FindFirstChild("EndInteractionEvent") then
 end
 
 Logger:log("SYSTEM", "NPC System initialized. Using V3 system.")
+
+-- Create and store NPCManager instance (it will return the same instance if already created)
+local npcManager = NPCManagerV3.new()
+_G.NPCManager = npcManager

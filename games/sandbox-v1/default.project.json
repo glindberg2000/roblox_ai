@@ -54,6 +54,9 @@
       },
       "MockPlayerTest": {
         "$path": "src/server/MockPlayerTest.server.lua"
+      },
+      "NPCInteractionTest": {
+        "$path": "src/server/NPCInteractionTest.server.lua"
       }
     },
     "StarterPlayer": {
