@@ -371,14 +371,16 @@ function NPCManagerV3:endInteraction(npc, player)
 	npc.isInteracting = false
 	npc.interactingPlayer = nil
 	self.interactionController:endInteraction(player)
-	-- Remove this line to prevent the message from appearing in the chat
-	-- NPCChatEvent:FireClient(player, npc.displayName, "The interaction has ended.")
-	self:log("Interaction ended between " .. npc.displayName .. " and " .. player.Name)
+	Logger:log("INTERACTION", string.format("Interaction ended between %s and %s", 
+		npc.displayName, 
+		player.Name
+	))
 end
 
 function NPCManagerV3:getCacheKey(npc, player, message)
 	local context = {
 		npcId = npc.id,
+		
 		playerId = player.UserId,
 		message = message,
 		memory = npc.shortTermMemory[player.UserId],
@@ -816,10 +818,10 @@ function NPCManagerV3:testFollowCommand(npcId, playerId)
 	local npc = self.npcs[npcId]
 	local player = game.Players:GetPlayerByUserId(playerId)
 	if npc and player then
-		self:log("Testing follow command for " .. npc.displayName)
+		Logger:log("MOVEMENT", string.format("Testing follow command for %s", npc.displayName))
 		self:startFollowing(npc, player)
 	else
-		self:log("Failed to find NPC or player for follow test")
+		Logger:log("ERROR", "Failed to find NPC or player for follow test")
 	end
 end
 

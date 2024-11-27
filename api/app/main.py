@@ -63,12 +63,24 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 # Setup templates
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
-# Route handlers
+
+# main.py
+from fastapi import Depends
+from .security import check_allowed_ips
+
 @app.get("/")
 @app.get("/dashboard")
-async def serve_dashboard(request: Request):
+async def serve_dashboard(request: Request, allowed_ips=Depends(check_allowed_ips)):
     """Serve the dashboard"""
     return templates.TemplateResponse("dashboard_new.html", {"request": request})
+
+
+#Route handlers
+# @app.get("/")
+# @app.get("/dashboard")
+# async def serve_dashboard(request: Request):
+#     """Serve the dashboard"""
+#     return templates.TemplateResponse("dashboard_new.html", {"request": request})
 
 @app.on_event("startup")
 async def startup_event():

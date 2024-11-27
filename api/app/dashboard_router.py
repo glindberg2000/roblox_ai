@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Request
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Request, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -44,7 +44,12 @@ from fastapi.templating import Jinja2Templates
 import sqlite3
 
 logger = logging.getLogger("roblox_app")
-router = APIRouter()
+
+# dashboard_router.py
+
+from .security import check_allowed_ips
+
+router = APIRouter(dependencies=[Depends(check_allowed_ips)])
 
 # Set up templates
 BASE_DIR = Path(__file__).resolve().parent.parent

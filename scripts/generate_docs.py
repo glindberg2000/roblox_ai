@@ -169,7 +169,7 @@ def generate_documentation(path_or_id, api_only=False):
             f.write("\n".join(doc_content))
             
         print(f"Documentation generated successfully for {game_name} at {output_path}")
-        sys.exit(0)
+        return
         
     print("WARNING: Attempting to generate game documentation - this should not happen for API docs")
     # Game documentation path (only reached if not API documentation)
@@ -189,7 +189,6 @@ def generate_documentation(path_or_id, api_only=False):
     if not src_dir.exists():
         raise FileNotFoundError(f"Source directory not found at {src_dir}")
         
-    # Create docs directory if it doesn't exist
     docs_dir.mkdir(parents=True, exist_ok=True)
     
     # Initialize documentation content for games
@@ -198,8 +197,25 @@ def generate_documentation(path_or_id, api_only=False):
         "## Directory Structure\n",
         "```",
         generate_tree_structure(src_dir),
-        "```\n"
+        "```\n",
+        "## Source Files\n"  # Added section for source files
     ]
+    
+    # Add Lua files content
+    for file_path in src_dir.glob("**/*.lua"):
+        if should_skip_file(file_path):
+            continue
+        if file_path.name.startswith('.'):
+            continue
+            
+        relative_path = file_path.relative_to(src_dir)
+        print(f"Adding Lua file to documentation: {relative_path}")
+        doc_content.extend([
+            f"### {relative_path}\n",
+            "```lua",
+            read_file_content(file_path),
+            "```\n"
+        ])
     
     # Write the documentation to a file
     output_path = docs_dir / "DOCUMENTATION.md"
