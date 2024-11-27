@@ -48,6 +48,12 @@
       },
       "AssetDatabase": {
         "$path": "src/data/AssetDatabase.lua"
+      },
+      "MockPlayer": {
+        "$path": "src/server/MockPlayer.lua"
+      },
+      "MockPlayerTest": {
+        "$path": "src/server/MockPlayerTest.server.lua"
       }
     },
     "StarterPlayer": {

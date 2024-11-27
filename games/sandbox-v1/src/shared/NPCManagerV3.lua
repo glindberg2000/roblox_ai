@@ -200,28 +200,30 @@ function NPCManagerV3:setupClickDetector(npc)
 	end)
 end
 
-function NPCManagerV3:handleNPCInteraction(npc, player, message)
+function NPCManagerV3:handleNPCInteraction(npc, participant, message)
     Logger:log("INTERACTION", string.format("Handling interaction: %s with %s - Message: %s",
         npc.displayName,
-        player.Name,
+        participant.Name,
         message
     ))
 
-    if self.interactionController:isInGroupInteraction(player) then
-        Logger:log("INTERACTION", string.format("Group interaction detected for %s", player.Name))
-        self:handleGroupInteraction(npc, player, message)
+    local isPlayer = participant:IsA("Player")
+    
+    if isPlayer and self.interactionController:isInGroupInteraction(participant) then
+        Logger:log("INTERACTION", string.format("Group interaction detected for %s", participant.Name))
+        self:handleGroupInteraction(npc, participant, message)
         return
     end
 
-    if not self.interactionController:canInteract(player) then
-        local interactingNPC = self.interactionController:getInteractingNPC(player)
+    if isPlayer and not self.interactionController:canInteract(participant) then
+        local interactingNPC = self.interactionController:getInteractingNPC(participant)
         if interactingNPC ~= npc then
-            Logger:log("INTERACTION", string.format("Player %s is already interacting with another NPC", player.Name))
+            Logger:log("INTERACTION", string.format("Participant %s is already interacting with another NPC", participant.Name))
             return
         end
     else
-        if not self.interactionController:startInteraction(player, npc) then
-            Logger:log("ERROR", string.format("Failed to start interaction between %s and %s", npc.displayName, player.Name))
+        if not self.interactionController:startInteraction(participant, npc) then
+            Logger:log("ERROR", string.format("Failed to start interaction between %s and %s", npc.displayName, participant.Name))
             return
         end
     end
@@ -236,15 +238,15 @@ function NPCManagerV3:handleNPCInteraction(npc, player, message)
     end
 
     npc.isInteracting = true
-    npc.interactingPlayer = player
+    npc.interactingPlayer = participant
 
-    local response = self:getResponseFromAI(npc, player, message)
+    local response = self:getResponseFromAI(npc, participant, message)
     if response then
         npc.lastResponseTime = currentTime
-        self:processAIResponse(npc, player, response)
+        self:processAIResponse(npc, participant, response)
     else
         Logger:log("ERROR", string.format("Failed to get AI response for %s", npc.displayName))
-        self:endInteraction(npc, player)
+        self:endInteraction(npc, participant)
     end
 end
 
@@ -281,27 +283,25 @@ local function getPlayerDescription(player)
 end
 
 -- Modified getResponseFromAI to include player description
-function NPCManagerV3:getResponseFromAI(npc, player, message)
-    local interactionState = self.interactionController:getInteractionState(player)
-    local playerMemory = npc.shortTermMemory[player.UserId] or {}
+function NPCManagerV3:getResponseFromAI(npc, participant, message)
+    local interactionState = self.interactionController:getInteractionState(participant)
+    local participantMemory = npc.shortTermMemory[participant.UserId] or {}
 
-    local cacheKey = self:getCacheKey(npc, player, message)
+    local cacheKey = self:getCacheKey(npc, participant, message)
     if self.responseCache[cacheKey] then
         return self.responseCache[cacheKey]
     end
 
-    local playerDescription = getPlayerDescription(player)
-
     local data = {
         message = message,
-        player_id = tostring(player.UserId),
+        player_id = tostring(participant.UserId),  -- Map participant to player_id
         npc_id = npc.id,
         npc_name = npc.displayName,
-        system_prompt = npc.system_prompt .. "\n\nPlayer Description: " .. playerDescription,
+        system_prompt = npc.system_prompt,  -- No changes to existing structure
         perception = self:getPerceptionData(npc),
-        context = self:getPlayerContext(player),
+        context = self:getPlayerContext(participant),
         interaction_state = interactionState,
-        memory = playerMemory,
+        memory = participantMemory,
         limit = 200,
     }
 
@@ -312,10 +312,9 @@ function NPCManagerV3:getResponseFromAI(npc, player, message)
     if success then
         Logger:log("API", string.format("Raw API response: %s", response))
         local parsed = HttpService:JSONDecode(response)
-        Logger:log("API", string.format("Parsed API response: %s", HttpService:JSONEncode(parsed)))
         if parsed and parsed.message then
             self.responseCache[cacheKey] = parsed
-            npc.shortTermMemory[player.UserId] = {
+            npc.shortTermMemory[participant.UserId] = {
                 lastInteractionTime = tick(),
                 recentTopics = parsed.topics_discussed or {},
             }
@@ -330,7 +329,7 @@ function NPCManagerV3:getResponseFromAI(npc, player, message)
     return nil
 end
 
-function NPCManagerV3:processAIResponse(npc, player, response)
+function NPCManagerV3:processAIResponse(npc, participant, response)
     Logger:log("RESPONSE", string.format("Processing AI response for %s: %s",
         npc.displayName,
         HttpService:JSONEncode(response)
@@ -338,7 +337,7 @@ function NPCManagerV3:processAIResponse(npc, player, response)
 
     if response.action and response.action.type == "stop_interacting" then
         Logger:log("ACTION", string.format("Stopping interaction for %s as per AI response", npc.displayName))
-        self:endInteraction(npc, player)
+        self:endInteraction(npc, participant)
         return
     end
 
@@ -347,7 +346,7 @@ function NPCManagerV3:processAIResponse(npc, player, response)
             npc.displayName,
             response.message
         ))
-        self:displayMessage(npc, response.message, player)
+        self:displayMessage(npc, response.message, participant)
     end
 
     if response.action then
@@ -355,7 +354,7 @@ function NPCManagerV3:processAIResponse(npc, player, response)
             npc.displayName,
             HttpService:JSONEncode(response.action)
         ))
-        self:executeAction(npc, player, response.action)
+        self:executeAction(npc, participant, response.action)
     end
 
     if response.internal_state then
@@ -368,20 +367,20 @@ function NPCManagerV3:processAIResponse(npc, player, response)
 end
 
 
-function NPCManagerV3:endInteraction(npc, player)
+function NPCManagerV3:endInteraction(npc, participant)
     npc.isInteracting = false
     npc.interactingPlayer = nil
-    self.interactionController:endInteraction(player)
+    self.interactionController:endInteraction(participant)
     Logger:log("INTERACTION", string.format("Interaction ended between %s and %s", 
         npc.displayName, 
-        player.Name
+        participant.Name
     ))
 
-    -- Stop following the player if the NPC is currently following
-    if npc.isFollowing and npc.followTarget == player then
+    -- Stop following the participant if the NPC is currently following
+    if npc.isFollowing and npc.followTarget == participant then
         Logger:log("MOVEMENT", string.format("%s is stopping follow due to interaction end with %s", 
             npc.displayName, 
-            player.Name
+            participant.Name
         ))
         self:stopFollowing(npc)
     end
