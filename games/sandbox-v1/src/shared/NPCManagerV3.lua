@@ -367,14 +367,24 @@ function NPCManagerV3:processAIResponse(npc, player, response)
     end
 end
 
+
 function NPCManagerV3:endInteraction(npc, player)
-	npc.isInteracting = false
-	npc.interactingPlayer = nil
-	self.interactionController:endInteraction(player)
-	Logger:log("INTERACTION", string.format("Interaction ended between %s and %s", 
-		npc.displayName, 
-		player.Name
-	))
+    npc.isInteracting = false
+    npc.interactingPlayer = nil
+    self.interactionController:endInteraction(player)
+    Logger:log("INTERACTION", string.format("Interaction ended between %s and %s", 
+        npc.displayName, 
+        player.Name
+    ))
+
+    -- Stop following the player if the NPC is currently following
+    if npc.isFollowing and npc.followTarget == player then
+        Logger:log("MOVEMENT", string.format("%s is stopping follow due to interaction end with %s", 
+            npc.displayName, 
+            player.Name
+        ))
+        self:stopFollowing(npc)
+    end
 end
 
 function NPCManagerV3:getCacheKey(npc, player, message)
