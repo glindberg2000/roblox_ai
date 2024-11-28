@@ -6,17 +6,24 @@
 api/
 ├── app
 │   ├── __init__.py
+│   ├── ai_handler.py
 │   ├── config.py
 │   ├── conversation_manager.py
+│   ├── conversation_managerV2.py
 │   ├── dashboard_router.py
 │   ├── database.py
 │   ├── db.py
 │   ├── image_utils.py
 │   ├── main.py
+│   ├── middleware.py
+│   ├── models.py
 │   ├── paths.py
 │   ├── routers.py
+│   ├── routers_v4.py
 │   ├── security.py
+│   ├── singletons.py
 │   ├── storage.py
+│   ├── tasks.py
 │   └── utils.py
 ├── db
 │   ├── migrate.py
@@ -405,10 +412,12 @@ app.add_middleware(
 # Import routers after FastAPI initialization
 from .routers import router
 from .dashboard_router import router as dashboard_router
+from .routers_v4 import router as router_v4
 
 # Include routers
-app.include_router(router)
 app.include_router(dashboard_router)
+app.include_router(router)
+app.include_router(router_v4)
 
 # Create static directory if it doesn't exist
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
@@ -465,6 +474,65 @@ async def add_cache_control_headers(request: Request, call_next):
     return response
 
 
+```
+
+### api/app/models.py
+
+```py
+# app/models.py
+
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, Any, List, Literal
+
+class NPCAction(BaseModel):
+    type: Literal["follow", "unfollow", "stop_talking", "none"]
+    data: Optional[Dict[str, Any]] = None
+
+class NPCResponseV3(BaseModel):
+    message: str
+    action: NPCAction
+    internal_state: Optional[Dict[str, Any]] = None
+
+class PerceptionData(BaseModel):
+    visible_objects: List[str] = Field(default_factory=list)
+    visible_players: List[str] = Field(default_factory=list)
+    memory: List[Dict[str, Any]] = Field(default_factory=list)
+
+class EnhancedChatRequest(BaseModel):
+    conversation_id: Optional[str] = None
+    message: str
+    initiator_id: str
+    target_id: str
+    conversation_type: Literal["npc_user", "npc_npc", "group"]
+    context: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    system_prompt: str
+
+class ConversationResponse(BaseModel):
+    conversation_id: str
+    message: str
+    action: NPCAction
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+class ConversationMetrics:
+    def __init__(self):
+        self.total_conversations = 0
+        self.active_conversations = 0
+        self.completed_conversations = 0
+        self.average_response_time = 0.0
+        self.total_messages = 0
+        
+    @property
+    def dict(self):
+        return self.model_dump()
+        
+    def model_dump(self):
+        return {
+            "total_conversations": self.total_conversations,
+            "active_conversations": self.active_conversations,
+            "completed_conversations": self.completed_conversations,
+            "average_response_time": self.average_response_time,
+            "total_messages": self.total_messages
+        }
 ```
 
 ### api/app/config.py
@@ -1421,6 +1489,18 @@ class FileStorageManager:
 
 ```
 
+### api/app/singletons.py
+
+```py
+from .conversation_managerV2 import EnhancedConversationManager
+
+# Create singleton instances
+conversation_manager = EnhancedConversationManager()
+
+# Export for use throughout the application
+__all__ = ['conversation_manager']
+```
+
 ### api/app/image_utils.py
 
 ```py
@@ -1540,6 +1620,137 @@ async def get_asset_description(asset_id: str, name: str) -> dict:
         return {"error": f"Failed to process request: {str(e)}"}
 ```
 
+### api/app/middleware.py
+
+```py
+import time
+import logging
+from typing import Dict, Any, Optional
+from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
+from datetime import datetime
+
+logger = logging.getLogger("ella_app")
+
+class ConversationMetrics:
+    def __init__(self):
+        self.total_conversations = 0
+        self.successful_conversations = 0
+        self.failed_conversations = 0
+        self.average_duration = 0.0
+        self.conversation_types: Dict[str, int] = {
+            "npc_user": 0,
+            "npc_npc": 0,
+            "group": 0
+        }
+
+class ConversationMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app):
+        super().__init__(app)
+        self.metrics = ConversationMetrics()
+        self.active_conversations: Dict[str, Dict[str, Any]] = {}
+
+    async def dispatch(self, request: Request, call_next):
+        # Only track conversation endpoints
+        if not request.url.path.startswith("/robloxgpt/v"):
+            return await call_next(request)
+
+        start_time = time.time()
+        conversation_id = None
+
+        try:
+            # Extract conversation details from request
+            body = await request.json()
+            conversation_id = body.get("conversation_id")
+            conversation_type = body.get("conversation_type", "npc_user")
+
+            # Track conversation start
+            if conversation_id:
+                self.active_conversations[conversation_id] = {
+                    "start_time": start_time,
+                    "type": conversation_type,
+                    "message_count": 0
+                }
+
+            # Process the request
+            response = await call_next(request)
+
+            # Update metrics on successful response
+            if response.status_code == 200:
+                self._update_metrics(
+                    conversation_id,
+                    conversation_type,
+                    start_time,
+                    success=True
+                )
+            else:
+                self._update_metrics(
+                    conversation_id,
+                    conversation_type,
+                    start_time,
+                    success=False
+                )
+
+            return response
+
+        except Exception as e:
+            logger.error(f"Error in conversation middleware: {e}")
+            self._update_metrics(
+                conversation_id,
+                "unknown",
+                start_time,
+                success=False
+            )
+            raise
+
+    def _update_metrics(
+        self,
+        conversation_id: Optional[str],
+        conversation_type: str,
+        start_time: float,
+        success: bool
+    ):
+        """Update conversation metrics"""
+        duration = time.time() - start_time
+        
+        # Update total counts
+        self.metrics.total_conversations += 1
+        if success:
+            self.metrics.successful_conversations += 1
+        else:
+            self.metrics.failed_conversations += 1
+
+        # Update conversation type counts
+        if conversation_type in self.metrics.conversation_types:
+            self.metrics.conversation_types[conversation_type] += 1
+
+        # Update average duration
+        current_avg = self.metrics.average_duration
+        total = self.metrics.total_conversations
+        self.metrics.average_duration = (
+            (current_avg * (total - 1) + duration) / total
+        )
+
+        # Log metrics
+        logger.info(
+            f"Conversation processed - "
+            f"ID: {conversation_id}, "
+            f"Type: {conversation_type}, "
+            f"Duration: {duration:.2f}s, "
+            f"Success: {success}"
+        )
+
+        # Remove from active conversations if completed
+        if conversation_id and conversation_id in self.active_conversations:
+            conv_data = self.active_conversations.pop(conversation_id)
+            logger.debug(
+                f"Conversation completed - "
+                f"ID: {conversation_id}, "
+                f"Messages: {conv_data['message_count']}, "
+                f"Duration: {duration:.2f}s"
+            ) 
+```
+
 ### api/app/security.py
 
 ```py
@@ -1560,10 +1771,387 @@ def check_allowed_ips(request: Request):
         )
 ```
 
+### api/app/tasks.py
+
+```py
+import asyncio
+import logging
+from datetime import datetime, timedelta
+from typing import Optional
+from .conversation_managerV2 import ConversationManagerV2
+
+logger = logging.getLogger("ella_app")
+
+class CleanupTasks:
+    def __init__(self, conversation_manager: ConversationManagerV2):
+        self.conversation_manager = conversation_manager
+        self.cleanup_interval = 300  # 5 minutes
+        self.task: Optional[asyncio.Task] = None
+        self.last_cleanup = datetime.now()
+
+    async def start_cleanup_task(self):
+        """Start the background cleanup task"""
+        if self.task is None or self.task.done():
+            self.task = asyncio.create_task(self._cleanup_loop())
+            logger.info("Started conversation cleanup task")
+
+    async def stop_cleanup_task(self):
+        """Stop the background cleanup task"""
+        if self.task and not self.task.done():
+            self.task.cancel()
+            try:
+                await self.task
+            except asyncio.CancelledError:
+                pass
+            logger.info("Stopped conversation cleanup task")
+
+    async def _cleanup_loop(self):
+        """Main cleanup loop"""
+        while True:
+            try:
+                await self._perform_cleanup()
+                await asyncio.sleep(self.cleanup_interval)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in cleanup task: {e}")
+                await asyncio.sleep(60)  # Wait before retrying
+
+    async def _perform_cleanup(self):
+        """Perform the actual cleanup operations"""
+        try:
+            start_time = datetime.now()
+            cleaned = self.conversation_manager.cleanup_expired()
+            duration = (datetime.now() - start_time).total_seconds()
+            
+            logger.info(
+                f"Cleanup completed: removed {cleaned} expired conversations "
+                f"in {duration:.2f} seconds"
+            )
+            self.last_cleanup = datetime.now()
+        except Exception as e:
+            logger.error(f"Error during conversation cleanup: {e}") 
+```
+
 ### api/app/__init__.py
 
 ```py
 
+```
+
+### api/app/routers_v4.py
+
+```py
+# app/routers_v4.py
+
+import logging
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
+import os
+
+from .models import (
+    EnhancedChatRequest, 
+    ConversationResponse, 
+    NPCResponseV3, 
+    NPCAction
+)
+from .ai_handler import AIHandler
+from .conversation_managerV2 import ConversationManagerV2
+from .config import NPC_SYSTEM_PROMPT_ADDITION
+
+# Initialize logging
+logger = logging.getLogger("ella_app")
+
+# Initialize router with v4 prefix
+router = APIRouter(prefix="/v4")
+
+# Initialize managers
+conversation_manager = ConversationManagerV2()
+ai_handler = AIHandler(api_key=os.getenv("OPENAI_API_KEY"))
+
+@router.post("/chat")
+async def enhanced_chat_endpoint(request: EnhancedChatRequest):
+    """
+    Enhanced chat endpoint supporting different conversation types
+    and persistent conversation state
+    """
+    try:
+        logger.info(f"V4 Chat request: {request.conversation_type} from {request.initiator_id}")
+
+        # Validate conversation type
+        if request.conversation_type not in ["npc_user", "npc_npc", "group"]:
+            raise HTTPException(status_code=422, detail="Invalid conversation type")
+
+        # Get or create conversation
+        conversation_id = request.conversation_id
+        if not conversation_id:
+            # Create participants with appropriate types based on conversation_type
+            initiator_data = {
+                "id": request.initiator_id,
+                "type": "npc" if request.conversation_type.startswith("npc") else "player",
+                "name": request.context.get("initiator_name", f"Entity_{request.initiator_id}")
+            }
+            
+            target_data = {
+                "id": request.target_id,
+                "type": "npc" if request.conversation_type.endswith("npc") else "player",
+                "name": request.context.get("target_name", f"Entity_{request.target_id}")
+            }
+            
+            # Create Participant objects before passing to create_conversation
+            conversation_id = conversation_manager.create_conversation(
+                type=request.conversation_type,
+                participant1_data=initiator_data,
+                participant2_data=target_data
+            )
+            
+            if not conversation_id:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Cannot create new conversation - rate limit or participant limit reached"
+                )
+
+        # Get conversation history
+        history = conversation_manager.get_history(conversation_id)
+        
+        # Prepare context for AI
+        context_summary = f"""
+        Conversation type: {request.conversation_type}
+        Initiator: {request.context.get('initiator_name', request.initiator_id)}
+        Target: {request.context.get('target_name', request.target_id)}
+        """
+
+        if request.context:
+            context_details = "\n".join(f"{k}: {v}" for k, v in request.context.items() 
+                                      if k not in ['initiator_name', 'target_name'])
+            if context_details:
+                context_summary += f"\nAdditional context:\n{context_details}"
+
+        # Prepare messages for AI
+        messages = [
+            {"role": "system", "content": f"{request.system_prompt}\n\n{NPC_SYSTEM_PROMPT_ADDITION}\n\nContext: {context_summary}"},
+            *[{"role": "user" if i % 2 == 0 else "assistant", "content": msg} 
+              for i, msg in enumerate(history)],
+            {"role": "user", "content": request.message}
+        ]
+
+        # Mock AI response for testing
+        if os.getenv("TESTING"):
+            response = NPCResponseV3(
+                message="Test response",
+                action=NPCAction(type="none")
+            )
+        else:
+            response = await ai_handler.get_response(
+                messages=messages,
+                system_prompt=request.system_prompt
+            )
+
+        # Add messages to conversation history
+        conversation_manager.add_message(
+            conversation_id,
+            request.initiator_id,
+            request.message
+        )
+        
+        if response.message:
+            conversation_manager.add_message(
+                conversation_id,
+                request.target_id,
+                response.message
+            )
+
+        # Check for conversation end
+        if response.action and response.action.type == "stop_talking":
+            conversation_manager.end_conversation(conversation_id)
+            logger.info(f"Ending conversation {conversation_id} due to stop_talking action")
+
+        # Get conversation metadata
+        metadata = conversation_manager.get_conversation_context(conversation_id)
+
+        return ConversationResponse(
+            conversation_id=conversation_id,
+            message=response.message,
+            action=response.action,
+            metadata=metadata
+        )
+
+    except Exception as e:
+        logger.error(f"Error in v4 chat endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/conversations/{conversation_id}")
+async def end_conversation_endpoint(conversation_id: str):
+    """Manually end a conversation"""
+    try:
+        conversation_manager.end_conversation(conversation_id)
+        return JSONResponse({"status": "success", "message": "Conversation ended"})
+    except Exception as e:
+        logger.error(f"Error ending conversation: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/conversations/{participant_id}")
+async def get_participant_conversations(participant_id: str):
+    """Get all active conversations for a participant"""
+    try:
+        conversations = conversation_manager.get_active_conversations(participant_id)
+        return JSONResponse({
+            "participant_id": participant_id,
+            "conversations": [
+                conversation_manager.get_conversation_context(conv_id)
+                for conv_id in conversations
+            ]
+        })
+    except Exception as e:
+        logger.error(f"Error getting conversations: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/metrics")
+async def get_metrics():
+    """Get conversation metrics"""
+    return JSONResponse({
+        "conversation_metrics": conversation_manager.metrics.dict()
+    })
+```
+
+### api/app/ai_handler.py
+
+```py
+# app/ai_handler.py
+
+import asyncio
+import logging
+from typing import List, Dict, Any
+from openai import OpenAI
+from pydantic import BaseModel, Field
+from datetime import datetime
+
+logger = logging.getLogger("ella_app")
+
+class NPCAction(BaseModel):
+    type: str = Field(..., pattern="^(follow|unfollow|stop_talking|none)$")
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+class NPCResponse(BaseModel):
+    message: str
+    action: NPCAction
+    internal_state: Dict[str, Any] = Field(default_factory=dict)
+
+class AIHandler:
+    def __init__(self, api_key: str):
+        self.client = OpenAI(api_key=api_key)
+        self.response_cache = {}
+        self.max_parallel_requests = 5
+        self.semaphore = asyncio.Semaphore(self.max_parallel_requests)
+
+        # Define the response schema once
+        self.response_schema = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "npc_response",
+                "description": "NPC response format including message and action",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "description": "The NPC's spoken response"
+                        },
+                        "action": {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["follow", "unfollow", "stop_talking", "none"],
+                                    "description": "The type of action to take"
+                                },
+                                "data": {
+                                    "type": "object",
+                                    "description": "Additional data for the action",
+                                    "default": {}
+                                }
+                            },
+                            "required": ["type"],
+                            "additionalProperties": False
+                        },
+                        "internal_state": {
+                            "type": "object",
+                            "description": "NPC's internal state updates",
+                            "default": {}
+                        }
+                    },
+                    "required": ["message", "action"],
+                    "additionalProperties": False
+                }
+            }
+        }
+
+    async def get_response(
+        self,
+        messages: List[Dict[str, str]],
+        system_prompt: str,
+        max_tokens: int = 200
+    ) -> NPCResponse:
+        """Get structured response from OpenAI"""
+        try:
+            async with self.semaphore:
+                completion = await asyncio.to_thread(
+                    self.client.chat.completions.create,
+                    model="gpt-4o-mini",  # Update to newer model when available
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        *messages
+                    ],
+                    max_tokens=max_tokens,
+                    response_format=self.response_schema,
+                    temperature=0.7
+                )
+
+                # Check for refusal
+                if hasattr(completion.choices[0].message, 'refusal') and completion.choices[0].message.refusal:
+                    logger.warning("AI refused to respond")
+                    return NPCResponse(
+                        message="I cannot respond to that request.",
+                        action=NPCAction(type="none")
+                    )
+
+                # Check for incomplete response
+                if completion.choices[0].finish_reason != "stop":
+                    logger.warning(f"Response incomplete: {completion.choices[0].finish_reason}")
+                    return NPCResponse(
+                        message="I apologize, but I was unable to complete my response.",
+                        action=NPCAction(type="none")
+                    )
+
+                # Parse the response into our Pydantic model
+                response_data = completion.choices[0].message.content
+                logger.debug(f"Raw AI response: {response_data}")
+                
+                return NPCResponse.parse_raw(response_data)
+
+        except Exception as e:
+            logger.error(f"Error getting AI response: {str(e)}", exc_info=True)
+            return NPCResponse(
+                message="Hello! How can I help you today?",
+                action=NPCAction(type="none")
+            )
+
+    async def process_parallel_responses(
+        self,
+        requests: List[Dict[str, Any]]
+    ) -> List[NPCResponse]:
+        """Process multiple requests in parallel"""
+        tasks = [
+            self.get_response(
+                req["messages"],
+                req["system_prompt"],
+                req.get("max_tokens", 200)
+            )
+            for req in requests
+        ]
+        
+        return await asyncio.gather(*tasks)
 ```
 
 ### api/app/routers.py
@@ -2821,6 +3409,240 @@ class ConversationManager:
         conversation, _ = self.conversations[key]
         conversation.append(message)
         self.conversations[key] = (conversation[-50:], datetime.now())
+```
+
+### api/app/conversation_managerV2.py
+
+```py
+# app/conversation_managerV2.py
+
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Literal, Any
+from pydantic import BaseModel, ConfigDict
+from .models import ConversationMetrics
+import uuid
+import logging
+
+logger = logging.getLogger("roblox_app")
+
+class Participant(BaseModel):
+    id: str
+    type: Literal["npc", "player"]
+    name: str
+
+class Message(BaseModel):
+    sender_id: str
+    content: str
+    timestamp: datetime
+
+class Conversation(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    id: str
+    type: Literal["npc_user", "npc_npc", "group"]
+    participants: Dict[str, Participant]
+    messages: List[Message]
+    created_at: datetime
+    last_update: datetime
+    metadata: Dict[str, Any] = {}
+
+class ConversationMetrics:
+    def __init__(self):
+        self.total_conversations = 0
+        self.successful_conversations = 0
+        self.failed_conversations = 0
+        self.average_duration = 0.0
+        self.active_conversations = 0
+        self.completed_conversations = 0
+        self.average_response_time = 0.0
+        self.total_messages = 0
+
+    def dict(self):
+        return {
+            "total_conversations": self.total_conversations,
+            "successful_conversations": self.successful_conversations,
+            "failed_conversations": self.failed_conversations,
+            "average_duration": self.average_duration,
+            "active_conversations": self.active_conversations,
+            "completed_conversations": self.completed_conversations,
+            "average_response_time": self.average_response_time,
+            "total_messages": self.total_messages
+        }
+
+class ConversationManagerV2:
+    def __init__(self):
+        self.conversations: Dict[str, Conversation] = {}
+        self.participant_conversations: Dict[str, List[str]] = {}
+        self.expiry_time = timedelta(minutes=30)
+        self.metrics = ConversationMetrics()
+
+    def create_conversation(
+        self,
+        type: Literal["npc_user", "npc_npc", "group"],
+        participant1_data: Dict[str, Any],
+        participant2_data: Dict[str, Any]
+    ) -> str:
+        """Create a new conversation between participants"""
+        try:
+            # Create Participant objects from dictionaries
+            participant1 = Participant(
+                id=participant1_data["id"],
+                type=participant1_data.get("type", "npc"),
+                name=participant1_data.get("name", f"Entity_{participant1_data['id']}")
+            )
+            
+            participant2 = Participant(
+                id=participant2_data["id"],
+                type=participant2_data.get("type", "player"),
+                name=participant2_data.get("name", f"Entity_{participant2_data['id']}")
+            )
+
+            conversation_id = str(uuid.uuid4())
+            now = datetime.now()
+            
+            conversation = Conversation(
+                id=conversation_id,
+                type=type,
+                participants={
+                    participant1.id: participant1,
+                    participant2.id: participant2
+                },
+                messages=[],
+                created_at=now,
+                last_update=now,
+                metadata={}
+            )
+            
+            # Store conversation
+            self.conversations[conversation_id] = conversation
+            
+            # Update participant indexes
+            for p_id in [participant1.id, participant2.id]:
+                if p_id not in self.participant_conversations:
+                    self.participant_conversations[p_id] = []
+                self.participant_conversations[p_id].append(conversation_id)
+            
+            # Update metrics
+            self.metrics.total_conversations += 1
+            self.metrics.active_conversations += 1
+                
+            logger.info(f"Created conversation {conversation_id} between {participant1.name} and {participant2.name}")
+            return conversation_id
+            
+        except Exception as e:
+            logger.error(f"Error creating conversation: {e}")
+            return None
+
+    def add_message(self, conversation_id: str, sender_id: str, content: str) -> bool:
+        """Add a message to a conversation"""
+        try:
+            conversation = self.conversations.get(conversation_id)
+            if not conversation:
+                return False
+                
+            message = Message(
+                sender_id=sender_id,
+                content=content,
+                timestamp=datetime.now()
+            )
+            
+            conversation.messages.append(message)
+            conversation.last_update = datetime.now()
+            
+            # Update metrics
+            self.metrics.total_messages += 1
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error adding message: {e}")
+            return False
+
+    def end_conversation(self, conversation_id: str) -> bool:
+        """End and clean up a conversation"""
+        try:
+            conversation = self.conversations.get(conversation_id)
+            if not conversation:
+                return False
+                
+            # Update metrics
+            self.metrics.active_conversations -= 1
+            self.metrics.completed_conversations += 1
+            
+            # Calculate response time metrics
+            if len(conversation.messages) > 1:
+                total_time = (conversation.last_update - conversation.created_at).total_seconds()
+                avg_time = total_time / len(conversation.messages)
+                self._update_average_response_time(avg_time)
+            
+            # Remove from participant tracking
+            for participant_id in conversation.participants:
+                if participant_id in self.participant_conversations:
+                    self.participant_conversations[participant_id].remove(conversation_id)
+                    
+            # Remove conversation
+            del self.conversations[conversation_id]
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error ending conversation: {e}")
+            return False
+
+    def _update_average_response_time(self, response_time: float):
+        """Update average response time metric"""
+        current = self.metrics.average_response_time
+        total = self.metrics.total_messages
+        if total > 0:
+            self.metrics.average_response_time = (current * (total - 1) + response_time) / total
+        else:
+            self.metrics.average_response_time = response_time
+
+    def get_history(self, conversation_id: str, limit: Optional[int] = None) -> List[str]:
+        """Get conversation history as a list of messages"""
+        conversation = self.conversations.get(conversation_id)
+        if not conversation:
+            return []
+            
+        messages = [msg.content for msg in conversation.messages]
+        if limit:
+            messages = messages[-limit:]
+            
+        return messages
+
+    def get_conversation_context(self, conversation_id: str) -> Dict:
+        """Get full conversation context"""
+        conversation = self.conversations.get(conversation_id)
+        if not conversation:
+            return {}
+            
+        return {
+            "type": conversation.type,
+            "participants": {
+                pid: participant.model_dump() 
+                for pid, participant in conversation.participants.items()
+            },
+            "created_at": conversation.created_at.isoformat(),
+            "last_update": conversation.last_update.isoformat(),
+            "message_count": len(conversation.messages),
+            "metadata": conversation.metadata
+        }
+
+    def get_active_conversations(self, participant_id: str) -> List[str]:
+        """Get all active conversations for a participant"""
+        return self.participant_conversations.get(participant_id, [])
+
+    def cleanup_expired(self) -> int:
+        """Remove expired conversations"""
+        now = datetime.now()
+        expired = []
+        
+        for conv_id, conv in self.conversations.items():
+            if now - conv.last_update > self.expiry_time:
+                expired.append(conv_id)
+                
+        for conv_id in expired:
+            self.end_conversation(conv_id)
+            
+        return len(expired)
 ```
 
 ### api/static/css/dashboard.css

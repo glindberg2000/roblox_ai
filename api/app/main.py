@@ -51,10 +51,12 @@ app.add_middleware(
 # Import routers after FastAPI initialization
 from .routers import router
 from .dashboard_router import router as dashboard_router
+from .routers_v4 import router as router_v4
 
 # Include routers
-app.include_router(router)
 app.include_router(dashboard_router)
+app.include_router(router)
+app.include_router(router_v4)
 
 # Create static directory if it doesn't exist
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
