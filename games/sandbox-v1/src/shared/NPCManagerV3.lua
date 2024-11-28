@@ -64,6 +64,8 @@ function NPCManagerV3.getInstance()
         instance.npcs = {}
         instance.responseCache = {}
         instance.interactionController = require(game.ServerScriptService.InteractionController).new()
+        instance.activeInteractions = {} -- Track ongoing interactions
+        instance.movementStates = {} -- Track movement states per NPC
         Logger:log("SYSTEM", "Initializing NPCManagerV3")
         instance:loadNPCDatabase()
     end
@@ -354,60 +356,89 @@ function NPCManagerV3:updateNPCVision(npc)
 end
 
 -- Update helper function to check if participant is NPC
+-- Replace the isNPCParticipant function with this improved version
 function NPCManagerV3:isNPCParticipant(participant)
-    return participant and (participant.Type == "npc" or participant.npcId ~= nil)
+    if not participant then return false end
+    
+    -- Check if it's a mock NPC participant
+    if participant.npcId then return true end
+    
+    -- Check if it's a Player instance
+    if typeof(participant) == "Instance" and participant:IsA("Player") then
+        return false
+    end
+    
+    -- For any other case, check for NPC-specific properties
+    return participant.GetParticipantType and participant:GetParticipantType() == "npc"
 end
 
 function NPCManagerV3:displayMessage(npc, message, recipient)
-    -- Handle NPC-to-NPC chat
-    if self:isNPCParticipant(recipient) then
-        Logger:log("CHAT", string.format("NPC %s sending message to NPC %s: %s",
+    -- Handle player messages
+    if typeof(recipient) == "Instance" and recipient:IsA("Player") then
+        Logger:log("CHAT", string.format("NPC %s sending message to player %s: %s",
             npc.displayName,
             recipient.Name,
             message
         ))
         
-        -- Create chat bubble - just use the simple direct method that works
+        -- Create chat bubble
         if npc.model and npc.model:FindFirstChild("Head") then
             game:GetService("Chat"):Chat(npc.model.Head, message)
+            Logger:log("CHAT", string.format("Created chat bubble for NPC: %s", npc.displayName))
         end
         
-        -- Handle the recipient NPC's response
-        local recipientNPC = self.npcs[recipient.npcId]
-        if recipientNPC then
-            local responderMock = self:createMockParticipant(npc)
-            wait(1) -- Add small delay between messages
-            self:handleNPCInteraction(recipientNPC, responderMock, message)
+        -- Send to player's chat window
+        NPCChatEvent:FireClient(recipient, {
+            npcName = npc.displayName,
+            message = message,
+            type = "chat"
+        })
+        
+        -- Record in chat history
+        table.insert(npc.chatHistory, {
+            sender = npc.displayName,
+            recipient = recipient.Name,
+            message = message,
+            timestamp = os.time()
+        })
+        return
+    end
+    
+    -- Handle NPC-to-NPC messages
+    if self:isNPCParticipant(recipient) then
+        Logger:log("CHAT", string.format("NPC %s to NPC %s: %s",
+            npc.displayName,
+            recipient.displayName or recipient.Name,
+            message
+        ))
+        
+        -- Create chat bubble
+        if npc.model and npc.model:FindFirstChild("Head") then
+            game:GetService("Chat"):Chat(npc.model.Head, message)
+            Logger:log("CHAT", string.format("Created chat bubble for NPC: %s", npc.displayName))
+        end
+        
+        -- Fire event to all clients for redundancy
+        NPCChatEvent:FireAllClients({
+            npcName = npc.displayName,
+            message = message,
+            type = "npc_chat"
+        })
+        
+        -- Handle recipient response after a small delay
+        if recipient.npcId then
+            local recipientNPC = self.npcs[recipient.npcId]
+            if recipientNPC then
+                task.delay(1, function()
+                    self:handleNPCInteraction(recipientNPC, self:createMockParticipant(npc), message)
+                end)
+            end
         end
         return
     end
-
-    -- Handle NPC-to-Player chat
-    Logger:log("CHAT", string.format("NPC %s sending message to %s: %s",
-        npc.displayName,
-        recipient.Name,
-        message
-    ))
-
-    -- Create chat bubble
-    if npc.model and npc.model:FindFirstChild("Head") then
-        game:GetService("Chat"):Chat(npc.model.Head, message)
-    end
-
-    -- Send to player's chat window
-    NPCChatEvent:FireClient(recipient, {
-        npcName = npc.displayName,
-        message = message,
-        type = "chat"
-    })
-
-    -- Record chat history
-    table.insert(npc.chatHistory, {
-        sender = npc.displayName,
-        recipient = recipient.Name,
-        message = message,
-        timestamp = os.time()
-    })
+    
+    -- Log if recipient type is unknown
+    Logger:log("ERROR", string.format("Unknown recipient type for message from %s", npc.displayName))
 end
 
 -- And modify processAIResponse to directly use displayMessage
@@ -623,34 +654,204 @@ function NPCManagerV3:stopFollowing(npc)
     Logger:log("MOVEMENT", string.format("%s stopped following and movement halted", npc.displayName))
 end
 
+function NPCManagerV3:handleNPCInteraction(npc, participant, message)
+    Logger:log("INTERACTION", string.format("Handling interaction: %s with %s - Message: %s",
+        npc.displayName,
+        tostring(participant.Name),
+        message
+    ))
+
+    -- Generate unique interaction ID
+    local interactionId = HttpService:GenerateGUID(false)
+    
+    -- Update interaction state based on participant type
+    if typeof(participant) == "Instance" and participant:IsA("Player") then
+        -- Player interaction handling
+        npc.isInteracting = true
+        npc.interactingPlayer = participant
+        self:setNPCMovementState(npc, "locked", interactionId)
+        
+        -- Notify client that conversation started
+        NPCChatEvent:FireClient(participant, {
+            npcName = npc.displayName,
+            type = "started_conversation"
+        })
+    elseif self:isNPCParticipant(participant) then
+        -- NPC-to-NPC interaction handling
+        local otherNPC = self.npcs[participant.npcId]
+        if otherNPC then
+            npc.isInteracting = true
+            otherNPC.isInteracting = true
+            npc.interactingPlayer = participant
+            otherNPC.interactingPlayer = self:createMockParticipant(npc)
+            
+            self:setNPCMovementState(npc, "locked", interactionId)
+            self:setNPCMovementState(otherNPC, "locked", interactionId)
+        end
+    else
+        Logger:warn("Unknown participant type in handleNPCInteraction")
+        return
+    end
+
+    -- Get and process AI response
+    local response = self:getResponseFromAI(npc, participant, message)
+    if response then
+        self:processAIResponse(npc, participant, response)
+    else
+        Logger:error(string.format("Failed to get AI response for %s", npc.displayName))
+        self:endInteraction(npc, participant)
+    end
+end
+
+function NPCManagerV3:handlePlayerInteraction(npc, player, message, interactionId)
+    -- Lock only the NPC, not the player
+    self:setNPCMovementState(npc, "locked", interactionId)
+    
+    -- Update NPC state
+    npc.isInteracting = true
+    npc.interactingPlayer = player
+
+    -- Fire client event for chat window
+    NPCChatEvent:FireClient(player, {
+        npcName = npc.displayName,
+        message = message,
+        type = "started_conversation"
+    })
+end
+
+function NPCManagerV3:handleNPCToNPCInteraction(npc1, npc2Participant, message, interactionId)
+    local npc2 = self.npcs[npc2Participant.npcId]
+    if not npc2 then return end
+
+    -- Lock both NPCs
+    self:setNPCMovementState(npc1, "locked", interactionId)
+    self:setNPCMovementState(npc2, "locked", interactionId)
+
+    -- Update states
+    npc1.isInteracting = true
+    npc2.isInteracting = true
+    npc1.interactingPlayer = npc2Participant
+    npc2.interactingPlayer = self:createMockParticipant(npc1)
+end
+
+function NPCManagerV3:setNPCMovementState(npc, state, interactionId)
+    if not npc or not npc.model then return end
+    
+    -- Store previous state if not already stored
+    if not self.movementStates[npc.id] then
+        self.movementStates[npc.id] = {
+            walkSpeed = npc.model.Humanoid.WalkSpeed,
+            state = "free",
+            interactionId = nil
+        }
+    end
+
+    local currentState = self.movementStates[npc.id]
+    
+    if state == "locked" then
+        currentState.state = "locked"
+        currentState.interactionId = interactionId
+        npc.model.Humanoid.WalkSpeed = 0
+    elseif state == "free" then
+        currentState.state = "free"
+        currentState.interactionId = nil
+        npc.model.Humanoid.WalkSpeed = currentState.walkSpeed
+    end
+    
+    Logger:log("MOVEMENT", string.format("Set NPC %s movement state to %s", npc.displayName, state))
+end
+
+function NPCManagerV3:endInteraction(npc, participant, interactionId)
+    if not interactionId then
+        Logger:warn("No interactionId provided to endInteraction")
+        return
+    end
+
+    -- Clean up interaction tracking
+    self.activeInteractions[interactionId] = nil
+
+    -- Free the initiating NPC
+    self:setNPCMovementState(npc, "free")
+    npc.isInteracting = false
+    npc.interactingPlayer = nil
+
+    -- If NPC-to-NPC interaction, free the other NPC
+    if self:isNPCParticipant(participant) then
+        local otherNPC = self.npcs[participant.npcId]
+        if otherNPC then
+            self:setNPCMovementState(otherNPC, "free")
+            otherNPC.isInteracting = false
+            otherNPC.interactingPlayer = nil
+        end
+    end
+
+    -- If player interaction, notify client
+    if typeof(participant) == "Instance" and participant:IsA("Player") then
+        NPCChatEvent:FireClient(participant, {
+            npcName = npc.displayName,
+            type = "ended_conversation"
+        })
+    end
+
+    Logger:log("INTERACTION", string.format("Ended interaction between %s and %s (ID: %s)", 
+        npc.displayName, 
+        tostring(participant.Name),
+        interactionId
+    ))
+end
+
+function NPCManagerV3:cleanupStaleInteractions()
+    local currentTime = tick()
+    local staleThreshold = 300 -- 5 minutes
+
+    for interactionId, interaction in pairs(self.activeInteractions) do
+        if currentTime - interaction.lastUpdateTime > staleThreshold then
+            Logger:warn(string.format("Cleaning up stale interaction: %s", interactionId))
+            self:endInteraction(interaction.npc, interaction.participant, interactionId)
+        end
+    end
+end
+
 function NPCManagerV3:updateNPCState(npc)
     if not npc.model or not npc.model.PrimaryPart then return end
     
     self:updateNPCVision(npc)
     
-    -- Only check for NPC interactions if not already interacting
-    if not npc.isInteracting then
-        self:checkNPCInteractions(npc)
-    end
-    
     local humanoid = npc.model:FindFirstChild("Humanoid")
+    if not humanoid then return end
 
-    if npc.isFollowing then
+    -- Check if the NPC should be freed from interaction
+    if npc.isInteracting then
+        if npc.interactingPlayer then
+            local shouldEndInteraction = false
+            
+            if self:isNPCParticipant(npc.interactingPlayer) then
+                -- For NPC-to-NPC, check if other NPC is still valid/interacting
+                local otherNPC = self.npcs[npc.interactingPlayer.npcId]
+                if not otherNPC or not otherNPC.isInteracting then
+                    shouldEndInteraction = true
+                end
+            else
+                -- For player interactions, check range
+                if not self:isPlayerInRange(npc, npc.interactingPlayer) then
+                    shouldEndInteraction = true
+                end
+            end
+            
+            if shouldEndInteraction then
+                self:endInteraction(npc, npc.interactingPlayer)
+            end
+        end
+    elseif npc.isFollowing then
         self:updateFollowing(npc)
-        if humanoid then
-            AnimationManager:playAnimation(humanoid, "walk")
-        end
-    elseif npc.isInteracting then
-        if npc.interactingPlayer and not self:isPlayerInRange(npc, npc.interactingPlayer) then
-            Logger:log("INTERACTION", string.format("%s moved out of range, ending interaction", npc.interactingPlayer.Name))
-            self:endInteraction(npc, npc.interactingPlayer)
-        end
+        AnimationManager:playAnimation(humanoid, "walk")
     elseif not npc.isMoving then
-        -- Trigger idle animation if the NPC is not moving or following
-        if humanoid then
+        -- Only try to walk if completely free
+        if math.random() < 0.05 then  -- 5% chance each update
+            self:randomWalk(npc)
+        else
             AnimationManager:playAnimation(humanoid, "idle")
         end
-        self:randomWalk(npc)
     end
 end
 
@@ -970,45 +1171,7 @@ function NPCManagerV3:checkNPCInteractions(npc)
     end
 end
 
-function NPCManagerV3:handleNPCInteraction(npc, participant, message)
-    Logger:log("INTERACTION", string.format("Handling interaction: %s with %s - Message: %s",
-        npc.displayName,
-        participant.Name,
-        message
-    ))
 
-    -- Only lock the specific NPCs involved in this interaction
-    if self:isNPCParticipant(participant) then
-        -- For NPC-to-NPC interaction, lock both NPCs
-        local participantNPC = self.npcs[participant.npcId]
-        if participantNPC then
-            -- Lock both NPCs in conversation
-            npc.isInteracting = true
-            participantNPC.isInteracting = true
-            
-            -- Stop their movement
-            self:lockNPCInPlace(npc)
-            self:lockNPCInPlace(participantNPC)
-            
-            -- Store who they're talking to
-            npc.interactingPlayer = participant
-            participantNPC.interactingPlayer = self:createMockParticipant(npc)
-        end
-    else
-        -- For player interactions, only lock the NPC
-        npc.isInteracting = true
-        npc.interactingPlayer = participant
-        self:lockNPCInPlace(npc)
-    end
-
-    local response = self:getResponseFromAI(npc, participant, message)
-    if response then
-        self:processAIResponse(npc, participant, response)
-    else
-        Logger:log("ERROR", string.format("Failed to get AI response for %s", npc.displayName))
-        self:endInteraction(npc, participant)
-    end
-end
 
 function NPCManagerV3:getResponseFromAI(npc, participant, message)
     local interactionState = self.interactionController:getInteractionState(participant)
