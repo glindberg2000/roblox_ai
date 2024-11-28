@@ -12,42 +12,41 @@ LocalDB.Name = "LocalDB"
 local AssetLookup = {}
 
 -- Function to store asset descriptions in ReplicatedStorage
+-- Function to store asset descriptions in ReplicatedStorage
 local function storeAssetDescriptions(assetId, name, description, imageUrl)
-	local assetEntry = LocalDB:FindFirstChild(assetId)
-	if assetEntry then
-		assetEntry:Destroy() -- Remove existing entry to ensure we're updating all fields
-	end
+    local assetEntry = LocalDB:FindFirstChild(assetId)
+    if assetEntry then
+        assetEntry:Destroy() -- Remove existing entry to ensure we're updating all fields
+    end
 
-	assetEntry = Instance.new("Folder")
-	assetEntry.Name = assetId
-	assetEntry.Parent = LocalDB
+    assetEntry = Instance.new("Folder")
+    assetEntry.Name = assetId
+    assetEntry.Parent = LocalDB
 
-	local nameValue = Instance.new("StringValue")
-	nameValue.Name = "Name"
-	nameValue.Value = name
-	nameValue.Parent = assetEntry
+    -- Create and set name value with fallback
+    local nameValue = Instance.new("StringValue")
+    nameValue.Name = "Name"
+    nameValue.Value = name or "Unknown Asset"
+    nameValue.Parent = assetEntry
 
-	local descValue = Instance.new("StringValue")
-	descValue.Name = "Description"
-	descValue.Value = description
-	descValue.Parent = assetEntry
+    -- Create and set description value with fallback
+    local descValue = Instance.new("StringValue")
+    descValue.Name = "Description"
+    descValue.Value = description or "No description available"
+    descValue.Parent = assetEntry
 
-	local imageValue = Instance.new("StringValue")
-	imageValue.Name = "ImageUrl"
-	imageValue.Value = imageUrl
-	imageValue.Parent = assetEntry
+    -- Create and set image value with fallback
+    local imageValue = Instance.new("StringValue")
+    imageValue.Name = "ImageUrl"
+    imageValue.Value = imageUrl or ""
+    imageValue.Parent = assetEntry
 
-	-- Add to lookup table
-	AssetLookup[name] = assetId
-
-	print(
-		string.format(
-			"Stored asset: ID: %s, Name: %s, Description: %s",
-			assetId,
-			name,
-			string.sub(description, 1, 50) .. "..."
-		)
-	)
+    print(string.format(
+        "Stored asset: ID: %s, Name: %s, Description: %s",
+        assetId,
+        nameValue.Value,
+        string.sub(descValue.Value, 1, 50) .. "..."
+    ))
 end
 
 -- Initialize all assets from the local AssetDatabase

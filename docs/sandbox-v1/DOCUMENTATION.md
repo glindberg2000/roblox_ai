@@ -439,22 +439,10 @@ local Logger = require(ServerScriptService:WaitForChild("Logger"))
 
 Logger:log("SYSTEM", "Setting up chat service")
 
--- Example: Enabling chat (if needed)
-if ChatService then
-    local success, result = pcall(function()
-        ChatService:ChatVersion("TextChatService")
-    end)
-    
-    if success then
-        Logger:log("SYSTEM", "Chat service initialized successfully")
-    else
-        Logger:log("ERROR", string.format("Unable to initialize chat service: %s", tostring(result)))
-    end
-else
-    Logger:log("ERROR", "Unable to get Chat service: service not available")
-end
+-- Enable bubble chat directly
+ChatService.BubbleChatEnabled = true
 
-Logger:log("SYSTEM", "Chat setup completed")
+Logger:log("SYSTEM", "Chat setup completed with bubble chat configuration")
 ```
 
 ### server/NPCConfigurations.lua
@@ -1235,7 +1223,51 @@ function NPCManagerV3:createNPC(npcData)
 
     self:setupClickDetector(npc)
     self.npcs[npc.id] = npc
+    
     Logger:log("NPC", string.format("NPC added: %s (Total NPCs: %d)", npc.displayName, self:getNPCCount()))
+    
+    -- Return the created NPC
+    return npc
+end
+
+-- Add a separate function to test chat for all NPCs
+function NPCManagerV3:testAllNPCChat()
+    Logger:log("TEST", "Testing chat for all NPCs...")
+    for _, npc in pairs(self.npcs) do
+        if npc.model and npc.model:FindFirstChild("Head") then
+            -- Try simple chat method only
+            game:GetService("Chat"):Chat(npc.model.Head, "Test chat from " .. npc.displayName)
+            wait(0.5) -- Small delay between tests
+        end
+    end
+    Logger:log("TEST", "Chat testing complete")
+end
+
+-- Update loadNPCDatabase to run chat test after all NPCs are created
+function NPCManagerV3:loadNPCDatabase()
+    local npcDatabase = require(ReplicatedStorage:WaitForChild("NPCDatabaseV3"))
+    Logger:log("DATABASE", string.format("Loading NPCs from database: %d NPCs found", #npcDatabase.npcs))
+    
+    for _, npcData in ipairs(npcDatabase.npcs) do
+        self:createNPC(npcData)
+    end
+    
+    -- Test chat after all NPCs are created
+    wait(1) -- Give a moment for everything to settle
+    self:testAllNPCChat()
+end
+
+-- Modify the createNPC function to initialize chat speaker
+-- Store the original createNPC function
+local originalCreateNPC = NPCManagerV3.createNPC
+
+-- Override createNPC to add chat speaker initialization
+function NPCManagerV3:createNPC(npcData)
+    local npc = originalCreateNPC(self, npcData)
+    if npc then
+        self:initializeNPCChatSpeaker(npc)
+    end
+    return npc
 end
 
 function NPCManagerV3:getNPCCount()
@@ -1400,6 +1432,7 @@ function NPCManagerV3:isNPCParticipant(participant)
 end
 
 -- Update displayMessage function to handle both types
+-- Update the displayMessage function to use direct chat for NPC-to-NPC interactions
 function NPCManagerV3:displayMessage(npc, message, recipient)
     -- First check if this is NPC-to-NPC chat
     if self:isNPCParticipant(recipient) then
@@ -1408,6 +1441,12 @@ function NPCManagerV3:displayMessage(npc, message, recipient)
             recipient.displayName,
             message
         ))
+        
+        -- Use direct chat method since we know it works
+        if npc.model and npc.model:FindFirstChild("Head") then
+            game:GetService("Chat"):Chat(npc.model.Head, message)
+            Logger:log("CHAT", string.format("Created chat bubble for NPC: %s", npc.displayName))
+        end
         
         -- Create a response from the recipient NPC
         local recipientNPC = self.npcs[recipient.npcId]
@@ -1442,7 +1481,94 @@ function NPCManagerV3:displayMessage(npc, message, recipient)
     })
 end
 
--- Update displayNPCToNPCMessage function
+-- And modify processAIResponse to directly use displayMessage
+function NPCManagerV3:processAIResponse(npc, participant, response)
+    Logger:log("RESPONSE", string.format("Processing AI response for %s: %s",
+        npc.displayName,
+        HttpService:JSONEncode(response)
+    ))
+
+    if response.message then
+        Logger:log("CHAT", string.format("Displaying message from %s: %s",
+            npc.displayName,
+            response.message
+        ))
+        -- Use displayMessage directly
+        self:displayMessage(npc, response.message, participant)
+    end
+
+    if response.action then
+        Logger:log("ACTION", string.format("Executing action for %s: %s",
+            npc.displayName,
+            HttpService:JSONEncode(response.action)
+        ))
+        self:executeAction(npc, participant, response.action)
+    end
+
+    if response.internal_state then
+        Logger:log("STATE", string.format("Updating internal state for %s: %s",
+            npc.displayName,
+            HttpService:JSONEncode(response.internal_state)
+        ))
+        self:updateInternalState(npc, response.internal_state)
+    end
+end
+
+
+-- Add this new function to help manage NPC chat speakers
+function NPCManagerV3:initializeNPCChatSpeaker(npc)
+    if npc and npc.model then
+        local createSpeaker = _G.CreateNPCSpeaker
+        if createSpeaker then
+            createSpeaker(npc.model)
+            Logger:log("SYSTEM", string.format("Initialized chat speaker for NPC: %s", npc.displayName))
+        end
+    end
+end
+
+-- Update the displayNPCToNPCMessage function in NPCManagerV3.lua
+function NPCManagerV3:testChatBubbles(fromNPC)
+    if not fromNPC or not fromNPC.model then
+        Logger:log("ERROR", "Invalid NPC for chat test")
+        return
+    end
+
+    local head = fromNPC.model:FindFirstChild("Head")
+    if not head then
+        Logger:log("ERROR", string.format("NPC %s has no Head part!", fromNPC.displayName))
+        return
+    end
+
+    -- Try each chat method
+    Logger:log("TEST", "Testing chat methods...")
+
+    -- Method 1: Direct Chat
+    game:GetService("Chat"):Chat(head, "Test 1: Direct Chat")
+    wait(2)
+
+    -- Method 2: Legacy Chat
+    head.Chatted:Fire("Test 2: Legacy Chat")
+    wait(2)
+
+    -- Method 3: BubbleChat
+    local Chat = game:GetService("Chat")
+    Chat:Chat(head, "Test 3: BubbleChat", Enum.ChatColor.Blue)
+    wait(2)
+
+    -- Method 4: ChatService
+    local success, err = pcall(function()
+        Chat:CreateTalkDialog(head)
+        head:SetTextBubble("Test 4: ChatService")
+    end)
+    
+    if not success then
+        Logger:log("ERROR", "ChatService method failed: " .. tostring(err))
+    end
+
+    Logger:log("TEST", "Chat test complete")
+end
+
+-- Also update displayNPCToNPCMessage to try all methods
 function NPCManagerV3:displayNPCToNPCMessage(fromNPC, toNPC, message)
     if not (fromNPC and toNPC and message) then
         Logger:log("ERROR", "Missing required parameters for NPC-to-NPC message")
@@ -1455,20 +1581,18 @@ function NPCManagerV3:displayNPCToNPCMessage(fromNPC, toNPC, message)
         message
     ))
     
-    -- Show chat bubble for NPC-to-NPC interactions
+    -- Use the same direct Chat call that worked in our test
     if fromNPC.model and fromNPC.model:FindFirstChild("Head") then
-        ChatService:Chat(fromNPC.model.Head, message, Enum.ChatColor.Blue)
+        game:GetService("Chat"):Chat(fromNPC.model.Head, message)
+        Logger:log("CHAT", string.format("Created chat bubble for NPC: %s", fromNPC.displayName))
     end
     
-    -- Log the interaction
-    Logger:log("NPC_CHAT", string.format("%s to %s: %s",
-        fromNPC.displayName or "Unknown",
-        toNPC.displayName or "Unknown",
-        message
-    ))
-    
-    -- Fire event to all clients so everyone can see NPC-to-NPC chat
-    NPCChatEvent:FireAllClients(fromNPC.displayName, message)
+    -- Fire event to all clients for redundancy
+    NPCChatEvent:FireAllClients({
+        npcName = fromNPC.displayName,
+        message = message,
+        type = "npc_chat"
+    })
 end
 
 function NPCManagerV3:executeAction(npc, player, action)
@@ -2192,54 +2316,28 @@ return {
 ### client/NPCClientHandler.client.lua
 
 ```lua
--- StarterPlayerScripts/NPCClientHandler.client.lua
-
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local TextChatService = game:GetService("TextChatService")
 
--- Initialize Logger
-local Logger
-local function initializeLogger()
-    local success, result = pcall(function()
-        return require(ReplicatedStorage:WaitForChild("Logger", 10))
-    end)
-
-    if success then
-        Logger = result
-    else
-        -- Fallback logger
-        Logger = {
-            log = function(_, category, message)
-                print(string.format("[%s] %s", category, message))
-            end
-        }
-    end
-end
-
-initializeLogger()
-
+local Logger = require(ReplicatedStorage:WaitForChild("Logger"))
 local NPCChatEvent = ReplicatedStorage:WaitForChild("NPCChatEvent")
 
-NPCChatEvent.OnClientEvent:Connect(function(npcName, message)
-    if message ~= "The interaction has ended." then
-        Logger:log("CHAT", string.format("Received NPC message: %s - %s", npcName, message))
+NPCChatEvent.OnClientEvent:Connect(function(data)
+    if not data or not data.message then return end
 
-        -- Display in chat box
-        local textChannel = TextChatService.TextChannels.RBXGeneral
-        if textChannel then
-            textChannel:DisplaySystemMessage(npcName .. ": " .. message)
-            Logger:log("CHAT", string.format("Message displayed in chat: %s: %s", npcName, message))
-        else
-            Logger:log("ERROR", "RBXGeneral text channel not found")
-        end
-
-        Logger:log("CHAT", string.format("NPC Chat processed - %s: %s", npcName, message))
+    -- Get the default text channel
+    if TextChatService then
+        -- Format the message
+        local formattedMessage = string.format("[%s]: %s", data.npcName, data.message)
+        
+        -- Send to default channel
+        TextChatService.TextChannels.RBXSystem:DisplaySystemMessage(formattedMessage)
+        Logger:log("CHAT", string.format("Message displayed in chat: %s", formattedMessage))
     else
-        Logger:log("CHAT", string.format("Interaction ended with %s", npcName))
+        Logger:log("ERROR", "TextChatService not available")
     end
 end)
 
 Logger:log("SYSTEM", "NPC Client Chat Handler loaded")
-
 ```

@@ -255,33 +255,7 @@ function NPCManagerV3:setupClickDetector(npc)
 	end)
 end
 
-function NPCManagerV3:handleNPCInteraction(npc, participant, message)
-    Logger:log("INTERACTION", string.format("Handling interaction: %s with %s - Message: %s",
-        npc.displayName,
-        participant.Name,
-        message
-    ))
 
-    -- Lock NPCs in place if this is NPC-to-NPC interaction
-    if self:isNPCParticipant(participant) then
-        self:lockNPCInPlace(npc)
-        local participantNPC = self.npcs[participant.npcId]
-        if participantNPC then
-            self:lockNPCInPlace(participantNPC)
-        end
-    end
-
-    npc.isInteracting = true
-    npc.interactingPlayer = participant
-
-    local response = self:getResponseFromAI(npc, participant, message)
-    if response then
-        self:processAIResponse(npc, participant, response)
-    else
-        Logger:log("ERROR", string.format("Failed to get AI response for %s", npc.displayName))
-        self:endInteraction(npc, participant)
-    end
-end
 
 function NPCManagerV3:endInteraction(npc, participant)
     -- First unlock the initiating NPC
@@ -384,24 +358,21 @@ function NPCManagerV3:isNPCParticipant(participant)
     return participant and (participant.Type == "npc" or participant.npcId ~= nil)
 end
 
--- Update displayMessage function to handle both types
--- Update the displayMessage function to use direct chat for NPC-to-NPC interactions
 function NPCManagerV3:displayMessage(npc, message, recipient)
-    -- First check if this is NPC-to-NPC chat
+    -- Handle NPC-to-NPC chat
     if self:isNPCParticipant(recipient) then
         Logger:log("CHAT", string.format("NPC %s sending message to NPC %s: %s",
             npc.displayName,
-            recipient.displayName,
+            recipient.Name,
             message
         ))
         
-        -- Use direct chat method since we know it works
+        -- Create chat bubble - just use the simple direct method that works
         if npc.model and npc.model:FindFirstChild("Head") then
             game:GetService("Chat"):Chat(npc.model.Head, message)
-            Logger:log("CHAT", string.format("Created chat bubble for NPC: %s", npc.displayName))
         end
         
-        -- Create a response from the recipient NPC
+        -- Handle the recipient NPC's response
         local recipientNPC = self.npcs[recipient.npcId]
         if recipientNPC then
             local responderMock = self:createMockParticipant(npc)
@@ -411,14 +382,19 @@ function NPCManagerV3:displayMessage(npc, message, recipient)
         return
     end
 
-    -- Handle player chat normally
+    -- Handle NPC-to-Player chat
     Logger:log("CHAT", string.format("NPC %s sending message to %s: %s",
         npc.displayName,
         recipient.Name,
         message
     ))
 
-    -- Fire the chat event to the client
+    -- Create chat bubble
+    if npc.model and npc.model:FindFirstChild("Head") then
+        game:GetService("Chat"):Chat(npc.model.Head, message)
+    end
+
+    -- Send to player's chat window
     NPCChatEvent:FireClient(recipient, {
         npcName = npc.displayName,
         message = message,
@@ -994,14 +970,54 @@ function NPCManagerV3:checkNPCInteractions(npc)
     end
 end
 
--- Add back getResponseFromAI function
+function NPCManagerV3:handleNPCInteraction(npc, participant, message)
+    Logger:log("INTERACTION", string.format("Handling interaction: %s with %s - Message: %s",
+        npc.displayName,
+        participant.Name,
+        message
+    ))
+
+    -- Only lock the specific NPCs involved in this interaction
+    if self:isNPCParticipant(participant) then
+        -- For NPC-to-NPC interaction, lock both NPCs
+        local participantNPC = self.npcs[participant.npcId]
+        if participantNPC then
+            -- Lock both NPCs in conversation
+            npc.isInteracting = true
+            participantNPC.isInteracting = true
+            
+            -- Stop their movement
+            self:lockNPCInPlace(npc)
+            self:lockNPCInPlace(participantNPC)
+            
+            -- Store who they're talking to
+            npc.interactingPlayer = participant
+            participantNPC.interactingPlayer = self:createMockParticipant(npc)
+        end
+    else
+        -- For player interactions, only lock the NPC
+        npc.isInteracting = true
+        npc.interactingPlayer = participant
+        self:lockNPCInPlace(npc)
+    end
+
+    local response = self:getResponseFromAI(npc, participant, message)
+    if response then
+        self:processAIResponse(npc, participant, response)
+    else
+        Logger:log("ERROR", string.format("Failed to get AI response for %s", npc.displayName))
+        self:endInteraction(npc, participant)
+    end
+end
+
 function NPCManagerV3:getResponseFromAI(npc, participant, message)
     local interactionState = self.interactionController:getInteractionState(participant)
     local participantMemory = npc.shortTermMemory[participant.UserId] or {}
 
-    local cacheKey = self:getCacheKey(npc, participant, message)
-    if self.responseCache[cacheKey] then
-        return self.responseCache[cacheKey]
+    -- Ensure we're using the correct participant name
+    local participantName = participant.Name
+    if self:isNPCParticipant(participant) then
+        participantName = participant.displayName or participant.Name
     end
 
     local data = {
@@ -1009,12 +1025,17 @@ function NPCManagerV3:getResponseFromAI(npc, participant, message)
         player_id = tostring(participant.UserId),
         npc_id = npc.id,
         npc_name = npc.displayName,
+        participant_name = participantName, -- Add explicit participant name
         system_prompt = npc.system_prompt,
         perception = self:getPerceptionData(npc),
-        context = self:getPlayerContext(participant),
+        context = {
+            participant_type = self:isNPCParticipant(participant) and "npc" or "player",
+            participant_name = participantName,
+            is_new_conversation = true,
+            interaction_history = npc.chatHistory or {}
+        },
         interaction_state = interactionState,
-        memory = participantMemory,
-        limit = 200,
+        memory = participantMemory
     }
 
     local success, response = pcall(function()
@@ -1022,13 +1043,18 @@ function NPCManagerV3:getResponseFromAI(npc, participant, message)
     end)
 
     if success then
-        Logger:log("API", string.format("Raw API response: %s", response))
+        Logger:log("API", string.format("Raw API response for interaction between %s and %s: %s", 
+            npc.displayName,
+            participantName,
+            response
+        ))
         local parsed = HttpService:JSONDecode(response)
         if parsed and parsed.message then
-            self.responseCache[cacheKey] = parsed
+            self.responseCache[self:getCacheKey(npc, participant, message)] = parsed
             npc.shortTermMemory[participant.UserId] = {
                 lastInteractionTime = tick(),
                 recentTopics = parsed.topics_discussed or {},
+                participantName = participantName -- Store the participant name in memory
             }
             return parsed
         else

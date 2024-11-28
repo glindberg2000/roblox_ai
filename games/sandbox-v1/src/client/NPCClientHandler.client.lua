@@ -1,49 +1,48 @@
--- StarterPlayerScripts/NPCClientHandler.client.lua
-
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
-local TextChatService = game:GetService("TextChatService")
+local TextService = game:GetService("TextService")
 
--- Initialize Logger
-local Logger
-local function initializeLogger()
-    local success, result = pcall(function()
-        return require(ReplicatedStorage:WaitForChild("Logger", 10))
+-- Get the chat specific RemoteEvent
+local NPCChatEvent = ReplicatedStorage:WaitForChild("NPCChatEvent")
+
+-- Function to safely send a message to the chat system
+local function sendToChat(npcName, message)
+    -- Try to filter the message (optional but recommended)
+    local success, filteredMessage = pcall(function()
+        return TextService:FilterStringAsync(message, Players.LocalPlayer.UserId)
     end)
-
-    if success then
-        Logger = result
-    else
-        -- Fallback logger
-        Logger = {
-            log = function(_, category, message)
-                print(string.format("[%s] %s", category, message))
-            end
-        }
+    
+    if not success then
+        filteredMessage = message -- Use original if filtering fails
+    end
+    
+    -- Format the message with NPC name
+    local formattedMessage = string.format("[%s] %s", npcName, filteredMessage)
+    
+    -- Send using legacy chat system
+    if game:GetService("StarterGui"):GetCoreGuiEnabled(Enum.CoreGuiType.Chat) then
+        game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
+            Text = formattedMessage,
+            Color = Color3.fromRGB(249, 217, 55),
+            Font = Enum.Font.SourceSansBold
+        })
+    end
+    
+    -- Also try TextChatService if available
+    local TextChatService = game:GetService("TextChatService")
+    if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+        local channel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+        if channel then
+            channel:DisplaySystemMessage(formattedMessage)
+        end
     end
 end
 
-initializeLogger()
-
-local NPCChatEvent = ReplicatedStorage:WaitForChild("NPCChatEvent")
-
-NPCChatEvent.OnClientEvent:Connect(function(npcName, message)
-    if message ~= "The interaction has ended." then
-        Logger:log("CHAT", string.format("Received NPC message: %s - %s", npcName, message))
-
-        -- Display in chat box
-        local textChannel = TextChatService.TextChannels.RBXGeneral
-        if textChannel then
-            textChannel:DisplaySystemMessage(npcName .. ": " .. message)
-            Logger:log("CHAT", string.format("Message displayed in chat: %s: %s", npcName, message))
-        else
-            Logger:log("ERROR", "RBXGeneral text channel not found")
-        end
-
-        Logger:log("CHAT", string.format("NPC Chat processed - %s: %s", npcName, message))
-    else
-        Logger:log("CHAT", string.format("Interaction ended with %s", npcName))
+-- Handle incoming NPC chat messages
+NPCChatEvent.OnClientEvent:Connect(function(data)
+    if data and data.npcName and data.message then
+        sendToChat(data.npcName, data.message)
     end
 end)
 
-Logger:log("SYSTEM", "NPC Client Chat Handler loaded")
+print("NPC Client Chat Handler initialized")

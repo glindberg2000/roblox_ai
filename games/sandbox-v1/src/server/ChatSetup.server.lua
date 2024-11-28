@@ -4,7 +4,7 @@ local Logger = require(ServerScriptService:WaitForChild("Logger"))
 
 Logger:log("SYSTEM", "Setting up chat service")
 
--- Enable bubble chat directly
+-- Enable bubble chat without checking ChatVersion
 ChatService.BubbleChatEnabled = true
 
-Logger:log("SYSTEM", "Chat setup completed with bubble chat configuration")
+Logger:log("SYSTEM", "Chat setup completed")
