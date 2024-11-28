@@ -15,6 +15,7 @@ api/
 │   ├── main.py
 │   ├── paths.py
 │   ├── routers.py
+│   ├── security.py
 │   ├── storage.py
 │   └── utils.py
 ├── db
@@ -416,12 +417,24 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 # Setup templates
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
-# Route handlers
+
+# main.py
+from fastapi import Depends
+from .security import check_allowed_ips
+
 @app.get("/")
 @app.get("/dashboard")
-async def serve_dashboard(request: Request):
+async def serve_dashboard(request: Request, allowed_ips=Depends(check_allowed_ips)):
     """Serve the dashboard"""
     return templates.TemplateResponse("dashboard_new.html", {"request": request})
+
+
+#Route handlers
+# @app.get("/")
+# @app.get("/dashboard")
+# async def serve_dashboard(request: Request):
+#     """Serve the dashboard"""
+#     return templates.TemplateResponse("dashboard_new.html", {"request": request})
 
 @app.on_event("startup")
 async def startup_event():
@@ -1527,6 +1540,26 @@ async def get_asset_description(asset_id: str, name: str) -> dict:
         return {"error": f"Failed to process request: {str(e)}"}
 ```
 
+### api/app/security.py
+
+```py
+# security.py
+import os
+from fastapi import Request, HTTPException, status
+from dotenv import load_dotenv
+
+load_dotenv()
+ALLOWED_IPS = os.getenv("ALLOWED_IPS", "").split(",")
+
+def check_allowed_ips(request: Request):
+    client_ip = request.client.host
+    if client_ip not in ALLOWED_IPS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this resource."
+        )
+```
+
 ### api/app/__init__.py
 
 ```py
@@ -1630,124 +1663,6 @@ class EditItemRequest(BaseModel):
 # Initialize conversation manager
 conversation_manager = ConversationManager()
 
-
-# def generate_avatar_description_from_image(image_path: str, max_length: int = 300) -> str:
-#     base64_image = encode_image(image_path)
-    
-#     try:
-#         response = client.chat.completions.create(
-#             model="gpt-4o-mini",
-#             messages=[
-#                 {
-#                     "role": "user",
-#                     "content": [
-#                         {
-#                             "type": "text",
-#                             "text": (
-#                                 f"Please provide a detailed description of this Roblox avatar within {max_length} characters. "
-#                                 "Include details about the avatar's clothing, accessories, colors, any unique features, and its overall style or theme."
-#                             ),
-#                         },
-#                         {
-#                             "type": "image_url",
-#                             "image_url": {
-#                                 "url": f"data:image/jpeg;base64,{base64_image}"
-#                             },
-#                         }
-#                     ],
-#                 }
-#             ]
-#         )
-#         description = response.choices[0].message.content
-#         return description
-#     except OpenAIError as e:
-#         logger.error(f"OpenAI API error: {e}")
-#         return "No description available."
-
-# def download_avatar_image(user_id: str) -> str:
-#     avatar_api_url = f"https://thumbnails.roblox.com/v1/users/avatar?userIds={user_id}&size=420x420&format=Png"
-#     try:
-#         response = requests.get(avatar_api_url)
-#         response.raise_for_status()
-#         image_url = response.json()['data'][0]['imageUrl']
-#         return download_image(image_url, os.path.join(AVATAR_SAVE_PATH, f"{user_id}.png"))
-#     except Exception as e:
-#         logger.error(f"Error fetching avatar image: {e}")
-#         raise HTTPException(status_code=500, detail="Failed to download avatar image.")
-
-# def download_asset_image(asset_id: str) -> tuple[str, str]:
-#     asset_api_url = f"https://thumbnails.roblox.com/v1/assets?assetIds={asset_id}&size=420x420&format=Png&isCircular=false"
-#     try:
-#         response = requests.get(asset_api_url)
-#         response.raise_for_status()
-#         image_url = response.json()['data'][0]['imageUrl']
-#         local_path = os.path.join(ASSET_IMAGE_SAVE_PATH, f"{asset_id}.png")
-#         download_image(image_url, local_path)
-#         return local_path, image_url
-#     except Exception as e:
-#         logger.error(f"Error fetching asset image: {e}")
-#         raise HTTPException(status_code=500, detail="Failed to download asset image.")
-
-# def generate_description_from_image(image_path: str, prompt: str, max_length: int = 300) -> str:
-#     base64_image = encode_image(image_path)
-    
-#     try:
-#         response = client.chat.completions.create(
-#             model="gpt-4o-mini",
-#             messages=[
-#                 {
-#                     "role": "user",
-#                     "content": [
-#                         {
-#                             "type": "text",
-#                             "text": f"{prompt} Limit the description to {max_length} characters."
-#                         },
-#                         {
-#                             "type": "image_url",
-#                             "image_url": {
-#                                 "url": f"data:image/jpeg;base64,{base64_image}"
-#                             },
-#                         }
-#                     ],
-#                 }
-#             ]
-#         )
-#         description = response.choices[0].message.content
-#         return description
-#     except OpenAIError as e:
-#         logger.error(f"OpenAI API error: {e}")
-#         return "No description available."
-
-# @router.post("/get_asset_description")
-# async def get_asset_description(data: AssetData):
-#     try:
-#         image_path, image_url = download_asset_image(data.asset_id)
-#         prompt = (
-#             "Please provide a detailed description of this Roblox asset image. "
-#             "Include details about its appearance, features, and any notable characteristics."
-#         )
-#         ai_description = generate_description_from_image(image_path, prompt)
-#         return {
-#             "description": ai_description,
-#             "imageUrl": image_url
-#         }
-#     except HTTPException as e:
-#         raise e
-#     except Exception as e:
-#         logger.error(f"Error processing asset description request: {e}")
-#         return {"error": f"Failed to process request: {str(e)}"}
-
-# @router.post("/get_player_description")
-# async def get_player_description(data: PlayerDescriptionRequest):
-#     try:
-#         image_path = download_avatar_image(data.user_id)
-#         ai_description = generate_avatar_description_from_image(image_path)
-#         return {"description": ai_description}
-#     except HTTPException as e:
-#         raise e
-#     except Exception as e:
-#         logger.error(f"Error processing player description request: {e}")
-#         return {"error": f"Failed to process request: {str(e)}"}
 
 
 @router.post("/get_asset_description")
@@ -1906,7 +1821,7 @@ async def heartbeat_update(request: Request):
 
 ```py
 import logging
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Request
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Request, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -1951,7 +1866,12 @@ from fastapi.templating import Jinja2Templates
 import sqlite3
 
 logger = logging.getLogger("roblox_app")
-router = APIRouter()
+
+# dashboard_router.py
+
+from .security import check_allowed_ips
+
+router = APIRouter(dependencies=[Depends(check_allowed_ips)])
 
 # Set up templates
 BASE_DIR = Path(__file__).resolve().parent.parent
