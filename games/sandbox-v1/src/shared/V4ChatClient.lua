@@ -2,8 +2,9 @@ local V4ChatClient = {}
 
 -- Import existing utilities/services
 local HttpService = game:GetService("HttpService")
-local NPCConfig = require(script.Parent.NPCConfig)
-local ChatUtils = require(script.Parent.ChatUtils)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local NPCConfig = require(ReplicatedStorage.NPCSystem.NPCConfig)
+local ChatUtils = require(ReplicatedStorage.NPCSystem.ChatUtils)
 
 -- Configuration
 local API_VERSION = "v4"
@@ -15,19 +16,20 @@ local ENDPOINTS = {
 
 -- Adapter to convert V3 format to V4
 local function adaptV3ToV4Request(v3Request)
+    local is_new = not (v3Request.metadata and v3Request.metadata.conversation_id)
     return {
         message = v3Request.message,
-        initiator_id = v3Request.player_id,
+        initiator_id = tostring(v3Request.player_id),
         target_id = v3Request.npc_id,
         conversation_type = "npc_user",
         system_prompt = v3Request.system_prompt,
+        conversation_id = v3Request.metadata and v3Request.metadata.conversation_id,
         context = {
-            initiator_name = v3Request.context.player_name,
+            initiator_name = v3Request.context.participant_name,
             target_name = v3Request.npc_name,
-            is_new_conversation = v3Request.context.is_new_conversation,
-            -- Preserve other context fields
-            nearby_players = v3Request.context.nearby_players,
-            npc_location = v3Request.context.npc_location
+            is_new_conversation = is_new,
+            nearby_players = v3Request.context.nearby_players or {},
+            npc_location = v3Request.context.npc_location or "unknown"
         }
     }
 end
@@ -36,8 +38,10 @@ end
 local function adaptV4ToV3Response(v4Response)
     return {
         message = v4Response.message,
-        action = v4Response.action,
-        -- Store conversation_id in metadata for future use
+        action = {
+            type = "none",
+            data = {}
+        },
         metadata = {
             conversation_id = v4Response.conversation_id,
             v4_metadata = v4Response.metadata
@@ -47,8 +51,10 @@ end
 
 function V4ChatClient:SendMessage(originalRequest)
     local success, result = pcall(function()
+        print("V4: Attempting to send message") -- Debug
         -- Convert V3 request format to V4
         local v4Request = adaptV3ToV4Request(originalRequest)
+        print("V4: Converted request:", HttpService:JSONEncode(v4Request)) -- Debug
         
         -- Add existing conversation ID if available
         if originalRequest.metadata and originalRequest.metadata.conversation_id then
@@ -57,6 +63,7 @@ function V4ChatClient:SendMessage(originalRequest)
         
         -- Make API request using existing HTTP service
         local response = ChatUtils:MakeRequest(ENDPOINTS.CHAT, v4Request)
+        print("V4: Got response:", HttpService:JSONEncode(response)) -- Debug
         
         -- Convert V4 response back to V3 format
         return adaptV4ToV3Response(response)

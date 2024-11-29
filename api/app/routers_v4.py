@@ -128,7 +128,7 @@ async def enhanced_chat_endpoint(request: EnhancedChatRequest):
         return ConversationResponse(
             conversation_id=conversation_id,
             message=response.message,
-            action=response.action,
+            action=NPCAction(type=response.action.type, data=response.action.data or {}),
             metadata=metadata
         )
 

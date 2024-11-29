@@ -8,6 +8,7 @@ local ChatService = game:GetService("Chat")
 
 local AnimationManager = require(ReplicatedStorage.Shared.AnimationManager)
 local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
+local NPCChatHandler = require(ReplicatedStorage.NPCSystem.NPCChatHandler)
 
 -- Initialize Logger
 local Logger
@@ -361,7 +362,7 @@ function NPCManagerV3:isNPCParticipant(participant)
     if not participant then return false end
     
     -- Check if it's a mock NPC participant
-    if participant.npcId then return true end
+    if participant.npcId or participant.Type == "npc" then return true end
     
     -- Check if it's a Player instance
     if typeof(participant) == "Instance" and participant:IsA("Player") then
@@ -369,7 +370,7 @@ function NPCManagerV3:isNPCParticipant(participant)
     end
     
     -- For any other case, check for NPC-specific properties
-    return participant.GetParticipantType and participant:GetParticipantType() == "npc"
+    return false
 end
 
 function NPCManagerV3:displayMessage(npc, message, recipient)
@@ -429,9 +430,14 @@ function NPCManagerV3:displayMessage(npc, message, recipient)
         if recipient.npcId then
             local recipientNPC = self.npcs[recipient.npcId]
             if recipientNPC then
-                task.delay(1, function()
-                    self:handleNPCInteraction(recipientNPC, self:createMockParticipant(npc), message)
-                end)
+                -- Continue conversation if they share the same conversation ID
+                if not recipientNPC.currentConversationId or recipientNPC.currentConversationId == npc.currentConversationId then
+                    task.delay(1, function()
+                        -- Share the same conversation ID
+                        recipientNPC.currentConversationId = npc.currentConversationId
+                        self:handleNPCInteraction(recipientNPC, self:createMockParticipant(npc), message)
+                    end)
+                end
             end
         end
         return
@@ -693,9 +699,34 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
         return
     end
 
-    -- Get and process AI response
-    local response = self:getResponseFromAI(npc, participant, message)
+    -- Replace the direct API call with NPCChatHandler
+    local request = {
+        message = message,
+        player_id = participant.UserId,
+        npc_id = npc.id,
+        npc_name = npc.displayName,
+        system_prompt = npc.system_prompt,
+        metadata = npc.currentConversationId and {
+            conversation_id = npc.currentConversationId
+        } or nil,
+        context = {
+            participant_type = self:isNPCParticipant(participant) and "npc" or "player",
+            participant_name = participant.Name,
+            is_new_conversation = not npc.currentConversationId,
+            interaction_history = {},
+            nearby_players = self:getVisiblePlayers(npc),
+            npc_location = self:getNPCLocation(participant)
+        },
+        perception = self:getPerceptionData(npc)
+    }
+
+    local response = NPCChatHandler:HandleChat(request)
     if response then
+        -- Store conversation ID for future messages
+        if response.metadata and response.metadata.conversation_id then
+            npc.currentConversationId = response.metadata.conversation_id
+        end
+        
         self:processAIResponse(npc, participant, response)
     else
         Logger:error(string.format("Failed to get AI response for %s", npc.displayName))
@@ -721,7 +752,10 @@ end
 
 function NPCManagerV3:handleNPCToNPCInteraction(npc1, npc2Participant, message, interactionId)
     local npc2 = self.npcs[npc2Participant.npcId]
-    if not npc2 then return end
+    if not npc2 then 
+        Logger:warn("Could not find NPC2 for interaction")
+        return 
+    end
 
     -- Lock both NPCs
     self:setNPCMovementState(npc1, "locked", interactionId)
@@ -872,7 +906,6 @@ function NPCManagerV3:isPlayerInRange(npc, player)
     end
     return false
 end
-
 function NPCManagerV3:updateFollowing(npc)
     if not npc.isFollowing then
         return -- Exit early if not following
@@ -1263,3 +1296,4 @@ function NPCManagerV3:processAIResponse(npc, participant, response)
 end
 
 return NPCManagerV3
+

@@ -8,6 +8,9 @@
         "$className": "Folder",
         "npcs": {
           "$path": "src/assets/npcs"
+        },
+        "scripts": {
+          "$path": "src/assets/scripts"
         }
       }
     },
@@ -19,10 +22,22 @@
       "NPCDatabaseV3": {
         "$path": "src/data/NPCDatabase.lua"
       },
-      "Shared": {
+      "NPCSystem": {
         "$className": "Folder",
-        "AnimationManager": {
-          "$path": "src/shared/AnimationManager.lua"
+        "V4ChatClient": {
+          "$path": "src/shared/V4ChatClient.lua"
+        },
+        "V3ChatClient": {
+          "$path": "src/shared/V3ChatClient.lua"
+        },
+        "NPCChatHandler": {
+          "$path": "src/shared/NPCChatHandler.lua"
+        },
+        "ChatUtils": {
+          "$path": "src/shared/ChatUtils.lua"
+        },
+        "NPCConfig": {
+          "$path": "src/shared/NPCConfig.lua"
         }
       }
     },
@@ -48,15 +63,6 @@
       },
       "AssetDatabase": {
         "$path": "src/data/AssetDatabase.lua"
-      },
-      "MockPlayer": {
-        "$path": "src/server/MockPlayer.lua"
-      },
-      "MockPlayerTest": {
-        "$path": "src/server/MockPlayerTest.server.lua"
-      },
-      "NPCInteractionTest": {
-        "$path": "src/server/NPCInteractionTest.server.lua"
       }
     },
     "StarterPlayer": {
