@@ -111,6 +111,41 @@ local NPCChatEvent = ReplicatedStorage:FindFirstChild("NPCChatEvent") or Instanc
 NPCChatEvent.Name = "NPCChatEvent"
 NPCChatEvent.Parent = ReplicatedStorage
 
+-- Add handler for player messages at initialization
+NPCChatEvent.OnServerEvent:Connect(function(player, data)
+    NPCManagerV3:getInstance():handlePlayerMessage(player, data)
+end)
+
+function NPCManagerV3:handlePlayerMessage(player, data)
+    local npcName = data.npcName
+    local message = data.message
+    
+    Logger:log("CHAT", string.format("Received message from player %s to NPC %s: %s",
+        player.Name,
+        npcName,
+        message
+    ))
+    
+    -- Find the NPC by name
+    for _, npc in pairs(self.npcs) do
+        if npc.displayName == npcName then
+            -- Check if the NPC is interacting with this player
+            if npc.isInteracting and npc.interactingPlayer == player then
+                -- Handle the interaction
+                self:handleNPCInteraction(npc, player, message)
+            else
+                Logger:log("INTERACTION", string.format("NPC %s is not interacting with player %s", 
+                    npc.displayName, 
+                    player.Name
+                ))
+            end
+            return
+        end
+    end
+    
+    Logger:log("ERROR", string.format("NPC %s not found when handling player message", npcName))
+end
+
 function NPCManagerV3:loadNPCDatabase()
     local npcDatabase = require(ReplicatedStorage:WaitForChild("NPCDatabaseV3"))
     Logger:log("DATABASE", string.format("Loading NPCs from database: %d NPCs found", #npcDatabase.npcs))
@@ -700,6 +735,14 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
         return
     end
 
+    -- Update interaction history
+    npc.chatHistory = npc.chatHistory or {}
+    table.insert(npc.chatHistory, {
+        sender = participant.Name or participant.displayName,
+        message = message,
+        timestamp = os.time()
+    })
+
     -- Prepare the chat request
     local request = {
         message = message,
@@ -714,7 +757,7 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
             participant_type = self:isNPCParticipant(participant) and "npc" or "player",
             participant_name = participant.Name or participant.displayName,
             is_new_conversation = not npc.currentConversationId,
-            interaction_history = {},
+            interaction_history = npc.chatHistory,
             nearby_players = self:getVisiblePlayers(npc),
             npc_location = "Unknown"
         },

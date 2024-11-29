@@ -5,6 +5,7 @@ local TextService = game:GetService("TextService")
 
 -- Get the chat specific RemoteEvent
 local NPCChatEvent = ReplicatedStorage:WaitForChild("NPCChatEvent")
+local currentNPCConversation = nil  -- Track which NPC we're talking to
 
 -- Function to safely send a message to the chat system
 local function sendToChat(npcName, message)
@@ -39,11 +40,46 @@ local function sendToChat(npcName, message)
     end
 end
 
+-- Function to handle player chat messages
+local function onPlayerChatted(message)
+    -- Check if we're in a conversation with an NPC
+    if currentNPCConversation then
+        -- Send the message to the server
+        NPCChatEvent:FireServer({
+            npcName = currentNPCConversation,
+            message = message
+        })
+    end
+end
+
 -- Handle incoming NPC chat messages
 NPCChatEvent.OnClientEvent:Connect(function(data)
-    if data and data.npcName and data.message then
+    if not data then return end
+
+    -- Handle different types of messages
+    if data.type == "started_conversation" then
+        currentNPCConversation = data.npcName
+        sendToChat("System", "Started conversation with " .. data.npcName)
+    elseif data.type == "ended_conversation" then
+        currentNPCConversation = nil
+        sendToChat("System", "Ended conversation with " .. data.npcName)
+    elseif data.npcName and data.message then
         sendToChat(data.npcName, data.message)
     end
 end)
+
+-- Connect to TextChatService for modern chat
+local TextChatService = game:GetService("TextChatService")
+if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+    TextChatService.SendingMessage:Connect(function(textChatMessage)
+        onPlayerChatted(textChatMessage.Text)
+    end)
+end
+
+-- Connect to legacy chat system
+local player = Players.LocalPlayer
+if player then
+    player.Chatted:Connect(onPlayerChatted)
+end
 
 print("NPC Client Chat Handler initialized")
