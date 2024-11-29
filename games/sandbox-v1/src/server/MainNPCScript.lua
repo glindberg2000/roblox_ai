@@ -1,3 +1,4 @@
+-- MainNPCScript.lua
 function updateNPCs()
     Logger:log("UPDATE", "------- Starting NPC State Update -------")
     

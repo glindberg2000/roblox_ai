@@ -1,3 +1,4 @@
+-- NPCChatHandler.lua
 local NPCChatHandler = {}
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

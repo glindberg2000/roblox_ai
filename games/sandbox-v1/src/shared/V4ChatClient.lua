@@ -1,3 +1,4 @@
+-- V4ChatClient.lua
 local V4ChatClient = {}
 
 -- Import existing utilities/services
