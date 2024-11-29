@@ -725,6 +725,15 @@ function NPCManagerV3:stopFollowing(npc)
 end
 
 function NPCManagerV3:handleNPCInteraction(npc, participant, message)
+    -- If this is a greeting message but we've already greeted, skip it
+    if message == "Hello" and npc.hasGreetedParticipant == participant.UserId then
+        Logger:log("INTERACTION", string.format("Skipping greeting - %s already greeted %s", 
+            npc.displayName,
+            participant.Name or participant.displayName
+        ))
+        return
+    end
+
     -- Generate a unique interaction ID
     local interactionId = HttpService:GenerateGUID(false)
     
@@ -747,6 +756,11 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
         message = message,
         timestamp = os.time()
     })
+
+    -- Mark that we've greeted this participant
+    if message == "Hello" then
+        npc.hasGreetedParticipant = participant.UserId
+    end
 
     -- Prepare the chat request
     local request = {
