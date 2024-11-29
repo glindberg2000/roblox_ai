@@ -647,22 +647,16 @@ function NPCManagerV3:executeAction(npc, player, action)
 end
 
 function NPCManagerV3:startFollowing(npc, player)
-    Logger:log("MOVEMENT", string.format("%s starting to follow %s", npc.displayName, player.Name))
     npc.isFollowing = true
     npc.followTarget = player
     npc.followStartTime = tick()
-
-    -- Play walk animation
-    local humanoid = npc.model:FindFirstChild("Humanoid")
-    if humanoid then
-        AnimationManager:playAnimation(humanoid, "walk")
-    end
-    
-    Logger:log("STATE", string.format(
-        "Follow state set for %s: isFollowing=%s, followTarget=%s",
+    npc.isWalking = false  -- Will be set to true when movement starts
+    -- Ensure NPC can move while following
+    self:setNPCMovementState(npc, "following")
+    Logger:log("STATE", string.format("Follow state set for %s: isFollowing=%s, followTarget=%s",
         npc.displayName,
         tostring(npc.isFollowing),
-        player.Name
+        tostring(player.Name)
     ))
 end
 
@@ -853,7 +847,11 @@ function NPCManagerV3:setNPCMovementState(npc, state, interactionId)
         interactionId or "none"
     ))
 
-    if state == "locked" and interactionId then
+    if state == "following" then
+        npc.model.Humanoid.WalkSpeed = 16  -- Normal walking speed
+        npc.movementState = "following"
+        Logger:log("MOVEMENT", string.format("%s is now following with speed %d", npc.displayName, npc.model.Humanoid.WalkSpeed))
+    elseif state == "locked" and interactionId then
         npc.model.Humanoid.WalkSpeed = 0
         npc.isInteracting = true
         npc.interactionId = interactionId
@@ -889,6 +887,44 @@ function NPCManagerV3:updateNPCState(npc)
     
     local humanoid = npc.model:FindFirstChild("Humanoid")
     if not humanoid then return end
+
+    -- Handle following behavior
+    if npc.isFollowing and npc.followTarget then
+        local targetCharacter = npc.followTarget.Character
+        if targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart") then
+            local targetPosition = targetCharacter.HumanoidRootPart.Position
+            local npcPosition = npc.model.PrimaryPart.Position
+            local distance = (targetPosition - npcPosition).Magnitude
+            
+            -- Only move if we're too far from target
+            if distance > MIN_FOLLOW_DISTANCE then
+                -- Calculate target point (slightly behind the player)
+                local direction = (targetPosition - npcPosition).Unit
+                local targetPoint = targetPosition - direction * MIN_FOLLOW_DISTANCE
+                
+                -- Move NPC
+                humanoid:MoveTo(targetPoint)
+                
+                -- Play walk animation if not already playing
+                if npc.movementState == "following" and not npc.isWalking then
+                    npc.isWalking = true
+                    AnimationManager:playAnimation(humanoid, "walk")
+                end
+                
+                Logger:log("MOVEMENT", string.format("%s following %s at distance %.1f", 
+                    npc.displayName,
+                    npc.followTarget.Name,
+                    distance
+                ))
+            else
+                -- Stop walking animation if we're close enough
+                if npc.isWalking then
+                    npc.isWalking = false
+                    AnimationManager:playAnimation(humanoid, "idle")
+                end
+            end
+        end
+    end
 
     -- Check if the NPC should be freed from interaction
     if npc.isInteracting then

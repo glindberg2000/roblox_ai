@@ -39,7 +39,7 @@ end
 local function adaptV4ToV3Response(v4Response)
     return {
         message = v4Response.message,
-        action = {
+        action = v4Response.action or {
             type = "none",
             data = {}
         },
@@ -55,12 +55,43 @@ function V4ChatClient:SendMessage(originalRequest)
         print("V4: Attempting to send message") -- Debug
         -- Convert V3 request format to V4
         local v4Request = adaptV3ToV4Request(originalRequest)
-        print("V4: Converted request:", HttpService:JSONEncode(v4Request)) -- Debug
         
-        -- Add existing conversation ID if available
-        if originalRequest.metadata and originalRequest.metadata.conversation_id then
-            v4Request.conversation_id = originalRequest.metadata.conversation_id
-        end
+        -- Add action instructions to system prompt
+        local actionInstructions = [[
+
+You can control NPC behavior by including an action in your response. Your response MUST be valid JSON with this structure:
+{
+    "message": "your message here",
+    "action": {
+        "type": "stop_talking | follow | unfollow | none",
+        "data": {}
+    }
+}
+
+Examples:
+1. To follow a player:
+{
+    "message": "I'll follow you! Lead the way!",
+    "action": {
+        "type": "follow",
+        "data": {}
+    }
+}
+
+2. To end conversation:
+{
+    "message": "Well, I should get going now. Take care!",
+    "action": {
+        "type": "stop_talking",
+        "data": {}
+    }
+}
+
+Remember: Always include both message and action in your response.
+]]
+
+        v4Request.system_prompt = (v4Request.system_prompt or "") .. actionInstructions
+        print("V4: Converted request:", HttpService:JSONEncode(v4Request)) -- Debug
         
         -- Make API request using existing HTTP service
         local response = ChatUtils:MakeRequest(ENDPOINTS.CHAT, v4Request)
