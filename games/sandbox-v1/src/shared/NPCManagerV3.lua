@@ -303,6 +303,12 @@ function NPCManagerV3:endInteraction(npc, participant, interactionId)
         interactionId or "N/A"
     ))
 
+    -- Set last interaction time to prevent immediate re-interaction
+    npc.lastInteractionTime = tick()
+    if participant then
+        npc.lastInteractionPartner = typeof(participant) == "Instance" and participant.UserId or participant.npcId
+    end
+
     -- Clean up interaction tracking if we have an ID
     if interactionId then
         self.activeInteractions[interactionId] = nil
@@ -624,6 +630,11 @@ function NPCManagerV3:executeAction(npc, player, action)
     Logger:log("ACTION", string.format("Executing action: %s for %s", action.type, npc.displayName))
     
     if action.type == "stop_talking" then
+        -- Stop following if we were following this player
+        if npc.isFollowing and npc.followTarget == player then
+            Logger:log("MOVEMENT", string.format("Stopping follow as part of ending interaction: %s", player.Name))
+            self:stopFollowing(npc)
+        end
         self:endInteraction(npc, player)
     elseif action.type == "follow" then
         Logger:log("MOVEMENT", string.format("Starting to follow player: %s", player.Name))
@@ -924,6 +935,8 @@ function NPCManagerV3:updateNPCState(npc)
                 end
             end
         end
+        -- Skip other checks while following
+        return
     end
 
     -- Check if the NPC should be freed from interaction
@@ -948,33 +961,31 @@ function NPCManagerV3:updateNPCState(npc)
                 self:endInteraction(npc, npc.interactingPlayer)
             end
         end
-    else
-        -- Only try to walk if not interacting
-        if math.random() < 0.05 then  -- 5% chance each update
-            self:randomWalk(npc)
-        else
-            AnimationManager:playAnimation(humanoid, "idle")
-        end
     end
 end
 
 function NPCManagerV3:isPlayerInRange(npc, player)
-    local playerPosition = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-    local npcPosition = npc.model and npc.model.PrimaryPart
+    if not player or not player.Character then return false end
+    if not npc.model or not npc.model.PrimaryPart then return false end
 
-    if playerPosition and npcPosition then
-        local distance = (playerPosition.Position - npcPosition.Position).Magnitude
-        local inRange = distance <= npc.responseRadius
-        Logger:log("VISION", string.format("Distance check for %s to %s: %.2f units (in range: %s)", 
-            npc.displayName, 
-            player.Name, 
-            distance, 
-            tostring(inRange)
-        ))
-        return inRange
+    -- Skip range check if following this player
+    if npc.isFollowing and npc.followTarget == player then
+        return true
     end
-    return false
+
+    -- Check if we recently ended an interaction with this player
+    local currentTime = tick()
+    if npc.lastInteractionTime and npc.lastInteractionPartner == player.UserId then
+        local timeSinceLastInteraction = currentTime - npc.lastInteractionTime
+        if timeSinceLastInteraction < 30 then -- 30 second cooldown
+            return false
+        end
+    end
+
+    local distance = (npc.model.PrimaryPart.Position - player.Character.PrimaryPart.Position).Magnitude
+    return distance <= npc.responseRadius
 end
+
 function NPCManagerV3:updateFollowing(npc)
     if not npc.isFollowing then
         return -- Exit early if not following
