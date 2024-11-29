@@ -319,6 +319,16 @@ function NPCManagerV3:endInteraction(npc, participant, interactionId)
     npc.isInteracting = false
     npc.interactingPlayer = nil
 
+    -- Don't clear conversation ID - let API handle conversation state
+    if npc.currentConversationId then
+        npc.lastConversationTime = tick()
+        Logger:log("CHAT", string.format("Preserving conversation context %s for %s with %s",
+            npc.currentConversationId,
+            npc.displayName,
+            participant.Name or participant.displayName
+        ))
+    end
+
     -- If NPC-to-NPC interaction, free the other NPC
     if self:isNPCParticipant(participant) then
         local otherNPC = self.npcs[participant.npcId]
@@ -635,7 +645,7 @@ function NPCManagerV3:executeAction(npc, player, action)
             Logger:log("MOVEMENT", string.format("Stopping follow as part of ending interaction: %s", player.Name))
             self:stopFollowing(npc)
         end
-        self:endInteraction(npc, player)
+        -- Let the normal conversation flow handle the ending
     elseif action.type == "follow" then
         Logger:log("MOVEMENT", string.format("Starting to follow player: %s", player.Name))
         self:startFollowing(npc, player)
@@ -725,14 +735,27 @@ function NPCManagerV3:stopFollowing(npc)
 end
 
 function NPCManagerV3:handleNPCInteraction(npc, participant, message)
-    -- If this is a greeting message but we've already greeted, skip it
-    if message == "Hello" and npc.hasGreetedParticipant == participant.UserId then
-        Logger:log("INTERACTION", string.format("Skipping greeting - %s already greeted %s", 
-            npc.displayName,
-            participant.Name or participant.displayName
-        ))
-        return
+    -- Check if we should clear old conversation context
+    if npc.lastConversationTime and npc.currentConversationId then
+        local timeSinceLastChat = tick() - npc.lastConversationTime
+        if timeSinceLastChat > 300 then -- 5 minutes
+            Logger:log("CHAT", string.format("Clearing old conversation context %s for %s (inactive for %.0f seconds)",
+                npc.currentConversationId,
+                npc.displayName,
+                timeSinceLastChat
+            ))
+            npc.currentConversationId = nil
+        end
     end
+
+-- -   -- If this is a greeting message but we've already greeted, skip it
+-- -   if message == "Hello" and npc.hasGreetedParticipant == participant.UserId then
+-- -       Logger:log("INTERACTION", string.format("Skipping greeting - %s already greeted %s", 
+-- -           npc.displayName,
+-- -           participant.Name or participant.displayName
+-- -       ))
+-- -       return
+-- -   end
 
     -- Generate a unique interaction ID
     local interactionId = HttpService:GenerateGUID(false)
@@ -974,6 +997,13 @@ function NPCManagerV3:updateNPCState(npc)
             if shouldEndInteraction then
                 self:endInteraction(npc, npc.interactingPlayer)
             end
+        end
+    else
+        -- Only try to walk if not interacting
+        if math.random() < 0.05 then  -- 5% chance each update
+            self:randomWalk(npc)
+        else
+            AnimationManager:playAnimation(humanoid, "idle")
         end
     end
 end
@@ -1328,6 +1358,15 @@ function NPCManagerV3:getResponseFromAI(npc, participant, message)
         playerId = tostring(participant.UserId)
     end
 
+    -- Check if this is a continuation of a conversation
+    local isNewConversation = not npc.currentConversationId
+    if not isNewConversation then
+        Logger:log("CHAT", string.format("Continuing conversation %s with %s", 
+            npc.currentConversationId,
+            participantName
+        ))
+    end
+
     local data = {
         message = message,
         player_id = playerId,
@@ -1336,11 +1375,16 @@ function NPCManagerV3:getResponseFromAI(npc, participant, message)
         participant_name = participantName,
         system_prompt = npc.system_prompt,
         perception = self:getPerceptionData(npc),
+        metadata = npc.currentConversationId and {
+            conversation_id = npc.currentConversationId
+        } or nil,
         context = {
             participant_type = participantType,
             participant_name = participantName,
-            is_new_conversation = true,
-            interaction_history = npc.chatHistory or {}
+            is_new_conversation = isNewConversation,
+            interaction_history = npc.chatHistory or {},
+            nearby_players = self:getVisiblePlayers(npc),
+            npc_location = "Unknown"
         },
         memory = npc.shortTermMemory[playerId] or {}
     }
