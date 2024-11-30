@@ -296,63 +296,57 @@ end
 
 
 function NPCManagerV3:endInteraction(npc, participant, interactionId)
-    -- Log the attempt to end interaction
-    Logger:log("INTERACTION", string.format("Attempting to end interaction for %s with %s (ID: %s)",
+    Logger:log("INTERACTION", string.format("Pausing interaction for %s with %s (ID: %s)",
         npc.displayName,
         participant and participant.Name or "Unknown",
         interactionId or "N/A"
     ))
 
-    -- Set last interaction time to prevent immediate re-interaction
+    -- Update timestamps
     npc.lastInteractionTime = tick()
+    npc.lastConversationTime = tick()
+    
     if participant then
         npc.lastInteractionPartner = typeof(participant) == "Instance" and participant.UserId or participant.npcId
     end
 
-    -- Clean up interaction tracking if we have an ID
-    if interactionId then
-        self.activeInteractions[interactionId] = nil
-    end
-
-    -- Always free the initiating NPC
-    self:setNPCMovementState(npc, "free")
-    npc.isInteracting = false
-    npc.interactingPlayer = nil
-
-    -- Don't clear conversation ID - let API handle conversation state
+    -- Preserve conversation context and history
     if npc.currentConversationId then
-        npc.lastConversationTime = tick()
-        Logger:log("CHAT", string.format("Preserving conversation context %s for %s with %s",
+        Logger:log("CHAT", string.format("Preserving conversation %s for %s with %s",
             npc.currentConversationId,
             npc.displayName,
             participant.Name or participant.displayName
         ))
     end
 
-    -- If NPC-to-NPC interaction, free the other NPC
+    -- Clean up interaction tracking
+    if interactionId then
+        self.activeInteractions[interactionId] = nil
+    end
+
+    -- Free movement state but preserve conversation data
+    self:setNPCMovementState(npc, "free")
+    npc.isInteracting = false
+    npc.interactingPlayer = nil
+
+    -- Handle NPC-to-NPC cleanup
     if self:isNPCParticipant(participant) then
         local otherNPC = self.npcs[participant.npcId]
         if otherNPC then
             self:setNPCMovementState(otherNPC, "free")
             otherNPC.isInteracting = false
             otherNPC.interactingPlayer = nil
-            Logger:log("INTERACTION", string.format("Freed other NPC: %s", otherNPC.displayName))
         end
     end
 
-    -- If player interaction, notify client
+    -- Notify client of paused conversation
     if typeof(participant) == "Instance" and participant:IsA("Player") then
         NPCChatEvent:FireClient(participant, {
             npcName = npc.displayName,
-            type = "ended_conversation"
+            type = "paused_conversation",
+            conversationId = npc.currentConversationId
         })
     end
-
-    Logger:log("INTERACTION", string.format("Ended interaction between %s and %s (ID: %s)",
-        npc.displayName,
-        tostring(participant.Name),
-        interactionId or "N/A"
-    ))
 end
 
 function NPCManagerV3:getCacheKey(npc, player, message)
@@ -735,43 +729,67 @@ function NPCManagerV3:stopFollowing(npc)
 end
 
 function NPCManagerV3:handleNPCInteraction(npc, participant, message)
-    -- Check if we should clear old conversation context
+    -- First check if this is a valid participant
+    if not npc or not participant then
+        Logger:warn("Invalid participants in handleNPCInteraction")
+        return
+    end
+
+    -- Generate participant ID
+    local participantId = typeof(participant) == "Instance" and participant.UserId or participant.npcId
+    
+    -- Check for existing conversation timeout
     if npc.lastConversationTime and npc.currentConversationId then
         local timeSinceLastChat = tick() - npc.lastConversationTime
-        if timeSinceLastChat > 300 then -- 5 minutes
+        if timeSinceLastChat > 1800 then -- 30 minutes
             Logger:log("CHAT", string.format("Clearing old conversation context %s for %s (inactive for %.0f seconds)",
                 npc.currentConversationId,
                 npc.displayName,
                 timeSinceLastChat
             ))
             npc.currentConversationId = nil
+            npc.hasGreetedParticipant = nil
+            npc.chatHistory = {} -- Clear chat history when conversation expires
         end
     end
 
--- -   -- If this is a greeting message but we've already greeted, skip it
--- -   if message == "Hello" and npc.hasGreetedParticipant == participant.UserId then
--- -       Logger:log("INTERACTION", string.format("Skipping greeting - %s already greeted %s", 
--- -           npc.displayName,
--- -           participant.Name or participant.displayName
--- -       ))
--- -       return
--- -   end
+    -- Handle greeting logic
+    local isNewConversation = not npc.currentConversationId
+    local isGreeting = message == "Hello"
 
-    -- Generate a unique interaction ID
-    local interactionId = HttpService:GenerateGUID(false)
-    
-    Logger:log("INTERACTION", string.format("Starting interaction - NPC: %s, Participant Type: %s, ID: %s",
-        npc.displayName,
-        typeof(participant) == "Instance" and "Player" or "NPC",
-        interactionId
-    ))
-
-    -- Validate participants
-    if not npc or not participant then
-        Logger:warn("Invalid participants in handleNPCInteraction")
-        return
+    -- If we have an existing conversation, transform greeting to continuation
+    if isGreeting and not isNewConversation then
+        -- Check if this is a quick re-engagement (within 5 minutes)
+        local timeSinceLastChat = tick() - (npc.lastConversationTime or 0)
+        if timeSinceLastChat <= 300 then -- 5 minutes
+            -- Transform greeting to continuation
+            message = "Hi again!"
+            Logger:log("CHAT", string.format("Transformed greeting to continuation for recent conversation %s", 
+                npc.currentConversationId
+            ))
+        else
+            -- Treat as new conversation if it's been a while
+            npc.currentConversationId = nil
+            isNewConversation = true
+            Logger:log("CHAT", "Starting new conversation after long pause")
+        end
     end
 
+    -- Skip duplicate greetings with cooldown
+    if isGreeting and npc.hasGreetedParticipant == participantId then
+        local timeSinceLastGreeting = tick() - (npc.lastGreetingTime or 0)
+        if timeSinceLastGreeting < 30 then -- 30 second cooldown
+            Logger:log("INTERACTION", string.format("Skipping duplicate greeting from %s (cooldown: %.1f seconds)", 
+                participant.Name or participant.displayName,
+                timeSinceLastGreeting
+            ))
+            return
+        end
+    end
+
+    -- Generate interaction ID
+    local interactionId = HttpService:GenerateGUID(false)
+    
     -- Update interaction history
     npc.chatHistory = npc.chatHistory or {}
     table.insert(npc.chatHistory, {
@@ -780,15 +798,16 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
         timestamp = os.time()
     })
 
-    -- Mark that we've greeted this participant
-    if message == "Hello" then
-        npc.hasGreetedParticipant = participant.UserId
+    -- Update greeting state for new conversations only
+    if isNewConversation and isGreeting then
+        npc.hasGreetedParticipant = participantId
+        npc.lastGreetingTime = tick()
     end
 
-    -- Prepare the chat request
-    local request = {
+    -- Get AI response
+    local response = NPCChatHandler:HandleChat({
         message = message,
-        player_id = participant.UserId or 0,
+        player_id = participantId,
         npc_id = npc.id,
         npc_name = npc.displayName,
         system_prompt = npc.system_prompt,
@@ -798,19 +817,31 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
         context = {
             participant_type = self:isNPCParticipant(participant) and "npc" or "player",
             participant_name = participant.Name or participant.displayName,
-            is_new_conversation = not npc.currentConversationId,
+            is_new_conversation = isNewConversation,
             interaction_history = npc.chatHistory,
             nearby_players = self:getVisiblePlayers(npc),
             npc_location = "Unknown"
         },
         perception = self:getPerceptionData(npc)
-    }
+    })
 
-    -- Get AI response before locking NPCs
-    local response = NPCChatHandler:HandleChat(request)
     if not response then
         Logger:warn("Failed to get AI response, aborting interaction")
         return
+    end
+
+    -- Update conversation state and timestamp
+    if response.metadata and response.metadata.conversation_id then
+        npc.currentConversationId = response.metadata.conversation_id
+        npc.lastConversationTime = tick()
+        
+        -- Store response in chat history
+        table.insert(npc.chatHistory, {
+            sender = npc.displayName,
+            recipient = participant.Name or participant.displayName,
+            message = response.message,
+            timestamp = os.time()
+        })
     end
 
     -- Handle different interaction types
@@ -818,21 +849,10 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
         self:handlePlayerInteraction(npc, participant, message, interactionId)
     elseif self:isNPCParticipant(participant) then
         self:handleNPCToNPCInteraction(npc, participant, message, interactionId)
-    else
-        Logger:warn(string.format("Unknown participant type in interaction with %s", npc.displayName))
-        return
     end
 
-    -- Store conversation ID for future messages
-    if response.metadata and response.metadata.conversation_id then
-        npc.currentConversationId = response.metadata.conversation_id
-    end
-    
-    -- Process the AI response
+    -- Process the response
     self:processAIResponse(npc, participant, response)
-
-    -- Update interaction time
-    npc.lastInteractionTime = tick()
 end
 
 function NPCManagerV3:handlePlayerInteraction(npc, player, message, interactionId)
@@ -896,7 +916,7 @@ function NPCManagerV3:setNPCMovementState(npc, state, interactionId)
     ))
 
     if state == "following" then
-        npc.model.Humanoid.WalkSpeed = 16  -- Normal walking speed
+        npc.model.Humanoid.WalkSpeed = 16
         npc.movementState = "following"
         Logger:log("MOVEMENT", string.format("%s is now following with speed %d", npc.displayName, npc.model.Humanoid.WalkSpeed))
     elseif state == "locked" and interactionId then
@@ -906,11 +926,10 @@ function NPCManagerV3:setNPCMovementState(npc, state, interactionId)
         npc.movementState = "locked"
         Logger:log("LOCK", string.format("Locked %s for interaction %s", npc.displayName, interactionId))
     else
-        npc.model.Humanoid.WalkSpeed = 16  -- Reset to default walk speed
+        npc.model.Humanoid.WalkSpeed = 16
         npc.isInteracting = false
         npc.interactionId = nil
         npc.interactingPlayer = nil
-        npc.currentConversationId = nil
         npc.movementState = "free"
         Logger:log("UNLOCK", string.format("Freed %s from previous state", npc.displayName))
     end
@@ -997,13 +1016,6 @@ function NPCManagerV3:updateNPCState(npc)
             if shouldEndInteraction then
                 self:endInteraction(npc, npc.interactingPlayer)
             end
-        end
-    else
-        -- Only try to walk if not interacting
-        if math.random() < 0.05 then  -- 5% chance each update
-            self:randomWalk(npc)
-        else
-            AnimationManager:playAnimation(humanoid, "idle")
         end
     end
 end
