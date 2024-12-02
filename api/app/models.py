@@ -55,6 +55,17 @@ class ConversationMetrics:
         }
 
 class AgentMapping(BaseModel):
+    """
+    Maps NPCs to their AI agents for persistent conversations.
+    
+    Attributes:
+        id: Internal database ID
+        npc_id: References the NPC in our system
+        participant_id: Unique identifier for the participant
+        agent_id: The AI agent ID (e.g., Letta agent ID)
+        agent_type: Type of AI agent (e.g., 'letta')
+        created_at: When this mapping was created
+    """
     id: Optional[int] = None
     npc_id: int
     participant_id: str

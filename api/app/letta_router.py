@@ -11,6 +11,31 @@ logger = logging.getLogger("roblox_app")
 router = APIRouter(prefix="/letta/v1", tags=["letta"])
 letta_client = LettaRobloxClient("http://localhost:8283")
 
+"""
+Letta AI Integration Router
+
+This module provides endpoints for integrating Letta AI agents with NPCs.
+It handles:
+- Agent creation and management
+- Conversation persistence
+- NPC context and memory management
+
+Integration Flow:
+1. When an NPC first interacts with a participant, a Letta agent is created
+2. The agent is initialized with the NPC's context (personality, abilities, etc.)
+3. The agent_mapping table maintains the relationship between NPCs and Letta agents
+4. Subsequent interactions use the same agent to maintain conversation context
+
+Example Usage:
+    POST /letta/v1/chat
+    {
+        "npc_id": 123,
+        "participant_id": "player_456",
+        "message": "Hello!",
+        "system_prompt": "Optional override for NPC's default prompt"
+    }
+"""
+
 class ChatRequest(BaseModel):
     npc_id: int  # Changed to int to match database
     participant_id: str
