@@ -79,6 +79,21 @@ return {
             "chat", 
         }, 
             shortTermMemory = {}, 
+        },        {
+            id = "9db3e3e8-78ff-405b-a11b-240c4afc251e", 
+            displayName = "Pete", 
+            name = "Pete", 
+            assetId = "128282678684676", 
+            model = "128282678684676", 
+            modelName = "Pete", 
+            system_prompt = "A young boy who is curious and always discovering new things.", 
+            responseRadius = 20, 
+            spawnPosition = Vector3.new(10.0, 18.0, -12.0), 
+            abilities = {
+            "move", 
+            "chat", 
+        }, 
+            shortTermMemory = {}, 
         },
     },
 }

@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List, Literal
+from datetime import datetime
 
 class NPCAction(BaseModel):
     type: Literal["follow", "unfollow", "stop_talking", "none"]
@@ -52,3 +53,45 @@ class ConversationMetrics:
             "average_response_time": self.average_response_time,
             "total_messages": self.total_messages
         }
+
+class AgentMapping(BaseModel):
+    id: Optional[int] = None
+    npc_id: int
+    participant_id: str
+    agent_id: str
+    agent_type: str = "letta"
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+def create_agent_mapping(
+    npc_id: int, 
+    participant_id: str, 
+    agent_id: str, 
+    agent_type: str = "letta"
+) -> AgentMapping:
+    """Create a new NPC agent mapping"""
+    with get_db() as db:
+        cursor = db.execute("""
+            INSERT INTO agent_mappings (npc_id, participant_id, agent_id, agent_type)
+            VALUES (?, ?, ?, ?)
+            RETURNING *
+        """, (npc_id, participant_id, agent_id, agent_type))
+        result = cursor.fetchone()
+        db.commit()
+        return AgentMapping(**dict(result))
+
+def get_agent_mapping(
+    npc_id: int, 
+    participant_id: str, 
+    agent_type: str = "letta"
+) -> Optional[AgentMapping]:
+    """Get existing NPC agent mapping"""
+    with get_db() as db:
+        cursor = db.execute("""
+            SELECT * FROM agent_mappings 
+            WHERE npc_id = ? AND participant_id = ? AND agent_type = ?
+        """, (npc_id, participant_id, agent_type))
+        result = cursor.fetchone()
+        return AgentMapping(**dict(result)) if result else None

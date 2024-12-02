@@ -4,6 +4,8 @@ from pathlib import Path
 import json
 from .config import SQLITE_DB_PATH
 from .paths import get_database_paths
+from typing import Optional, Dict, Any
+from .models import AgentMapping
 
 @contextmanager
 def get_db():
@@ -421,3 +423,61 @@ def fetch_npcs_by_game(game_id: int):
             ORDER BY n.display_name
         """, (game_id,))
         return [dict(row) for row in cursor.fetchall()]
+
+def get_npc_context(npc_id: int) -> Optional[Dict[str, Any]]:
+    """Get complete NPC context including asset info"""
+    with get_db() as db:
+        cursor = db.execute("""
+            SELECT 
+                n.npc_id,
+                n.display_name,
+                n.system_prompt,
+                n.abilities,
+                a.description as asset_description
+            FROM npcs n
+            LEFT JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
+            WHERE n.id = ?
+        """, (npc_id,))
+        result = cursor.fetchone()
+        
+        if not result:
+            return None
+            
+        return {
+            "npc_id": result["npc_id"],
+            "display_name": result["display_name"],
+            "system_prompt": result["system_prompt"],
+            "abilities": json.loads(result["abilities"] or "[]"),
+            "description": result["asset_description"]
+        }
+
+def create_agent_mapping(
+    npc_id: int, 
+    participant_id: str, 
+    agent_id: str, 
+    agent_type: str = "letta"
+) -> AgentMapping:
+    """Create a new agent mapping"""
+    with get_db() as db:
+        cursor = db.execute("""
+            INSERT INTO agent_mappings (npc_id, participant_id, agent_id, agent_type)
+            VALUES (?, ?, ?, ?)
+            RETURNING *
+        """, (npc_id, participant_id, agent_id, agent_type))
+        result = cursor.fetchone()
+        db.commit()
+        return AgentMapping(**dict(result))
+
+def get_agent_mapping(
+    npc_id: int, 
+    participant_id: str, 
+    agent_type: str = "letta"
+) -> Optional[AgentMapping]:
+    """Get existing agent mapping"""
+    with get_db() as db:
+        cursor = db.execute("""
+            SELECT * FROM agent_mappings 
+            WHERE npc_id = ? AND participant_id = ? AND agent_type = ?
+        """, (npc_id, participant_id, agent_type))
+        result = cursor.fetchone()
+        return AgentMapping(**dict(result)) if result else None

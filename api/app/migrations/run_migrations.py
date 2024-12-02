@@ -22,9 +22,9 @@ def run_migration(migration_name: str, rollback: bool = False):
                 logger.error(f"No rollback function found in {migration_name}")
                 return False
         else:
-            if hasattr(migration, 'migrate_spawn_positions'):
+            if hasattr(migration, 'migrate_npc_agents'):
                 logger.info(f"Running migration: {migration_name}")
-                migration.migrate_spawn_positions()
+                migration.migrate_npc_agents()
             else:
                 logger.error(f"No migration function found in {migration_name}")
                 return False
