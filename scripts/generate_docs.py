@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import argparse
 import sys
+from typing import Set, List
 
 def read_file_content(file_path):
     """Read and return the contents of a file."""
@@ -224,15 +225,96 @@ def generate_documentation(path_or_id, api_only=False):
         
     print(f"Documentation generated successfully for {game_name} at {output_path}")
 
+def get_core_npc_files() -> Set[str]:
+    """Return set of core NPC system files that should be included in minimal documentation."""
+    return {
+        # Core NPC files
+        'NPCManagerV3.lua',
+        'NPCDatabaseV3.lua',
+        'NPCChatHandler.lua',
+        'AnimationManager.lua',
+        # Core API files
+        'routers_v4.py',
+        'models.py',
+        'conversation_managerV2.py',
+        'ai_handler.py'
+    }
+
+def generate_minimal_documentation(game_slug: str):
+    """Generate minimal documentation focusing on core NPC system files."""
+    project_root = Path(__file__).parent.parent
+    docs_dir = project_root / "docs"
+    game_dir = project_root / "games" / game_slug
+    api_dir = project_root / "api"
+    
+    # Create docs directory
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    
+    core_files = get_core_npc_files()
+    
+    # Initialize documentation content
+    doc_content = [
+        f"# {game_slug} NPC System Documentation (Minimal)\n",
+        "## Game Directory Structure\n",
+        "```",
+        generate_tree_structure(game_dir / "src", start_with_root=False),
+        "```\n",
+        "## API Directory Structure\n",
+        "```",
+        generate_tree_structure(api_dir, start_with_root=False),
+        "```\n",
+        "## Core Game Files\n"
+    ]
+    
+    # Add core game files
+    for file_path in (game_dir / "src").rglob("*.*"):
+        if file_path.name in core_files:
+            relative_path = file_path.relative_to(game_dir / "src")
+            print(f"Adding core game file: {relative_path}")
+            doc_content.extend([
+                f"### {relative_path}\n",
+                "```" + (file_path.suffix[1:] or 'text'),
+                read_file_content(file_path),
+                "```\n"
+            ])
+    
+    # Add API files section
+    doc_content.extend([
+        "## Core API Files\n"
+    ])
+    
+    # Add core API files
+    for file_path in api_dir.rglob("*.*"):
+        if file_path.name in core_files:
+            relative_path = file_path.relative_to(api_dir)
+            print(f"Adding core API file: {relative_path}")
+            doc_content.extend([
+                f"### {relative_path}\n",
+                "```" + (file_path.suffix[1:] or 'text'),
+                read_file_content(file_path),
+                "```\n"
+            ])
+    
+    # Write minimal documentation
+    output_path = docs_dir / f"{game_slug}_MINIMAL_DOCUMENTATION.md"
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write("\n".join(doc_content))
+        
+    print(f"Minimal documentation generated successfully at {output_path}")
+
 def main():
     """Main entry point for the documentation generator."""
     parser = argparse.ArgumentParser(description='Generate documentation for the project.')
     parser.add_argument('path_or_id', help='Path to the game directory or "api" for API documentation')
     parser.add_argument('--api-only', action='store_true', help='Generate only API documentation')
+    parser.add_argument('--minimal', action='store_true', help='Generate minimal documentation focusing on core NPC system')
     
     args = parser.parse_args()
     try:
-        generate_documentation(args.path_or_id, args.api_only)
+        if args.minimal:
+            generate_minimal_documentation(args.path_or_id)
+        else:
+            generate_documentation(args.path_or_id, args.api_only)
     except Exception as e:
         print(f"Error generating documentation: {str(e)}")
         sys.exit(1)

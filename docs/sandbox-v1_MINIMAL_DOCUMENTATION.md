@@ -1,6 +1,6 @@
-# sandbox-v1 Documentation
+# sandbox-v1 NPC System Documentation (Minimal)
 
-## Directory Structure
+## Game Directory Structure
 
 ```
 ├── assets
@@ -40,1175 +40,85 @@
     └── V4ChatClient.lua
 ```
 
-## Source Files
-
-### server/PlayerJoinHandler.server.lua
-
-```lua
---PlayerJoinHandler.server.lua
-local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ServerScriptService = game:GetService("ServerScriptService")
-
--- Initialize Logger
-local Logger = require(ServerScriptService.Logger)
-
--- Folder to store player descriptions in ReplicatedStorage
-local PlayerDescriptionsFolder = ReplicatedStorage:FindFirstChild("PlayerDescriptions")
-	or Instance.new("Folder", ReplicatedStorage)
-PlayerDescriptionsFolder.Name = "PlayerDescriptions"
-
-local API_URL = "https://roblox.ella-ai-care.com/get_player_description"
-
--- Function to send player ID to an external API and get a description
-local function getPlayerDescriptionFromAPI(userId)
-	local data = { user_id = tostring(userId) }
-
-	-- API call to get the player description
-	local success, response = pcall(function()
-		return HttpService:PostAsync(API_URL, HttpService:JSONEncode(data), Enum.HttpContentType.ApplicationJson)
-	end)
-
-	if success then
-		local parsedResponse = HttpService:JSONDecode(response)
-
-		-- Check if the API response contains a valid description
-		if parsedResponse and parsedResponse.description then
-			Logger:log("API", string.format("Received response from API for userId: %s", userId))
-			return parsedResponse.description
-		else
-			Logger:log("ERROR", string.format("API response missing 'description' for userId: %s", userId))
-			return "No description available"
-		end
-	else
-		Logger:log("ERROR", string.format("Failed to get player description from API for userId: %s. Error: %s", 
-            userId, 
-            tostring(response)
-        ))
-		return "Error retrieving description"
-	end
-end
-
--- Function to store player description in ReplicatedStorage
-local function storePlayerDescription(playerName, description)
-	-- Create or update the player's description in ReplicatedStorage
-	local existingDesc = PlayerDescriptionsFolder:FindFirstChild(playerName)
-	if existingDesc then
-		existingDesc.Value = description
-		Logger:log("DATABASE", string.format("Updated description for player: %s", playerName))
-	else
-		local playerDesc = Instance.new("StringValue")
-		playerDesc.Name = playerName
-		playerDesc.Value = description
-		playerDesc.Parent = PlayerDescriptionsFolder
-		Logger:log("DATABASE", string.format("Created new description for player: %s", playerName))
-	end
-end
-
--- Event handler for when a player joins the game
-local function onPlayerAdded(player)
-	Logger:log("INTERACTION", string.format("Player joined: %s (UserId: %s)", 
-        player.Name, 
-        player.UserId
-    ))
-
-	-- Get the player's description from the API
-	local description = getPlayerDescriptionFromAPI(player.UserId)
-
-	-- Store the description in ReplicatedStorage
-	if description then
-		storePlayerDescription(player.Name, description)
-		Logger:log("STATE", string.format("Stored description for player: %s -> %s", 
-            player.Name, 
-            description
-        ))
-	else
-		local fallbackDescription = "A player named " .. player.Name
-		storePlayerDescription(player.Name, fallbackDescription)
-		Logger:log("WARN", string.format("Using fallback description for player: %s -> %s", 
-            player.Name, 
-            fallbackDescription
-        ))
-	end
-end
-
--- Connect the PlayerAdded event to the onPlayerAdded function
-Players.PlayerAdded:Connect(onPlayerAdded)
-
--- Ensure logs are displayed at server startup
-Logger:log("SYSTEM", "PlayerJoinHandler initialized and waiting for players.")
+## API Directory Structure
 
 ```
-
-### server/MainNPCScript.server.lua
-
-```lua
--- ServerScriptService/MainNPCScript.server.lua
--- At the top of MainNPCScript.server.lua
-local ServerScriptService = game:GetService("ServerScriptService")
-local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
-local Logger = require(ServerScriptService:WaitForChild("Logger"))
-
-local success, result = pcall(function()
-	return require(ServerScriptService:WaitForChild("InteractionController", 5))
-end)
-
-if success then
-	InteractionController = result
-	Logger:log("SYSTEM", "InteractionController loaded successfully")
-else
-	Logger:log("ERROR", "Failed to load InteractionController: " .. tostring(result))
-	-- Provide a basic implementation to prevent further errors
-	InteractionController = {
-		new = function()
-			return {
-				canInteract = function()
-					return true
-				end,
-				startInteraction = function()
-					return true
-				end,
-				endInteraction = function() end,
-				getInteractingNPC = function()
-					return nil
-				end,
-			}
-		end,
-	}
-end
-
--- Rest of your MainNPCScript code...
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-local ServerScriptService = game:GetService("ServerScriptService")
-
-local Logger = require(ServerScriptService:WaitForChild("Logger"))
-
--- Move ensureStorage to the top, before NPC initialization
-local function ensureStorage()
-    local ServerStorage = game:GetService("ServerStorage")
-    
-    -- Create Assets/npcs folder structure
-    local Assets = ServerStorage:FindFirstChild("Assets") or 
-                   Instance.new("Folder", ServerStorage)
-    Assets.Name = "Assets"
-    
-    local npcs = Assets:FindFirstChild("npcs") or 
-                 Instance.new("Folder", Assets)
-    npcs.Name = "npcs"
-    
-    Logger:log("SYSTEM", "Storage structure verified")
-end
-
--- Call ensureStorage first
-ensureStorage()
-
--- Then initialize NPC system
-local NPCManagerV3 = require(ReplicatedStorage:WaitForChild("NPCManagerV3"))
-Logger:log("SYSTEM", "Starting NPC initialization")
-local npcManagerV3 = NPCManagerV3.new()
-Logger:log("SYSTEM", "NPC Manager created")
-
-for npcId, npcData in pairs(npcManagerV3.npcs) do
-	Logger:log("STATE", string.format("NPC spawned: %s", npcData.displayName))
-end
-
-local interactionController = npcManagerV3.interactionController
-
-Logger:log("SYSTEM", "NPC system V3 initialized")
-
-local function checkPlayerProximity()
-	for _, player in ipairs(Players:GetPlayers()) do
-		local playerPosition = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-		if playerPosition then
-			for _, npc in pairs(npcManagerV3.npcs) do
-				if npc.model and npc.model.PrimaryPart then
-					local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
-					if distance <= npc.responseRadius and not npc.isInteracting then
-						if interactionController:canInteract(player) then
-							Logger:log("INTERACTION", string.format("Auto-interaction triggered for %s with %s", 
-								npc.displayName, player.Name))
-							npcManagerV3:handleNPCInteraction(npc, player, "Hello")
-						end
-					end
-				end
-			end
-		end
-	end
-end
-
-local function onPlayerChatted(player, message)
-	Logger:log("INTERACTION", string.format("Player %s chatted: %s", player.Name, message))
-	
-	local playerPosition = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if not playerPosition then
-		Logger:log("ERROR", string.format("Cannot process chat for %s: Character not found", player.Name))
-		return
-	end
-
-	local closestNPC, closestDistance = nil, math.huge
-
-	for _, npc in pairs(npcManagerV3.npcs) do
-		if npc.model and npc.model.PrimaryPart then
-			local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
-			if distance <= npc.responseRadius and distance < closestDistance then
-				closestNPC, closestDistance = npc, distance
-			end
-		end
-	end
-
-	if closestNPC then
-		Logger:log("INTERACTION", string.format("Routing chat from %s to NPC %s", 
-			player.Name, closestNPC.displayName))
-		npcManagerV3:handleNPCInteraction(closestNPC, player, message)
-	end
-end
-
-local function setupChatConnections()
-	Logger:log("SYSTEM", "Setting up chat connections")
-	Players.PlayerAdded:Connect(function(player)
-		Logger:log("STATE", string.format("Setting up chat connection for player: %s", player.Name))
-		player.Chatted:Connect(function(message)
-			onPlayerChatted(player, message)
-		end)
-	end)
-end
-
-setupChatConnections()
-
-local function updateNPCs()
-	Logger:log("SYSTEM", "Starting NPC update loop")
-	while true do
-		checkPlayerProximity()
-		for _, npc in pairs(npcManagerV3.npcs) do
-			npcManagerV3:updateNPCState(npc)
-		end
-		wait(1)
-	end
-end
-
-spawn(updateNPCs)
-
--- Handle player-initiated interaction ending
-local EndInteractionEvent = Instance.new("RemoteEvent")
-EndInteractionEvent.Name = "EndInteractionEvent"
-EndInteractionEvent.Parent = ReplicatedStorage
-
-EndInteractionEvent.OnServerEvent:Connect(function(player)
-	local interactingNPC = interactionController:getInteractingNPC(player)
-	if interactingNPC then
-		Logger:log("INTERACTION", string.format("Player %s manually ended interaction with %s", 
-			player.Name, interactingNPC.displayName))
-		npcManagerV3:endInteraction(interactingNPC, player)
-	end
-end)
-
-Logger:log("SYSTEM", "NPC system V3 main script running")
-
+├── app
+│   ├── __init__.py
+│   ├── ai_handler.py
+│   ├── config.py
+│   ├── conversation_manager.py
+│   ├── conversation_managerV2.py
+│   ├── dashboard_router.py
+│   ├── database.py
+│   ├── db.py
+│   ├── image_utils.py
+│   ├── main.py
+│   ├── middleware.py
+│   ├── models.py
+│   ├── paths.py
+│   ├── routers.py
+│   ├── routers_v4.py
+│   ├── security.py
+│   ├── singletons.py
+│   ├── storage.py
+│   ├── tasks.py
+│   └── utils.py
+├── db
+│   ├── migrate.py
+│   ├── schema.sql
+├── initial_data
+│   └── game1
+│       └── src
+│           └── data
+│               ├── AssetDatabase.json
+│               └── NPCDatabase.json
+├── modules
+│   └── game_creator.py
+├── routes
+│   └── games.py
+├── static
+│   ├── css
+│   │   └── dashboard.css
+│   └── js
+│       ├── dashboard_new
+│       │   ├── abilityConfig.js
+│       │   ├── assets.js
+│       │   ├── game.js
+│       │   ├── games.js
+│       │   ├── index.js
+│       │   ├── npc.js
+│       │   ├── state.js
+│       │   ├── ui.js
+│       │   └── utils.js
+│       ├── abilityConfig.js
+│       ├── dashboard.js
+│       └── games.js
+├── storage
+│   ├── assets
+│   │   ├── models
+│   │   ├── thumbnails
+│   ├── avatars
+│   ├── default
+│   │   ├── assets
+│   │   ├── avatars
+│   │   └── thumbnails
+│   └── thumbnails
+├── templates
+│   ├── dashboard_new.html
+│   ├── npc-edit.html
+│   ├── npcs.html
+│   └── players.html
+├── .env.example
+├── init_db.py
+├── pytest.ini
+├── requirements.txt
+├── setup_db.py
+├── test_imports.py
+└── testimg.py
 ```
 
-### server/NPCSystemInitializer.server.lua
-
-```lua
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ServerStorage = game:GetService("ServerStorage")
-local ServerScriptService = game:GetService("ServerScriptService")
-local Logger = require(ServerScriptService:WaitForChild("Logger"))
-local NPCManagerV3 = require(ReplicatedStorage:WaitForChild("NPCManagerV3"))
-
--- Initialize storage structure first
-local function ensureStorage()
-	-- Create Assets/npcs folder structure
-	local Assets = ServerStorage:FindFirstChild("Assets") or 
-				   Instance.new("Folder", ServerStorage)
-	Assets.Name = "Assets"
-	
-	local npcs = Assets:FindFirstChild("npcs") or 
-				 Instance.new("Folder", Assets)
-	npcs.Name = "npcs"
-	
-	-- Get list of required models from NPCDatabase
-	local npcDatabase = require(ReplicatedStorage:WaitForChild("NPCDatabaseV3"))
-	
-	-- Scan the npcs folder for available models
-	local availableModels = {}
-	for _, model in ipairs(npcs:GetChildren()) do
-		availableModels[model.Name] = true
-		Logger:log("ASSET", string.format("Found model: %s", model.Name))
-	end
-	
-	-- Check which required models are missing
-	for _, npc in ipairs(npcDatabase.npcs) do
-		if not availableModels[npc.model] then
-			Logger:log("ERROR", string.format("Missing required model '%s' for NPC: %s", 
-				npc.model, npc.displayName))
-		end
-	end
-	
-	return npcs
-end
-
-local npcsFolder = ensureStorage()
-
--- Initialize events for NPC chat and interaction
-if not ReplicatedStorage:FindFirstChild("NPCChatEvent") then
-	local NPCChatEvent = Instance.new("RemoteEvent")
-	NPCChatEvent.Name = "NPCChatEvent"
-	NPCChatEvent.Parent = ReplicatedStorage
-	Logger:log("SYSTEM", "Created NPCChatEvent")
-end
-
-if not ReplicatedStorage:FindFirstChild("EndInteractionEvent") then
-	local EndInteractionEvent = Instance.new("RemoteEvent")
-	EndInteractionEvent.Name = "EndInteractionEvent"
-	EndInteractionEvent.Parent = ReplicatedStorage
-	Logger:log("SYSTEM", "Created EndInteractionEvent")
-end
-
-Logger:log("SYSTEM", "NPC System initialized. Using V3 system.")
-
--- Create and store NPCManager instance (it will return the same instance if already created)
-local npcManager = NPCManagerV3.new()
-_G.NPCManager = npcManager
-
-```
-
-### server/NPCInteractionTest.lua
-
-```lua
-function runNPCInteractionTests()
-    -- ... existing setup ...
-
-    -- Test 1: Basic NPC-to-NPC interaction
-    print("Test 1: Initiating basic NPC-to-NPC interaction")
-    local mockParticipant = npcManager:createMockParticipant(npc1)
-    
-    -- Verify mock participant
-    assert(mockParticipant.Type == "npc", "Mock participant should be of type 'npc'")
-    assert(mockParticipant.model == npc1.model, "Mock participant should have correct model reference")
-    assert(mockParticipant.npcId == npc1.id, "Mock participant should have correct NPC ID")
-    
-    -- Start interaction
-    local success, err = pcall(function()
-        npcManager:handleNPCInteraction(npc2, mockParticipant, "Hello!")
-        wait(2) -- Wait for the interaction to process
-        
-        -- Verify states
-        assert(npc2.isInteracting, "NPC2 should be in interaction state")
-        assert(npc2.model.Humanoid.WalkSpeed == 0, "NPC2 should be locked in place")
-        
-        -- Check for response
-        assert(#npc2.chatHistory > 0, "NPC2 should have responded")
-        print("NPC2 response: " .. npc2.chatHistory[#npc2.chatHistory])
-    end)
-    
-    if not success then
-        error("Interaction test failed: " .. tostring(err))
-    end
-    
-    -- Clean up
-    npcManager:endInteraction(npc2, mockParticipant)
-    wait(1)
-    
-    -- Verify cleanup
-    assert(not npc2.isInteracting, "NPC2 should not be in interaction state")
-    assert(npc2.model.Humanoid.WalkSpeed > 0, "NPC2 should be unlocked")
-
-    print("All NPC-to-NPC interaction tests passed!")
-end 
-```
-
-### server/MainNPCScript.lua
-
-```lua
--- MainNPCScript.lua
-function updateNPCs()
-    Logger:log("UPDATE", "------- Starting NPC State Update -------")
-    
-    for _, npc in pairs(NPCManager.npcs) do
-        NPCManager:updateNPCState(npc)
-    end
-    
-    Logger:log("UPDATE", "------- Finished NPC State Update -------")
-    wait(UPDATE_INTERVAL)
-end 
-```
-
-### server/ChatSetup.server.lua
-
-```lua
-local ChatService = game:GetService("Chat")
-local ServerScriptService = game:GetService("ServerScriptService")
-local Logger = require(ServerScriptService:WaitForChild("Logger"))
-
-Logger:log("SYSTEM", "Setting up chat service")
-
--- Enable bubble chat without checking ChatVersion
-ChatService.BubbleChatEnabled = true
-
-Logger:log("SYSTEM", "Chat setup completed")
-```
-
-### server/NPCConfigurations.lua
-
-```lua
--- Script Name: NPCConfigurations
--- Script Location: ServerScriptService
-
-return {
-	{
-		npcId = "eldrin",
-		displayName = "Eldrin the Wise",
-		model = "Eldrin",
-		responseRadius = 20,
-		spawnPosition = Vector3.new(0, 5, 0),
-	},
-	{
-		npcId = "luna",
-		displayName = "Luna the Stargazer",
-		model = "Luna",
-		responseRadius = 15,
-		spawnPosition = Vector3.new(10, 5, 10),
-	},
-}
-
-```
-
-### server/Logger.lua
-
-```lua
--- Logger.lua
-local Logger = {}
-
--- Define log levels
-Logger.LogLevel = {
-    DEBUG = 1,
-    INFO = 2,
-    WARN = 3,
-    ERROR = 4,
-    NONE = 5
-}
-
--- Current log level - can be changed at runtime
-Logger.currentLevel = Logger.LogLevel.DEBUG
-
--- Category filters - Uncomment to disable specific categories
-Logger.categoryFilters = {
-    -- System & Debug
-    -- SYSTEM = false,    -- System-level messages
-    -- DEBUG = false,     -- Debug information
-    -- ERROR = false,     -- Error messages
-    
-    -- NPC Behavior
-    -- VISION = false,    -- NPC vision updates
-    -- MOVEMENT = false,  -- NPC movement
-    -- ACTION = false,    -- NPC actions
-    -- ANIMATION = false, -- NPC animations
-    
-    -- Interaction & Chat
-    -- CHAT = false,      -- Chat messages
-    -- INTERACTION = false, -- Player-NPC interactions
-    -- RESPONSE = false,  -- AI responses
-    
-    -- State & Data
-    -- STATE = false,     -- State changes
-    -- DATABASE = false,  -- Database operations
-    -- ASSET = false,     -- Asset loading/management
-    -- API = false,       -- API calls
-}
-
-function Logger:setLogLevel(level)
-    if self.LogLevel[level] then
-        self.currentLevel = self.LogLevel[level]
-    end
-end
-
-function Logger:enableCategory(category)
-    self.categoryFilters[category] = true
-    print(string.format("Enabled logging for category: %s", category))
-end
-
-function Logger:disableCategory(category)
-    self.categoryFilters[category] = false
-    print(string.format("Disabled logging for category: %s", category))
-end
-
-function Logger:log(category, message, ...)
-    -- Check if category is explicitly disabled
-    if self.categoryFilters[category] == false then
-        return
-    end
-    
-    local timestamp = os.date("%Y-%m-%d %H:%M:%S")
-    
-    -- Handle old-style logging (single message parameter)
-    if message == nil then
-        -- If only one parameter was passed, treat it as the message
-        print(string.format("[%s] %s", timestamp, category))
-        return
-    end
-    
-    -- Handle new-style logging (category + message)
-    print(string.format("[%s] [%s] %s", timestamp, category:upper(), message))
-end
-
--- Convenience methods for each category
-function Logger:vision(message)
-    self:log("VISION", message)
-end
-
-function Logger:movement(message)
-    self:log("MOVEMENT", message)
-end
-
-function Logger:interaction(message)
-    self:log("INTERACTION", message)
-end
-
-function Logger:database(message)
-    self:log("DATABASE", message)
-end
-
-function Logger:asset(message)
-    self:log("ASSET", message)
-end
-
-function Logger:api(message)
-    self:log("API", message)
-end
-
-function Logger:state(message)
-    self:log("STATE", message)
-end
-
-function Logger:animation(message)
-    self:log("ANIMATION", message)
-end
-
-function Logger:error(message)
-    self:log("ERROR", message)
-end
-
-function Logger:debug(message)
-    self:log("DEBUG", message)
-end
-
--- Example usage:
--- To disable vision logs, uncomment this line:
-Logger.categoryFilters.VISION = false
-Logger.categoryFilters.MOVEMENT = false
-Logger.categoryFilters.ANIMATION = false
--- To re-enable vision logs, uncomment this line:
--- Logger.categoryFilters.VISION = true
-
--- You can also use these functions in your code:
--- Logger:disableCategory("VISION")
--- Logger:enableCategory("VISION")
-
-return Logger
-```
-
-### server/AssetInitializer.server.lua
-
-```lua
--- AssetInitializer.server.lua
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
--- Load the AssetDatabase file directly
-local AssetDatabase = require(game:GetService("ServerScriptService").AssetDatabase)
-
--- Create or get LocalDB in ReplicatedStorage for storing asset descriptions
-local LocalDB = ReplicatedStorage:FindFirstChild("LocalDB") or Instance.new("Folder", ReplicatedStorage)
-LocalDB.Name = "LocalDB"
-
--- Create a lookup table for assets by name
-local AssetLookup = {}
-
--- Function to store asset descriptions in ReplicatedStorage
--- Function to store asset descriptions in ReplicatedStorage
-local function storeAssetDescriptions(assetId, name, description, imageUrl)
-    local assetEntry = LocalDB:FindFirstChild(assetId)
-    if assetEntry then
-        assetEntry:Destroy() -- Remove existing entry to ensure we're updating all fields
-    end
-
-    assetEntry = Instance.new("Folder")
-    assetEntry.Name = assetId
-    assetEntry.Parent = LocalDB
-
-    -- Create and set name value with fallback
-    local nameValue = Instance.new("StringValue")
-    nameValue.Name = "Name"
-    nameValue.Value = name or "Unknown Asset"
-    nameValue.Parent = assetEntry
-
-    -- Create and set description value with fallback
-    local descValue = Instance.new("StringValue")
-    descValue.Name = "Description"
-    descValue.Value = description or "No description available"
-    descValue.Parent = assetEntry
-
-    -- Create and set image value with fallback
-    local imageValue = Instance.new("StringValue")
-    imageValue.Name = "ImageUrl"
-    imageValue.Value = imageUrl or ""
-    imageValue.Parent = assetEntry
-
-    print(string.format(
-        "Stored asset: ID: %s, Name: %s, Description: %s",
-        assetId,
-        nameValue.Value,
-        string.sub(descValue.Value, 1, 50) .. "..."
-    ))
-end
-
--- Initialize all assets from the local AssetDatabase
-local function initializeAssets()
-	for _, assetData in ipairs(AssetDatabase.assets) do
-		storeAssetDescriptions(assetData.assetId, assetData.name, assetData.description, assetData.imageUrl)
-	end
-end
-
-initializeAssets()
-print("All assets initialized from local database.")
-
--- Print out all stored assets for verification
-print("Verifying stored assets in LocalDB:")
-for _, assetEntry in ipairs(LocalDB:GetChildren()) do
-	local nameValue = assetEntry:FindFirstChild("Name")
-	local descValue = assetEntry:FindFirstChild("Description")
-	local imageValue = assetEntry:FindFirstChild("ImageUrl")
-
-	if nameValue and descValue and imageValue then
-		print(
-			string.format(
-				"Verified asset: ID: %s, Name: %s, Description: %s",
-				assetEntry.Name,
-				nameValue.Value,
-				string.sub(descValue.Value, 1, 50) .. "..."
-			)
-		)
-	else
-		print(
-			string.format(
-				"Error verifying asset: ID: %s, Name exists: %s, Description exists: %s, ImageUrl exists: %s",
-				assetEntry.Name,
-				tostring(nameValue ~= nil),
-				tostring(descValue ~= nil),
-				tostring(imageValue ~= nil)
-			)
-		)
-	end
-end
-
--- Function to check a specific asset by name
-local function checkAssetByName(assetName)
-	local assetId = AssetLookup[assetName]
-	if assetId then
-		local assetEntry = LocalDB:FindFirstChild(assetId)
-		if assetEntry then
-			local nameValue = assetEntry:FindFirstChild("Name")
-			local descValue = assetEntry:FindFirstChild("Description")
-			local imageValue = assetEntry:FindFirstChild("ImageUrl")
-
-			print(string.format("Asset check by name: %s", assetName))
-			print("  ID: " .. assetId)
-			print("  Name exists: " .. tostring(nameValue ~= nil))
-			print("  Description exists: " .. tostring(descValue ~= nil))
-			print("  ImageUrl exists: " .. tostring(imageValue ~= nil))
-
-			if nameValue then
-				print("  Name value: " .. nameValue.Value)
-			end
-			if descValue then
-				print("  Description value: " .. string.sub(descValue.Value, 1, 50) .. "...")
-			end
-			if imageValue then
-				print("  ImageUrl value: " .. imageValue.Value)
-			end
-		else
-			print("Asset entry not found for name: " .. assetName)
-		end
-	else
-		print("Asset not found in lookup table: " .. assetName)
-	end
-end
-
--- Check specific assets by name
-checkAssetByName("Tesla Cybertruck")
-checkAssetByName("Jeep")
-checkAssetByName("Road Sign Stop")
-checkAssetByName("HawaiiClothing Store")
-
-print("Asset initialization complete. AssetModule is now available in ReplicatedStorage.")
-
-```
-
-### server/InteractionController.lua
-
-```lua
--- ServerScriptService/InteractionController.lua
-local ServerScriptService = game:GetService("ServerScriptService")
-local Logger = require(ServerScriptService:WaitForChild("Logger"))
-
-local InteractionController = {}
-InteractionController.__index = InteractionController
-
-function InteractionController.new()
-    local self = setmetatable({}, InteractionController)
-    self.activeInteractions = {}
-    Logger:log("SYSTEM", "InteractionController initialized")
-    return self
-end
-
-function InteractionController:startInteraction(player, npc)
-    if self.activeInteractions[player] then
-        Logger:log("PLAYER", string.format("Player %s already in interaction", player.Name))
-        return false
-    end
-    self.activeInteractions[player] = {npc = npc, startTime = tick()}
-    Logger:log("PLAYER", string.format("Started interaction: %s with %s", player.Name, npc.displayName))
-    return true
-end
-
-function InteractionController:endInteraction(player)
-    Logger:log("PLAYER", string.format("Ending interaction for player %s", player.Name))
-    self.activeInteractions[player] = nil
-end
-
-function InteractionController:canInteract(player)
-    return not self.activeInteractions[player]
-end
-
-function InteractionController:getInteractingNPC(player)
-    local interaction = self.activeInteractions[player]
-    return interaction and interaction.npc or nil
-end
-
-function InteractionController:getInteractionState(player)
-    local interaction = self.activeInteractions[player]
-    if interaction then
-        return {
-            npc_id = interaction.npc.id,
-            npc_name = interaction.npc.displayName,
-            start_time = interaction.startTime,
-            duration = tick() - interaction.startTime,
-        }
-    end
-    return nil
-end
-
-function InteractionController:startGroupInteraction(players, npc)
-    for _, player in ipairs(players) do
-        self.activeInteractions[player] = {npc = npc, group = players, startTime = tick()}
-    end
-    Logger:log("PLAYER", string.format("Started group interaction with %d players", #players))
-end
-
-function InteractionController:isInGroupInteraction(player)
-    local interaction = self.activeInteractions[player]
-    return interaction and interaction.group ~= nil
-end
-
-function InteractionController:getGroupParticipants(player)
-    local interaction = self.activeInteractions[player]
-    if interaction and interaction.group then
-        return interaction.group
-    end
-    return {player}
-end
-
-return InteractionController
-```
-
-### server/MockPlayerTest.server.lua
-
-```lua
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local MockPlayer = require(script.Parent.MockPlayer)
-
--- Test function to run all checks
-local function runTests()
-    print("Starting MockPlayer tests...")
-    
-    -- Test 1: Basic instantiation with type
-    local testPlayer = MockPlayer.new("TestUser", 12345, "npc")
-    assert(testPlayer ~= nil, "MockPlayer should be created successfully")
-    assert(testPlayer.Name == "TestUser", "Name should match constructor argument")
-    assert(testPlayer.DisplayName == "TestUser", "DisplayName should match Name")
-    assert(testPlayer.UserId == 12345, "UserId should match constructor argument")
-    assert(testPlayer.Type == "npc", "Type should be set to npc")
-    print("✓ Basic instantiation tests passed")
-    
-    -- Test 2: Default type behavior
-    local defaultPlayer = MockPlayer.new("DefaultUser")
-    assert(defaultPlayer.Type == "npc", "Default Type should be 'npc'")
-    print("✓ Default type test passed")
-    
-    -- Test 3: IsA functionality
-    assert(testPlayer:IsA("Player") == true, "IsA('Player') should return true")
-    print("✓ IsA tests passed")
-    
-    -- Test 4: GetParticipantType functionality
-    assert(testPlayer:GetParticipantType() == "npc", "GetParticipantType should return 'npc'")
-    local playerTypeMock = MockPlayer.new("PlayerTest", 789, "player")
-    assert(playerTypeMock:GetParticipantType() == "player", "GetParticipantType should return 'player'")
-    print("✓ GetParticipantType tests passed")
-    
-    print("All MockPlayer tests passed successfully!")
-end
-
--- Run tests in protected call to catch any errors
-local success, error = pcall(runTests)
-if not success then
-    warn("MockPlayer tests failed: " .. tostring(error))
-end 
-```
-
-### server/NPCInteractionTest.server.lua
-
-```lua
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local NPCManagerV3 = require(ReplicatedStorage.NPCManagerV3)
-
-local function runNPCInteractionTests()
-    print("Starting NPC-to-NPC interaction tests...")
-    
-    -- Get the singleton instance
-    local npcManager = NPCManagerV3.new()
-    
-    -- Wait longer for NPCs to load from main initialization
-    wait(5)
-    
-    -- Get two NPCs from the manager
-    local npc1, npc2
-    local npcCount = 0
-    for id, npc in pairs(npcManager.npcs) do
-        npcCount = npcCount + 1
-        if npcCount == 1 then
-            npc1 = npc
-        elseif npcCount == 2 then
-            npc2 = npc
-            break
-        end
-    end
-    
-    if not (npc1 and npc2) then
-        warn("Failed to find two NPCs for testing")
-        return
-    end
-    
-    -- Disable movement for both NPCs during test
-    npc1.isMoving = false
-    npc2.isMoving = false
-    
-    print(string.format("Testing interaction between %s and %s", npc1.displayName, npc2.displayName))
-    
-    -- Test 1: Basic NPC-to-NPC interaction
-    print("Test 1: Initiating basic NPC-to-NPC interaction")
-    local mockParticipant = npcManager:createMockParticipant(npc1)
-    
-    -- Verify mock participant
-    assert(mockParticipant.Type == "npc", "Mock participant should be of type 'npc'")
-    assert(mockParticipant.model == npc1.model, "Mock participant should have correct model reference")
-    
-    -- Start interaction
-    local success, err = pcall(function()
-        npcManager:handleNPCInteraction(npc2, mockParticipant, "Hello!")
-        wait(1) -- Wait for interaction to process
-        
-        -- Verify interaction states
-        assert(npc2.isInteracting, "NPC2 should be in interaction state")
-        assert(not npc2.isMoving, "NPC2 should not be moving during interaction")
-    end)
-    
-    if not success then
-        error("Interaction test failed: " .. tostring(err))
-    end
-    
-    print("✓ Basic interaction test passed")
-    
-    -- Clean up
-    npcManager:endInteraction(npc2, mockParticipant)
-    wait(1)
-    
-    -- Re-enable movement
-    npc1.isMoving = true
-    npc2.isMoving = true
-    
-    -- Test 1: Basic NPC-to-NPC interaction with movement locking
-    print("Test 1: Testing NPC-to-NPC interaction with movement locking")
-    local mockParticipant = npcManager:createMockParticipant(npc1)
-    
-    -- Start interaction
-    local success, err = pcall(function()
-        -- Verify initial states
-        assert(npc1.isMoving == true, "NPC1 should be able to move initially")
-        assert(npc2.isMoving == true, "NPC2 should be able to move initially")
-        
-        npcManager:handleNPCInteraction(npc2, mockParticipant, "Hello!")
-        wait(1)
-        
-        -- Verify interaction states
-        assert(npc2.isInteracting == true, "NPC2 should be in interaction state")
-        assert(npc2.isMoving == false, "NPC2 should not be moving during interaction")
-        assert(npc2.model.Humanoid.WalkSpeed == 0, "NPC2 walk speed should be 0")
-        
-        -- Get original NPC1 and verify its state
-        local originalNPC1 = npcManager.npcs[tonumber(mockParticipant.UserId)]
-        assert(originalNPC1.isMoving == false, "Original NPC1 should not be moving")
-    end)
-    
-    if not success then
-        error("Movement locking test failed: " .. tostring(err))
-    end
-    
-    -- Test cleanup
-    npcManager:endInteraction(npc2, mockParticipant)
-    wait(1)
-    
-    -- Verify cleanup
-    assert(npc2.isInteracting == false, "NPC2 should not be in interaction state after cleanup")
-    assert(npc2.isMoving == true, "NPC2 should be able to move after cleanup")
-    assert(npc2.model.Humanoid.WalkSpeed > 0, "NPC2 walk speed should be restored")
-    
-    print("All NPC interaction tests completed successfully!")
-end
-
--- Run the tests in protected call
-local success, error = pcall(function()
-    runNPCInteractionTests()
-end)
-
-if not success then
-    warn("NPC interaction tests failed: " .. tostring(error))
-end 
-```
-
-### server/MockPlayer.lua
-
-```lua
--- ServerScriptService/MockPlayer.lua
-local MockPlayer = {}
-MockPlayer.__index = MockPlayer
-
-function MockPlayer.new(name, userId, participantType)
-    local self = setmetatable({}, MockPlayer)
-    self.Name = name
-    self.DisplayName = name
-    self.UserId = userId or -1  -- Keep negative ID for backwards compatibility
-    self.Type = participantType or "npc"  -- Default to "npc" if not specified
-    return self
-end
-
-function MockPlayer:IsA(className)
-    return className == "Player"
-end
-
--- Add helper method to check participant type
-function MockPlayer:GetParticipantType()
-    return self.Type
-end
-
-return MockPlayer
-```
-
-### shared/V3ChatClient.lua
-
-```lua
--- Basic V3 client for fallback
-local V3ChatClient = {}
-
-function V3ChatClient:SendMessage(request)
-    -- Basic V3 implementation
-    return {
-        message = "V3 Fallback: " .. request.message,
-        action = { type = "none" }
-    }
-end
-
-return V3ChatClient 
-```
-
-### shared/V4ChatClient.lua
-
-```lua
--- V4ChatClient.lua
-local V4ChatClient = {}
-
--- Import existing utilities/services
-local HttpService = game:GetService("HttpService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local NPCConfig = require(ReplicatedStorage.NPCSystem.NPCConfig)
-local ChatUtils = require(ReplicatedStorage.NPCSystem.ChatUtils)
-
--- Configuration
-local API_VERSION = "v4"
-local FALLBACK_VERSION = "v3"
-local ENDPOINTS = {
-    CHAT = "/v4/chat",
-    END_CONVERSATION = "/v4/conversations"
-}
-
--- Adapter to convert V3 format to V4
-local function adaptV3ToV4Request(v3Request)
-    local is_new = not (v3Request.metadata and v3Request.metadata.conversation_id)
-    return {
-        message = v3Request.message,
-        initiator_id = tostring(v3Request.player_id),
-        target_id = v3Request.npc_id,
-        conversation_type = "npc_user",
-        system_prompt = v3Request.system_prompt,
-        conversation_id = v3Request.metadata and v3Request.metadata.conversation_id,
-        context = {
-            initiator_name = v3Request.context.participant_name,
-            target_name = v3Request.npc_name,
-            is_new_conversation = is_new,
-            nearby_players = v3Request.context.nearby_players or {},
-            npc_location = v3Request.context.npc_location or "unknown"
-        }
-    }
-end
-
--- Adapter to convert V4 response to V3 format
-local function adaptV4ToV3Response(v4Response)
-    return {
-        message = v4Response.message,
-        action = v4Response.action or {
-            type = "none",
-            data = {}
-        },
-        metadata = {
-            conversation_id = v4Response.conversation_id,
-            v4_metadata = v4Response.metadata
-        }
-    }
-end
-
-function V4ChatClient:SendMessage(originalRequest)
-    local success, result = pcall(function()
-        print("V4: Attempting to send message") -- Debug
-        -- Convert V3 request format to V4
-        local v4Request = adaptV3ToV4Request(originalRequest)
-        
-        -- Add action instructions to system prompt
-        local actionInstructions = [[
-
-You can control NPC behavior by including an action in your response. Your response MUST be valid JSON with this structure:
-{
-    "message": "your message here",
-    "action": {
-        "type": "stop_talking | follow | unfollow | none",
-        "data": {}
-    }
-}
-
-Examples:
-1. To follow a player:
-{
-    "message": "I'll follow you! Lead the way!",
-    "action": {
-        "type": "follow",
-        "data": {}
-    }
-}
-
-2. To end conversation:
-{
-    "message": "Well, I should get going now. Take care!",
-    "action": {
-        "type": "stop_talking",
-        "data": {}
-    }
-}
-
-Remember: Always include both message and action in your response.
-]]
-
-        v4Request.system_prompt = (v4Request.system_prompt or "") .. actionInstructions
-        print("V4: Converted request:", HttpService:JSONEncode(v4Request)) -- Debug
-        
-        -- Make API request using existing HTTP service
-        local response = ChatUtils:MakeRequest(ENDPOINTS.CHAT, v4Request)
-        print("V4: Got response:", HttpService:JSONEncode(response)) -- Debug
-        
-        -- Convert V4 response back to V3 format
-        return adaptV4ToV3Response(response)
-    end)
-    
-    if not success then
-        warn("V4 chat failed, falling back to V3:", result)
-        -- Return format that triggers fallback to V3
-        return {
-            success = false,
-            shouldFallback = true,
-            error = result
-        }
-    end
-    
-    return result
-end
-
-function V4ChatClient:EndConversation(conversationId)
-    if not conversationId then return end
-    
-    local success, result = pcall(function()
-        return ChatUtils:MakeRequest(
-            ENDPOINTS.END_CONVERSATION .. "/" .. conversationId,
-            nil,
-            "DELETE"
-        )
-    end)
-    
-    if not success then
-        warn("Failed to end V4 conversation:", result)
-    end
-end
-
--- Optional: Add V4-specific features while maintaining V3 compatibility
-function V4ChatClient:GetConversationMetrics()
-    local success, result = pcall(function()
-        return ChatUtils:MakeRequest("/v4/metrics", nil, "GET")
-    end)
-    
-    return success and result or nil
-end
-
-return V4ChatClient 
-```
-
-### shared/AssetModule.lua
-
-```lua
--- src/shared/AssetModule.lua
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local LocalDB = ReplicatedStorage:WaitForChild("LocalDB")
-
-local AssetModule = {}
-
-function AssetModule.GetAssetDataByName(assetName)
-	for _, assetEntry in ipairs(LocalDB:GetChildren()) do
-		local nameValue = assetEntry:FindFirstChild("Name")
-		if nameValue and nameValue.Value == assetName then
-			local descValue = assetEntry:FindFirstChild("Description")
-			local imageValue = assetEntry:FindFirstChild("ImageUrl")
-			if descValue and imageValue then
-				return {
-					id = assetEntry.Name,
-					name = assetName,
-					description = descValue.Value,
-					imageUrl = imageValue.Value,
-				}
-			end
-		end
-	end
-	return nil
-end
-
-return AssetModule
-
-```
+## Core Game Files
 
 ### shared/NPCChatHandler.lua
 
@@ -1239,56 +149,6 @@ function NPCChatHandler:HandleChat(request)
 end
 
 return NPCChatHandler 
-```
-
-### shared/ChatUtils.lua
-
-```lua
-local ChatUtils = {}
-
-local HttpService = game:GetService("HttpService")
-local API_BASE_URL = "https://roblox.ella-ai-care.com"
-
-function ChatUtils:MakeRequest(endpoint, payload, method)
-    method = method or (payload and "POST" or "GET")
-    
-    local requestConfig = {
-        Url = API_BASE_URL .. endpoint,
-        Method = method,
-        Headers = {
-            ["Content-Type"] = "application/json"
-        }
-    }
-    
-    if payload then
-        requestConfig.Body = HttpService:JSONEncode(payload)
-    end
-    
-    local success, response = pcall(function()
-        return HttpService:RequestAsync(requestConfig)
-    end)
-    
-    if success and response.Success then
-        local decoded = HttpService:JSONDecode(response.Body)
-        if decoded and not decoded.action then
-            decoded.action = {
-                type = "none",
-                data = {}
-            }
-        end
-        return decoded
-    else
-        warn("API request failed:", response.StatusCode, response.StatusMessage)
-        warn("Request URL:", requestConfig.Url)
-        warn("Request payload:", requestConfig.Body)
-        if response.Body then
-            warn("Response body:", response.Body)
-        end
-        error("Failed to make API request: " .. tostring(response.StatusMessage))
-    end
-end
-
-return ChatUtils 
 ```
 
 ### shared/NPCManagerV3.lua
@@ -2763,215 +1623,6 @@ return NPCManagerV3
 
 ```
 
-### shared/NPCConfig.lua
-
-```lua
-return {
-    API_BASE_URL = "https://roblox.ella-ai-care.com",
-    DEFAULT_TIMEOUT = 30,
-    RATE_LIMIT = {
-        MAX_REQUESTS = 10,
-        WINDOW_SECONDS = 60
-    },
-    CONVERSATION_SETTINGS = {
-        MAX_LENGTH = 100,
-        IDLE_TIMEOUT = 300,
-        MAX_ACTIVE_CONVERSATIONS = 5
-    }
-} 
-```
-
-### shared/ConversationManagerV2.lua
-
-```lua
--- ConversationManagerV2.lua
--- A robust conversation management system for NPC interactions
--- Version: 1.0.0
--- Place in: game.ServerScriptService.Shared
-
-local ConversationManagerV2 = {}
-ConversationManagerV2.__index = ConversationManagerV2
-
--- Constants
-local CONVERSATION_TIMEOUT = 300 -- 5 minutes
-local MAX_HISTORY_LENGTH = 50
-local MAX_CONVERSATIONS_PER_NPC = 5
-
--- Conversation types enum
-ConversationManagerV2.Types = {
-    NPC_USER = "npc_user",
-    NPC_NPC = "npc_npc",
-    GROUP = "group"
-}
-
--- Private storage
-local conversations = {}
-local activeParticipants = {}
-
--- Utility functions
-local function generateConversationId()
-    return game:GetService("HttpService"):GenerateGUID(false)
-end
-
-local function getCurrentTime()
-    return os.time()
-end
-
-local function isValidParticipant(participant)
-    return participant and (
-        (typeof(participant) == "Instance" and participant:IsA("Player")) or
-        (participant.GetParticipantType and participant:GetParticipantType() == "npc")
-    )
-end
-
--- Conversation object constructor
-function ConversationManagerV2.new()
-    local self = setmetatable({}, ConversationManagerV2)
-    self:startCleanupTask()
-    return self
-end
-
--- Core conversation management functions
-function ConversationManagerV2:createConversation(type, participant1, participant2)
-    -- Validate participants
-    if not isValidParticipant(participant1) or not isValidParticipant(participant2) then
-        warn("Invalid participants provided to createConversation")
-        return nil
-    end
-
-    -- Generate unique ID
-    local conversationId = generateConversationId()
-    
-    -- Create conversation structure
-    conversations[conversationId] = {
-        id = conversationId,
-        type = type,
-        participants = {
-            [participant1.UserId or participant1.id] = true,
-            [participant2.UserId or participant2.id] = true
-        },
-        messages = {},
-        created = getCurrentTime(),
-        lastUpdate = getCurrentTime(),
-        metadata = {}
-    }
-
-    -- Update participant tracking
-    local p1Id = participant1.UserId or participant1.id
-    local p2Id = participant2.UserId or participant2.id
-    
-    activeParticipants[p1Id] = activeParticipants[p1Id] or {}
-    activeParticipants[p2Id] = activeParticipants[p2Id] or {}
-    
-    activeParticipants[p1Id][conversationId] = true
-    activeParticipants[p2Id][conversationId] = true
-
-    return conversationId
-end
-
-function ConversationManagerV2:addMessage(conversationId, sender, message)
-    local conversation = conversations[conversationId]
-    if not conversation then
-        warn("Attempt to add message to nonexistent conversation:", conversationId)
-        return false
-    end
-
-    -- Add message with metadata
-    table.insert(conversation.messages, {
-        sender = sender.UserId or sender.id,
-        content = message,
-        timestamp = getCurrentTime()
-    })
-
-    -- Trim history if needed
-    if #conversation.messages > MAX_HISTORY_LENGTH then
-        table.remove(conversation.messages, 1)
-    end
-
-    conversation.lastUpdate = getCurrentTime()
-    return true
-end
-
-function ConversationManagerV2:getHistory(conversationId, limit)
-    local conversation = conversations[conversationId]
-    if not conversation then
-        return {}
-    end
-
-    limit = limit or MAX_HISTORY_LENGTH
-    local messages = {}
-    local startIndex = math.max(1, #conversation.messages - limit + 1)
-    
-    for i = startIndex, #conversation.messages do
-        table.insert(messages, conversation.messages[i].content)
-    end
-
-    return messages
-end
-
-function ConversationManagerV2:endConversation(conversationId)
-    local conversation = conversations[conversationId]
-    if not conversation then
-        return false
-    end
-
-    -- Remove from participant tracking
-    for participantId in pairs(conversation.participants) do
-        if activeParticipants[participantId] then
-            activeParticipants[participantId][conversationId] = nil
-        end
-    end
-
-    -- Remove conversation
-    conversations[conversationId] = nil
-    return true
-end
-
--- Cleanup task
-function ConversationManagerV2:startCleanupTask()
-    task.spawn(function()
-        while true do
-            local currentTime = getCurrentTime()
-            
-            -- Check for expired conversations
-            for id, conversation in pairs(conversations) do
-                if currentTime - conversation.lastUpdate > CONVERSATION_TIMEOUT then
-                    self:endConversation(id)
-                end
-            end
-            
-            task.wait(60) -- Run cleanup every minute
-        end
-    end)
-end
-
--- Utility methods
-function ConversationManagerV2:getActiveConversations(participantId)
-    return activeParticipants[participantId] or {}
-end
-
-function ConversationManagerV2:isParticipantInConversation(participantId, conversationId)
-    local conversation = conversations[conversationId]
-    return conversation and conversation.participants[participantId] or false
-end
-
-function ConversationManagerV2:getConversationMetadata(conversationId)
-    local conversation = conversations[conversationId]
-    return conversation and conversation.metadata or nil
-end
-
-function ConversationManagerV2:updateMetadata(conversationId, key, value)
-    local conversation = conversations[conversationId]
-    if conversation then
-        conversation.metadata[key] = value
-        return true
-    end
-    return false
-end
-
-return ConversationManagerV2
-```
-
 ### shared/AnimationManager.lua
 
 ```lua
@@ -3048,205 +1699,606 @@ end
 return AnimationManager
 ```
 
-### data/AssetDatabase.lua
+## Core API Files
 
-```lua
-return {
-    assets = {
-        {
-            assetId = "4446576906",
-            name = "Noob2",
-            description = "The humanoid asset features a simple, blocky character design. It has a round, yellow head with a cheerful smile, and a blue short-sleeved shirt. The arms are wide and yellow, while the legs are green, creating a bright, colorful appearance. The character embodies a playful, cartoonish style typical of Roblox avatars.",
-        },
-        {
-            assetId = "7315192066",
-            name = "kid",
-            description = "This character features a cheerful smile and shaggy brown hair. It sports a green T-shirt with white stars and the number \"8\" printed on it, paired with dark pants. Purple sunglasses add a trendy touch, while white sneakers complete the sporty look, giving the character a fun and casual appearance.",
-        },
-        {
-            assetId = "123821666772514",
-            name = "sportymerch",
-            description = "This humanoid model features a blocky character dressed in a stylish black tracksuit with yellow accents. The outfit includes an Adidas logo and is complemented by sporty gray shoes. The character sports spiky blonde hair and wears purple sunglasses, adding a cool vibe. A cheerful smile enhances its friendly appearance.",
-        },
-    },
-}
+### app/models.py
+
+```py
+# app/models.py
+
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, Any, List, Literal
+
+class NPCAction(BaseModel):
+    type: Literal["follow", "unfollow", "stop_talking", "none"]
+    data: Optional[Dict[str, Any]] = None
+
+class NPCResponseV3(BaseModel):
+    message: str
+    action: NPCAction
+    internal_state: Optional[Dict[str, Any]] = None
+
+class PerceptionData(BaseModel):
+    visible_objects: List[str] = Field(default_factory=list)
+    visible_players: List[str] = Field(default_factory=list)
+    memory: List[Dict[str, Any]] = Field(default_factory=list)
+
+class EnhancedChatRequest(BaseModel):
+    conversation_id: Optional[str] = None
+    message: str
+    initiator_id: str
+    target_id: str
+    conversation_type: Literal["npc_user", "npc_npc", "group"]
+    context: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    system_prompt: str
+
+class ConversationResponse(BaseModel):
+    conversation_id: str
+    message: str
+    action: NPCAction
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+class ConversationMetrics:
+    def __init__(self):
+        self.total_conversations = 0
+        self.active_conversations = 0
+        self.completed_conversations = 0
+        self.average_response_time = 0.0
+        self.total_messages = 0
+        
+    @property
+    def dict(self):
+        return self.model_dump()
+        
+    def model_dump(self):
+        return {
+            "total_conversations": self.total_conversations,
+            "active_conversations": self.active_conversations,
+            "completed_conversations": self.completed_conversations,
+            "average_response_time": self.average_response_time,
+            "total_messages": self.total_messages
+        }
 ```
 
-### data/NPCDatabase.lua
+### app/routers_v4.py
 
-```lua
-return {
-    npcs = {
-        {
-            id = "8c9bba8d-4f9a-4748-9e75-1334e48e2e66", 
-            displayName = "Diamond", 
-            name = "Diamond", 
-            assetId = "4446576906", 
-            model = "4446576906", 
-            modelName = "Diamond", 
-            system_prompt = "I'm sharp", 
-            responseRadius = 20, 
-            spawnPosition = Vector3.new(8.0, 18.0, -12.0), 
-            abilities = {
-            "move", 
-            "chat", 
-        }, 
-            shortTermMemory = {}, 
-        },        {
-            id = "e43613f0-cc70-4e98-9b61-2a39fecfa443", 
-            displayName = "Goldie", 
-            name = "Goldie", 
-            assetId = "4446576906", 
-            model = "4446576906", 
-            modelName = "Goldie", 
-            system_prompt = "i'm golden", 
-            responseRadius = 20, 
-            spawnPosition = Vector3.new(10.0, 18.0, -12.0), 
-            abilities = {
-            "chat", 
-        }, 
-            shortTermMemory = {}, 
-        },        {
-            id = "0544b51c-1009-4231-ac6e-053626135ed4", 
-            displayName = "Noobster", 
-            name = "Noobster", 
-            assetId = "4446576906", 
-            model = "4446576906", 
-            modelName = "Noobster", 
-            system_prompt = "you're clueless but also useful....", 
-            responseRadius = 20, 
-            spawnPosition = Vector3.new(6.0, 18.0, -12.0), 
-            abilities = {
-            "move", 
-            "chat", 
-            "trade", 
-            "quest", 
-            "combat", 
-        }, 
-            shortTermMemory = {}, 
-        },        {
-            id = "3cff63ac-9960-46bb-af7f-88e824d68dbe", 
-            displayName = "Oscar", 
-            name = "Oscar", 
-            assetId = "7315192066", 
-            model = "7315192066", 
-            modelName = "Oscar", 
-            system_prompt = "You are Oscar, Pets' twin brother. you look for adventures.", 
-            responseRadius = 20, 
-            spawnPosition = Vector3.new(0.0, 18.0, -6.0), 
-            abilities = {
-            "chat", 
-            "trade", 
-            "quest", 
-            "combat", 
-        }, 
-            shortTermMemory = {}, 
-        },        {
-            id = "b11fbfb5-5f46-40cb-9c4c-84ca72b55ac7", 
-            displayName = "Pete", 
-            name = "Pete", 
-            assetId = "7315192066", 
-            model = "7315192066", 
-            modelName = "Pete", 
-            system_prompt = "You like to talk about merch you're selling. Valterpoop aka KrushKen is your boss so you keep an eye out for him or his dad greggytheegg.", 
-            responseRadius = 20, 
-            spawnPosition = Vector3.new(12.0, 18.0, -12.0), 
-            abilities = {
-            "move", 
-            "chat", 
-        }, 
-            shortTermMemory = {}, 
-        },
-    },
-}
+```py
+# app/routers_v4.py
+
+import logging
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
+import os
+
+from .models import (
+    EnhancedChatRequest, 
+    ConversationResponse, 
+    NPCResponseV3, 
+    NPCAction
+)
+from .ai_handler import AIHandler
+from .conversation_managerV2 import ConversationManagerV2
+from .config import NPC_SYSTEM_PROMPT_ADDITION
+
+# Initialize logging
+logger = logging.getLogger("ella_app")
+
+# Initialize router with v4 prefix
+router = APIRouter(prefix="/v4")
+
+# Initialize managers
+conversation_manager = ConversationManagerV2()
+ai_handler = AIHandler(api_key=os.getenv("OPENAI_API_KEY"))
+
+@router.post("/chat")
+async def enhanced_chat_endpoint(request: EnhancedChatRequest):
+    """
+    Enhanced chat endpoint supporting different conversation types
+    and persistent conversation state
+    """
+    try:
+        logger.info(f"V4 Chat request: {request.conversation_type} from {request.initiator_id}")
+
+        # Validate conversation type
+        if request.conversation_type not in ["npc_user", "npc_npc", "group"]:
+            raise HTTPException(status_code=422, detail="Invalid conversation type")
+
+        # Get or create conversation
+        conversation_id = request.conversation_id
+        if not conversation_id:
+            # Create participants with appropriate types based on conversation_type
+            initiator_data = {
+                "id": request.initiator_id,
+                "type": "npc" if request.conversation_type.startswith("npc") else "player",
+                "name": request.context.get("initiator_name", f"Entity_{request.initiator_id}")
+            }
+            
+            target_data = {
+                "id": request.target_id,
+                "type": "npc" if request.conversation_type.endswith("npc") else "player",
+                "name": request.context.get("target_name", f"Entity_{request.target_id}")
+            }
+            
+            # Create Participant objects before passing to create_conversation
+            conversation_id = conversation_manager.create_conversation(
+                type=request.conversation_type,
+                participant1_data=initiator_data,
+                participant2_data=target_data
+            )
+            
+            if not conversation_id:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Cannot create new conversation - rate limit or participant limit reached"
+                )
+
+        # Get conversation history
+        history = conversation_manager.get_history(conversation_id)
+        
+        # Prepare context for AI
+        context_summary = f"""
+        Conversation type: {request.conversation_type}
+        Initiator: {request.context.get('initiator_name', request.initiator_id)}
+        Target: {request.context.get('target_name', request.target_id)}
+        """
+
+        if request.context:
+            context_details = "\n".join(f"{k}: {v}" for k, v in request.context.items() 
+                                      if k not in ['initiator_name', 'target_name'])
+            if context_details:
+                context_summary += f"\nAdditional context:\n{context_details}"
+
+        # Prepare messages for AI
+        messages = [
+            {"role": "system", "content": f"{request.system_prompt}\n\n{NPC_SYSTEM_PROMPT_ADDITION}\n\nContext: {context_summary}"},
+            *[{"role": "user" if i % 2 == 0 else "assistant", "content": msg} 
+              for i, msg in enumerate(history)],
+            {"role": "user", "content": request.message}
+        ]
+
+        # Mock AI response for testing
+        if os.getenv("TESTING"):
+            response = NPCResponseV3(
+                message="Test response",
+                action=NPCAction(type="none")
+            )
+        else:
+            response = await ai_handler.get_response(
+                messages=messages,
+                system_prompt=request.system_prompt
+            )
+
+        # Add messages to conversation history
+        conversation_manager.add_message(
+            conversation_id,
+            request.initiator_id,
+            request.message
+        )
+        
+        if response.message:
+            conversation_manager.add_message(
+                conversation_id,
+                request.target_id,
+                response.message
+            )
+
+        # Check for conversation end
+        if response.action and response.action.type == "stop_talking":
+            conversation_manager.end_conversation(conversation_id)
+            logger.info(f"Ending conversation {conversation_id} due to stop_talking action")
+
+        # Get conversation metadata
+        metadata = conversation_manager.get_conversation_context(conversation_id)
+
+        return ConversationResponse(
+            conversation_id=conversation_id,
+            message=response.message,
+            action=NPCAction(type=response.action.type, data=response.action.data or {}),
+            metadata=metadata
+        )
+
+    except Exception as e:
+        logger.error(f"Error in v4 chat endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/conversations/{conversation_id}")
+async def end_conversation_endpoint(conversation_id: str):
+    """Manually end a conversation"""
+    try:
+        conversation_manager.end_conversation(conversation_id)
+        return JSONResponse({"status": "success", "message": "Conversation ended"})
+    except Exception as e:
+        logger.error(f"Error ending conversation: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/conversations/{participant_id}")
+async def get_participant_conversations(participant_id: str):
+    """Get all active conversations for a participant"""
+    try:
+        conversations = conversation_manager.get_active_conversations(participant_id)
+        return JSONResponse({
+            "participant_id": participant_id,
+            "conversations": [
+                conversation_manager.get_conversation_context(conv_id)
+                for conv_id in conversations
+            ]
+        })
+    except Exception as e:
+        logger.error(f"Error getting conversations: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/metrics")
+async def get_metrics():
+    """Get conversation metrics"""
+    return JSONResponse({
+        "conversation_metrics": conversation_manager.metrics.dict()
+    })
 ```
 
-### client/NPCClientHandler.client.lua
+### app/ai_handler.py
 
-```lua
--- NPCClientHandler.client.lua
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-local TextService = game:GetService("TextService")
+```py
+# app/ai_handler.py
 
--- Get the chat specific RemoteEvent
-local NPCChatEvent = ReplicatedStorage:WaitForChild("NPCChatEvent")
-local currentNPCConversation = nil  -- Track which NPC we're talking to
+import asyncio
+import logging
+import json
+from typing import List, Dict, Any
+from openai import OpenAI
+from pydantic import BaseModel, Field
+from datetime import datetime
 
--- Function to safely send a message to the chat system
-local function sendToChat(npcName, message)
-    -- Try to filter the message (optional but recommended)
-    local success, filteredMessage = pcall(function()
-        return TextService:FilterStringAsync(message, Players.LocalPlayer.UserId)
-    end)
+logger = logging.getLogger("ella_app")
+
+class NPCAction(BaseModel):
+    type: str = Field(..., pattern="^(follow|unfollow|stop_talking|none)$")
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+class NPCResponse(BaseModel):
+    message: str
+    action: NPCAction
+    internal_state: Dict[str, Any] = Field(default_factory=dict)
+
+class AIHandler:
+    def __init__(self, api_key: str):
+        self.client = OpenAI(api_key=api_key)
+        self.response_cache = {}
+        self.max_parallel_requests = 5
+        self.semaphore = asyncio.Semaphore(self.max_parallel_requests)
+
+        # Define the response schema once
+        self.response_schema = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "npc_response",
+                "description": "NPC response format including message and action",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "description": "The NPC's spoken response"
+                        },
+                        "action": {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["follow", "unfollow", "stop_talking", "none"],
+                                    "description": "The type of action to take"
+                                },
+                                "data": {
+                                    "type": "object"
+                                }
+                            },
+                            "required": ["type"]
+                        },
+                        "internal_state": {
+                            "type": "object"
+                        }
+                    },
+                    "required": ["message", "action"]
+                }
+            }
+        }
+
+    async def get_response(
+        self,
+        messages: List[Dict[str, str]],
+        system_prompt: str,
+        max_tokens: int = 200
+    ) -> NPCResponse:
+        """Get structured response from OpenAI"""
+        try:
+            async with self.semaphore:
+                completion = await asyncio.to_thread(
+                    self.client.chat.completions.create,
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        *messages
+                    ],
+                    max_tokens=max_tokens,
+                    response_format=self.response_schema,
+                    temperature=0.7
+                )
+
+                # Check for refusal
+                if hasattr(completion.choices[0].message, 'refusal') and completion.choices[0].message.refusal:
+                    logger.warning("AI refused to respond")
+                    return NPCResponse(
+                        message="I cannot respond to that request.",
+                        action=NPCAction(type="none")
+                    )
+
+                # Check for incomplete response
+                if completion.choices[0].finish_reason != "stop":
+                    logger.warning(f"Response incomplete: {completion.choices[0].finish_reason}")
+                    return NPCResponse(
+                        message="I apologize, but I was unable to complete my response.",
+                        action=NPCAction(type="none")
+                    )
+
+                # Parse the response into our Pydantic model
+                response_data = completion.choices[0].message.content
+                logger.debug(f"Raw AI response: {response_data}")
+                
+                return NPCResponse(**json.loads(response_data))
+
+        except Exception as e:
+            logger.error(f"Error getting AI response: {str(e)}", exc_info=True)
+            return NPCResponse(
+                message="Hello! How can I help you today?",
+                action=NPCAction(type="none")
+            )
+
+    async def process_parallel_responses(
+        self,
+        requests: List[Dict[str, Any]]
+    ) -> List[NPCResponse]:
+        """Process multiple requests in parallel"""
+        tasks = [
+            self.get_response(
+                req["messages"],
+                req["system_prompt"],
+                req.get("max_tokens", 200)
+            )
+            for req in requests
+        ]
+        
+        return await asyncio.gather(*tasks)
+```
+
+### app/conversation_managerV2.py
+
+```py
+# app/conversation_managerV2.py
+
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Literal, Any
+from pydantic import BaseModel, ConfigDict
+from .models import ConversationMetrics
+import uuid
+import logging
+
+logger = logging.getLogger("roblox_app")
+
+class Participant(BaseModel):
+    id: str
+    type: Literal["npc", "player"]
+    name: str
+
+class Message(BaseModel):
+    sender_id: str
+    content: str
+    timestamp: datetime
+
+class Conversation(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     
-    if not success then
-        filteredMessage = message -- Use original if filtering fails
-    end
-    
-    -- Format the message with NPC name
-    local formattedMessage = string.format("[%s] %s", npcName, filteredMessage)
-    
-    -- Send using legacy chat system
-    if game:GetService("StarterGui"):GetCoreGuiEnabled(Enum.CoreGuiType.Chat) then
-        game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
-            Text = formattedMessage,
-            Color = Color3.fromRGB(249, 217, 55),
-            Font = Enum.Font.SourceSansBold
-        })
-    end
-    
-    -- Also try TextChatService if available
-    local TextChatService = game:GetService("TextChatService")
-    if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
-        local channel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
-        if channel then
-            channel:DisplaySystemMessage(formattedMessage)
-        end
-    end
-end
+    id: str
+    type: Literal["npc_user", "npc_npc", "group"]
+    participants: Dict[str, Participant]
+    messages: List[Message]
+    created_at: datetime
+    last_update: datetime
+    metadata: Dict[str, Any] = {}
 
--- Function to handle player chat messages
-local function onPlayerChatted(message)
-    -- Check if we're in a conversation with an NPC
-    if currentNPCConversation then
-        -- Send the message to the server
-        NPCChatEvent:FireServer({
-            npcName = currentNPCConversation,
-            message = message
-        })
-    end
-end
+class ConversationMetrics:
+    def __init__(self):
+        self.total_conversations = 0
+        self.successful_conversations = 0
+        self.failed_conversations = 0
+        self.average_duration = 0.0
+        self.active_conversations = 0
+        self.completed_conversations = 0
+        self.average_response_time = 0.0
+        self.total_messages = 0
 
--- Handle incoming NPC chat messages
-NPCChatEvent.OnClientEvent:Connect(function(data)
-    if not data then return end
+    def dict(self):
+        return {
+            "total_conversations": self.total_conversations,
+            "successful_conversations": self.successful_conversations,
+            "failed_conversations": self.failed_conversations,
+            "average_duration": self.average_duration,
+            "active_conversations": self.active_conversations,
+            "completed_conversations": self.completed_conversations,
+            "average_response_time": self.average_response_time,
+            "total_messages": self.total_messages
+        }
 
-    -- Handle different types of messages
-    if data.type == "started_conversation" then
-        currentNPCConversation = data.npcName
-        sendToChat("System", "Started conversation with " .. data.npcName)
-    elseif data.type == "ended_conversation" then
-        currentNPCConversation = nil
-        sendToChat("System", "Ended conversation with " .. data.npcName)
-    elseif data.npcName and data.message then
-        sendToChat(data.npcName, data.message)
-    end
-end)
+class ConversationManagerV2:
+    def __init__(self):
+        self.conversations: Dict[str, Conversation] = {}
+        self.participant_conversations: Dict[str, List[str]] = {}
+        self.expiry_time = timedelta(minutes=30)
+        self.metrics = ConversationMetrics()
 
--- Connect to TextChatService for modern chat
-local TextChatService = game:GetService("TextChatService")
-if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
-    TextChatService.SendingMessage:Connect(function(textChatMessage)
-        onPlayerChatted(textChatMessage.Text)
-    end)
-end
+    def create_conversation(
+        self,
+        type: Literal["npc_user", "npc_npc", "group"],
+        participant1_data: Dict[str, Any],
+        participant2_data: Dict[str, Any]
+    ) -> str:
+        """Create a new conversation between participants"""
+        try:
+            # Create Participant objects from dictionaries
+            participant1 = Participant(
+                id=participant1_data["id"],
+                type=participant1_data.get("type", "npc"),
+                name=participant1_data.get("name", f"Entity_{participant1_data['id']}")
+            )
+            
+            participant2 = Participant(
+                id=participant2_data["id"],
+                type=participant2_data.get("type", "player"),
+                name=participant2_data.get("name", f"Entity_{participant2_data['id']}")
+            )
 
--- Connect to legacy chat system
-local player = Players.LocalPlayer
-if player then
-    player.Chatted:Connect(onPlayerChatted)
-end
+            conversation_id = str(uuid.uuid4())
+            now = datetime.now()
+            
+            conversation = Conversation(
+                id=conversation_id,
+                type=type,
+                participants={
+                    participant1.id: participant1,
+                    participant2.id: participant2
+                },
+                messages=[],
+                created_at=now,
+                last_update=now,
+                metadata={}
+            )
+            
+            # Store conversation
+            self.conversations[conversation_id] = conversation
+            
+            # Update participant indexes
+            for p_id in [participant1.id, participant2.id]:
+                if p_id not in self.participant_conversations:
+                    self.participant_conversations[p_id] = []
+                self.participant_conversations[p_id].append(conversation_id)
+            
+            # Update metrics
+            self.metrics.total_conversations += 1
+            self.metrics.active_conversations += 1
+                
+            logger.info(f"Created conversation {conversation_id} between {participant1.name} and {participant2.name}")
+            return conversation_id
+            
+        except Exception as e:
+            logger.error(f"Error creating conversation: {e}")
+            return None
 
-print("NPC Client Chat Handler initialized")
+    def add_message(self, conversation_id: str, sender_id: str, content: str) -> bool:
+        """Add a message to a conversation"""
+        try:
+            conversation = self.conversations.get(conversation_id)
+            if not conversation:
+                return False
+                
+            message = Message(
+                sender_id=sender_id,
+                content=content,
+                timestamp=datetime.now()
+            )
+            
+            conversation.messages.append(message)
+            conversation.last_update = datetime.now()
+            
+            # Update metrics
+            self.metrics.total_messages += 1
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error adding message: {e}")
+            return False
+
+    def end_conversation(self, conversation_id: str) -> bool:
+        """End and clean up a conversation"""
+        try:
+            conversation = self.conversations.get(conversation_id)
+            if not conversation:
+                return False
+                
+            # Update metrics
+            self.metrics.active_conversations -= 1
+            self.metrics.completed_conversations += 1
+            
+            # Calculate response time metrics
+            if len(conversation.messages) > 1:
+                total_time = (conversation.last_update - conversation.created_at).total_seconds()
+                avg_time = total_time / len(conversation.messages)
+                self._update_average_response_time(avg_time)
+            
+            # Remove from participant tracking
+            for participant_id in conversation.participants:
+                if participant_id in self.participant_conversations:
+                    self.participant_conversations[participant_id].remove(conversation_id)
+                    
+            # Remove conversation
+            del self.conversations[conversation_id]
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error ending conversation: {e}")
+            return False
+
+    def _update_average_response_time(self, response_time: float):
+        """Update average response time metric"""
+        current = self.metrics.average_response_time
+        total = self.metrics.total_messages
+        if total > 0:
+            self.metrics.average_response_time = (current * (total - 1) + response_time) / total
+        else:
+            self.metrics.average_response_time = response_time
+
+    def get_history(self, conversation_id: str, limit: Optional[int] = None) -> List[str]:
+        """Get conversation history as a list of messages"""
+        conversation = self.conversations.get(conversation_id)
+        if not conversation:
+            return []
+            
+        messages = [msg.content for msg in conversation.messages]
+        if limit:
+            messages = messages[-limit:]
+            
+        return messages
+
+    def get_conversation_context(self, conversation_id: str) -> Dict:
+        """Get full conversation context"""
+        conversation = self.conversations.get(conversation_id)
+        if not conversation:
+            return {}
+            
+        return {
+            "type": conversation.type,
+            "participants": {
+                pid: participant.model_dump() 
+                for pid, participant in conversation.participants.items()
+            },
+            "created_at": conversation.created_at.isoformat(),
+            "last_update": conversation.last_update.isoformat(),
+            "message_count": len(conversation.messages),
+            "metadata": conversation.metadata
+        }
+
+    def get_active_conversations(self, participant_id: str) -> List[str]:
+        """Get all active conversations for a participant"""
+        return self.participant_conversations.get(participant_id, [])
+
+    def cleanup_expired(self) -> int:
+        """Remove expired conversations"""
+        now = datetime.now()
+        expired = []
+        
+        for conv_id, conv in self.conversations.items():
+            if now - conv.last_update > self.expiry_time:
+                expired.append(conv_id)
+                
+        for conv_id in expired:
+            self.end_conversation(conv_id)
+            
+        return len(expired)
 ```

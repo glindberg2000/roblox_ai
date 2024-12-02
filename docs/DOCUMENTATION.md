@@ -1972,7 +1972,7 @@ async def enhanced_chat_endpoint(request: EnhancedChatRequest):
         return ConversationResponse(
             conversation_id=conversation_id,
             message=response.message,
-            action=response.action,
+            action=NPCAction(type=response.action.type, data=response.action.data or {}),
             metadata=metadata
         )
 
@@ -2021,6 +2021,7 @@ async def get_metrics():
 
 import asyncio
 import logging
+import json
 from typing import List, Dict, Any
 from openai import OpenAI
 from pydantic import BaseModel, Field
@@ -2050,7 +2051,6 @@ class AIHandler:
             "json_schema": {
                 "name": "npc_response",
                 "description": "NPC response format including message and action",
-                "strict": True,
                 "schema": {
                     "type": "object",
                     "properties": {
@@ -2067,22 +2067,16 @@ class AIHandler:
                                     "description": "The type of action to take"
                                 },
                                 "data": {
-                                    "type": "object",
-                                    "description": "Additional data for the action",
-                                    "default": {}
+                                    "type": "object"
                                 }
                             },
-                            "required": ["type"],
-                            "additionalProperties": False
+                            "required": ["type"]
                         },
                         "internal_state": {
-                            "type": "object",
-                            "description": "NPC's internal state updates",
-                            "default": {}
+                            "type": "object"
                         }
                     },
-                    "required": ["message", "action"],
-                    "additionalProperties": False
+                    "required": ["message", "action"]
                 }
             }
         }
@@ -2098,7 +2092,7 @@ class AIHandler:
             async with self.semaphore:
                 completion = await asyncio.to_thread(
                     self.client.chat.completions.create,
-                    model="gpt-4o-mini",  # Update to newer model when available
+                    model="gpt-4o-mini",
                     messages=[
                         {"role": "system", "content": system_prompt},
                         *messages
@@ -2128,7 +2122,7 @@ class AIHandler:
                 response_data = completion.choices[0].message.content
                 logger.debug(f"Raw AI response: {response_data}")
                 
-                return NPCResponse.parse_raw(response_data)
+                return NPCResponse(**json.loads(response_data))
 
         except Exception as e:
             logger.error(f"Error getting AI response: {str(e)}", exc_info=True)
