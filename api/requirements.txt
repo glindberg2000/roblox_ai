@@ -7,3 +7,4 @@ python-multipart
 requests
 pillow
 python-slugify
+git+ssh://git@github.com/glindberg2000/letta-roblox-client.git@main#egg=letta_roblox&subdirectory=src

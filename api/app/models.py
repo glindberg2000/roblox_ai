@@ -67,7 +67,7 @@ class AgentMapping(BaseModel):
         created_at: When this mapping was created
     """
     id: Optional[int] = None
-    npc_id: int
+    npc_id: str
     participant_id: str
     agent_id: str
     agent_type: str = "letta"
@@ -77,7 +77,7 @@ class AgentMapping(BaseModel):
         from_attributes = True
 
 def create_agent_mapping(
-    npc_id: int, 
+    npc_id: str, 
     participant_id: str, 
     agent_id: str, 
     agent_type: str = "letta"
@@ -94,7 +94,7 @@ def create_agent_mapping(
         return AgentMapping(**dict(result))
 
 def get_agent_mapping(
-    npc_id: int, 
+    npc_id: str, 
     participant_id: str, 
     agent_type: str = "letta"
 ) -> Optional[AgentMapping]:

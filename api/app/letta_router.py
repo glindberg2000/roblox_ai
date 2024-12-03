@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from letta_roblox.client import LettaRobloxClient
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
-from .database import get_npc_context, create_agent_mapping, get_agent_mapping
+from .database import get_npc_context, create_agent_mapping, get_agent_mapping, get_db
 import logging
 
 logger = logging.getLogger("roblox_app")
@@ -37,7 +37,7 @@ Example Usage:
 """
 
 class ChatRequest(BaseModel):
-    npc_id: int  # Changed to int to match database
+    npc_id: str  # Using UUID string from database
     participant_id: str
     message: str
     system_prompt: Optional[str] = None
@@ -49,47 +49,66 @@ class ChatResponse(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     action: Optional[Dict[str, Any]] = None
 
+@router.post("/chat/debug", status_code=200)
+async def debug_chat_request(request: Request):
+    """Debug endpoint to see raw request data"""
+    body = await request.json()
+    print("Debug - Raw request body:", body)
+    return {
+        "received": body,
+        "validation_model": ChatRequest.model_json_schema()
+    }
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat_with_npc(request: ChatRequest):
+    print("Received request:", request.model_dump_json())
     try:
-        # First try to get existing agent mapping
-        agent_mapping = get_agent_mapping(
-            npc_id=request.npc_id,
-            participant_id=request.participant_id
-        )
+        # Get NPC context
+        npc_context = get_npc_context(request.npc_id)
+        if not npc_context:
+            raise HTTPException(status_code=404, detail="NPC not found")
+
+        # Initialize context if None
+        request_context = request.context or {}
         
+        # Get existing agent mapping
+        agent_mapping = get_agent_mapping(request.npc_id, request.participant_id)
+        print(f"Found agent mapping: {agent_mapping}")
+
         if not agent_mapping:
-            # Get NPC context for new agent creation
-            npc_context = get_npc_context(request.npc_id)
-            if not npc_context:
-                raise HTTPException(status_code=404, detail="NPC not found")
+            # Get NPC details for memory
+            npc_details = get_npc_context(request.npc_id)
             
-            # Create new agent with rich context
+            # Create new agent with full memory
             agent = letta_client.create_agent(
                 npc_type="npc",
                 initial_memory={
-                    "human": f"Participant ID: {request.participant_id}",
-                    "persona": npc_context["system_prompt"] or request.system_prompt or "I am an NPC in a virtual world.",
-                    "description": npc_context["description"],
-                    "abilities": npc_context["abilities"],
-                    "display_name": npc_context["display_name"]
+                    "persona": f"""You are {npc_details['display_name']}.
+                               Role: {npc_details['system_prompt']}
+                               Abilities: {', '.join(npc_details.get('abilities', []))}
+                               Description: {npc_details.get('description', '')}""".strip(),
+                    "human": f"""You are talking to {request_context.get('participant_name', 'a player')}.
+                            Player Description: {request_context.get('player_description', '')}""".strip()
                 }
             )
             
-            # Store the mapping
+            # Store new agent mapping
             agent_mapping = create_agent_mapping(
                 npc_id=request.npc_id,
                 participant_id=request.participant_id,
                 agent_id=agent["id"]
             )
-            
-            logger.info(f"Created new agent mapping: {agent_mapping.model_dump()}")
+            print(f"Created new agent mapping: {agent_mapping}")
+        else:
+            print(f"Using existing agent {agent_mapping['letta_agent_id']} for {request.participant_id}")
         
         # Send message to agent
         response = letta_client.send_message(
-            agent_mapping.agent_id,
+            agent_mapping["letta_agent_id"],
             request.message
         )
+        
+        print(f"Got response from Letta: {response}")
         
         # Format response
         return ChatResponse(
@@ -126,3 +145,8 @@ async def delete_agent(npc_id: int, participant_id: str):
     except Exception as e:
         logger.error(f"Error deleting agent: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) 
+
+# Add to router startup
+@router.on_event("startup")
+async def startup_event():
+    pass 

@@ -424,8 +424,9 @@ def fetch_npcs_by_game(game_id: int):
         """, (game_id,))
         return [dict(row) for row in cursor.fetchall()]
 
-def get_npc_context(npc_id: int) -> Optional[Dict[str, Any]]:
+def get_npc_context(npc_id: str) -> Optional[Dict[str, Any]]:
     """Get complete NPC context including asset info"""
+    print(f"Looking up NPC with ID: {npc_id}")
     with get_db() as db:
         cursor = db.execute("""
             SELECT 
@@ -436,10 +437,11 @@ def get_npc_context(npc_id: int) -> Optional[Dict[str, Any]]:
                 a.description as asset_description
             FROM npcs n
             LEFT JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
-            WHERE n.id = ?
+            WHERE n.npc_id = ?
         """, (npc_id,))
         result = cursor.fetchone()
         
+        print(f"Query result: {result}")
         if not result:
             return None
             
@@ -451,33 +453,76 @@ def get_npc_context(npc_id: int) -> Optional[Dict[str, Any]]:
             "description": result["asset_description"]
         }
 
-def create_agent_mapping(
-    npc_id: int, 
-    participant_id: str, 
-    agent_id: str, 
-    agent_type: str = "letta"
-) -> AgentMapping:
+def create_agent_mapping(npc_id: str, participant_id: str, agent_id: str) -> Dict[str, Any]:
     """Create a new agent mapping"""
     with get_db() as db:
         cursor = db.execute("""
-            INSERT INTO agent_mappings (npc_id, participant_id, agent_id, agent_type)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO npc_agents (npc_id, participant_id, letta_agent_id)
+            VALUES (?, ?, ?)
             RETURNING *
-        """, (npc_id, participant_id, agent_id, agent_type))
+        """, (npc_id, participant_id, agent_id))
         result = cursor.fetchone()
         db.commit()
-        return AgentMapping(**dict(result))
+        return dict(result)
 
-def get_agent_mapping(
-    npc_id: int, 
-    participant_id: str, 
-    agent_type: str = "letta"
-) -> Optional[AgentMapping]:
+def get_agent_mapping(npc_id: str, participant_id: str) -> Optional[Dict[str, Any]]:
     """Get existing agent mapping"""
     with get_db() as db:
+        print(f"Looking up agent mapping for npc_id: {npc_id}, participant_id: {participant_id}")
         cursor = db.execute("""
-            SELECT * FROM agent_mappings 
-            WHERE npc_id = ? AND participant_id = ? AND agent_type = ?
-        """, (npc_id, participant_id, agent_type))
+            SELECT * FROM npc_agents 
+            WHERE npc_id = ? AND participant_id = ?
+        """, (npc_id, participant_id))
         result = cursor.fetchone()
-        return AgentMapping(**dict(result)) if result else None
+        if result:
+            print(f"Found existing agent mapping: {dict(result)}")
+        else:
+            print("No existing agent mapping found")
+        return dict(result) if result else None
+
+def debug_list_npcs():
+    """Debug function to list all NPCs"""
+    with get_db() as db:
+        cursor = db.execute("""
+            SELECT npc_id, id, display_name, system_prompt 
+            FROM npcs
+            ORDER BY id
+        """)
+        results = cursor.fetchall()
+        print("\nNPCs in database:")
+        for row in results:
+            print(f"id: {row['id']}, npc_id: {row['npc_id']}, name: {row['display_name']}")
+        return results
+
+def debug_list_agent_mappings():
+    """Debug function to list all agent mappings"""
+    with get_db() as db:
+        cursor = db.execute("""
+            SELECT * FROM npc_agents
+            ORDER BY created_at DESC
+            LIMIT 5
+        """)
+        results = cursor.fetchall()
+        print("\nRecent agent mappings:")
+        for row in results:
+            print(f"npc_id: {row['npc_id']}, participant_id: {row['participant_id']}, agent_id: {row['letta_agent_id']}")
+        return results
+
+def debug_show_npc(npc_id: str):
+    """Debug function to show NPC data"""
+    with get_db() as db:
+        cursor = db.execute("""
+            SELECT * FROM npcs WHERE npc_id = ?
+        """, (npc_id,))
+        result = cursor.fetchone()
+        if result:
+            print("\nNPC data:")
+            for key in result.keys():
+                print(f"{key}: {result[key]}")
+        else:
+            print(f"No NPC found with ID: {npc_id}")
+
+# Add to the bottom of the file:
+if __name__ == "__main__":
+    debug_list_npcs()
+    debug_list_agent_mappings()

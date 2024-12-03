@@ -6,10 +6,13 @@ local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local NPCConfig = require(ReplicatedStorage.NPCSystem.NPCConfig)
 local ChatUtils = require(ReplicatedStorage.NPCSystem.ChatUtils)
+local LettaConfig = require(ReplicatedStorage.NPCSystem.LettaConfig)
 
 -- Configuration
 local API_VERSION = "v4"
 local FALLBACK_VERSION = "v3"
+local LETTA_BASE_URL = LettaConfig.BASE_URL
+local LETTA_ENDPOINT = LettaConfig.ENDPOINTS.CHAT
 local ENDPOINTS = {
     CHAT = "/v4/chat",
     END_CONVERSATION = "/v4/conversations"
@@ -50,7 +53,63 @@ local function adaptV4ToV3Response(v4Response)
     }
 end
 
-function V4ChatClient:SendMessage(originalRequest)
+local function handleLettaChat(data)
+    print("Attempting Letta chat first...")
+    print("Incoming data:", HttpService:JSONEncode(data))
+
+    local success, response = pcall(function()
+        local lettaData = {
+            npc_id = data.npc_id,
+            participant_id = tostring(data.player_id),
+            message = data.message
+        }
+
+        print("Sending to Letta - npc_id:", data.npc_id)
+        print("Full Letta request:", HttpService:JSONEncode(lettaData))
+
+        local jsonData = HttpService:JSONEncode(lettaData)
+        local url = LETTA_BASE_URL .. LETTA_ENDPOINT
+        print("Sending to URL:", url)
+        local response = HttpService:PostAsync(
+            url,
+            jsonData,
+            Enum.HttpContentType.ApplicationJson,
+            false
+        )
+        
+        print("Letta response:", response)
+        local decoded = HttpService:JSONDecode(response)
+        
+        -- Fix action type format
+        if decoded.action and decoded.action.type then
+            decoded.action.type = "none"  -- Default to none if invalid
+        end
+        
+        return decoded
+    end)
+
+    if success then
+        if response.error then
+            warn("Letta error:", HttpService:JSONEncode(response))
+            return nil
+        end
+
+        print("Letta success:", HttpService:JSONEncode(response))
+        return {
+            message = response.message,
+            action = response.action or { type = "none" },
+            metadata = {
+                conversation_id = response.conversation_id,
+                v4_metadata = response.metadata
+            }
+        }
+    else
+        warn("Letta request failed:", response)
+        return nil
+    end
+end
+
+function V4ChatClient:SendMessageV4(originalRequest)
     local success, result = pcall(function()
         print("V4: Attempting to send message") -- Debug
         -- Convert V3 request format to V4
@@ -58,52 +117,20 @@ function V4ChatClient:SendMessage(originalRequest)
         
         -- Add action instructions to system prompt
         local actionInstructions = [[
-
-You can control NPC behavior by including an action in your response. Your response MUST be valid JSON with this structure:
-{
-    "message": "your message here",
-    "action": {
-        "type": "stop_talking | follow | unfollow | none",
-        "data": {}
-    }
-}
-
-Examples:
-1. To follow a player:
-{
-    "message": "I'll follow you! Lead the way!",
-    "action": {
-        "type": "follow",
-        "data": {}
-    }
-}
-
-2. To end conversation:
-{
-    "message": "Well, I should get going now. Take care!",
-    "action": {
-        "type": "stop_talking",
-        "data": {}
-    }
-}
-
-Remember: Always include both message and action in your response.
-]]
+            -- existing action instructions...
+        ]]
 
         v4Request.system_prompt = (v4Request.system_prompt or "") .. actionInstructions
-        print("V4: Converted request:", HttpService:JSONEncode(v4Request)) -- Debug
+        print("V4: Converted request:", HttpService:JSONEncode(v4Request))
         
-        -- Make API request using existing HTTP service
         local response = ChatUtils:MakeRequest(ENDPOINTS.CHAT, v4Request)
-        print("V4: Got response:", HttpService:JSONEncode(response)) -- Debug
+        print("V4: Got response:", HttpService:JSONEncode(response))
         
-        -- Convert V4 response back to V3 format
         return adaptV4ToV3Response(response)
     end)
     
     if not success then
         warn("V4 chat failed, falling back to V3:", result)
-        -- Return format that triggers fallback to V3
         return {
             success = false,
             shouldFallback = true,
@@ -112,6 +139,20 @@ Remember: Always include both message and action in your response.
     end
     
     return result
+end
+
+function V4ChatClient:SendMessage(originalRequest)
+    print("V4ChatClient:SendMessage called")
+    -- Try Letta first
+    local lettaResponse = handleLettaChat(originalRequest)
+    if lettaResponse then
+        print("Letta response successful")
+        return lettaResponse
+    end
+
+    print("Letta failed, falling back to V4")
+    -- Fall back to V4 if Letta fails
+    return self:SendMessageV4(originalRequest)
 end
 
 function V4ChatClient:EndConversation(conversationId)

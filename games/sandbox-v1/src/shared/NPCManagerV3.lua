@@ -1463,4 +1463,3 @@ function NPCManagerV3:processAIResponse(npc, participant, response)
 end
 
 return NPCManagerV3
-

@@ -16,6 +16,12 @@
     },
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
+      "Shared": {
+        "$className": "Folder",
+        "AnimationManager": {
+          "$path": "src/shared/AnimationManager.lua"
+        }
+      },
       "NPCManagerV3": {
         "$path": "src/shared/NPCManagerV3.lua"
       },
@@ -38,6 +44,9 @@
         },
         "NPCConfig": {
           "$path": "src/shared/NPCConfig.lua"
+        },
+        "LettaConfig": {
+          "$path": "src/shared/LettaConfig.lua"
         }
       }
     },
