@@ -26,7 +26,7 @@ from .image_utils import (
     generate_image_description,
     get_asset_description
 )
-from .database import get_db
+from .database import get_db, store_player_description
 from .storage import FileStorageManager
 
 # Initialize OpenAI client
@@ -122,6 +122,13 @@ async def get_player_description_endpoint(data: PlayerDescriptionRequest):
             "unique features, and overall style or theme."
         )
         description = await generate_image_description(image_path, prompt)
+        
+        # Store description using database function
+        try:
+            store_player_description(data.user_id, description)
+            logger.info(f"Stored description for player {data.user_id}: {description[:50]}...")
+        except Exception as e:
+            logger.error(f"Failed to store player description for {data.user_id}: {e}")
         
         return {"description": description}
     except HTTPException as e:

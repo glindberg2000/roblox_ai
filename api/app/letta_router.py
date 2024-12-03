@@ -84,7 +84,8 @@ async def chat_with_npc(request: ChatRequest):
             
             # Create memory using proper class
             memory = ChatMemory(
-                human=f"You are talking to {request_context.get('participant_name', 'a player')}",
+                human=f"""You are talking to {request_context.get('participant_name', 'a player')}.
+                        Description: {get_player_description(request.participant_id)}""".strip(),
                 persona=npc_details['system_prompt']
             )
             
@@ -215,3 +216,12 @@ async def npc_to_npc_chat(
 @router.on_event("startup")
 async def startup_event():
     pass 
+
+def get_player_description(participant_id: str) -> str:
+    """Get stored player description from database"""
+    with get_db() as db:
+        result = db.execute(
+            "SELECT description FROM player_descriptions WHERE player_id = ?",
+            (participant_id,)
+        ).fetchone()
+        return result['description'] if result else ""

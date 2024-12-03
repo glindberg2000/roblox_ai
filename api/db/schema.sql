@@ -37,6 +37,14 @@ CREATE TABLE IF NOT EXISTS npcs (
     FOREIGN KEY (asset_id) REFERENCES assets(asset_id)
 );
 
+-- Player descriptions table
+CREATE TABLE IF NOT EXISTS player_descriptions (
+    player_id TEXT PRIMARY KEY,
+    description TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Insert default game
 INSERT OR IGNORE INTO games (title, slug, description) 
 VALUES ('Default Game', 'default-game', 'The default game instance');

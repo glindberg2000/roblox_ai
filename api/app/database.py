@@ -434,21 +434,25 @@ def get_npc_context(npc_id: str) -> Optional[Dict[str, Any]]:
                 n.display_name,
                 n.system_prompt,
                 n.abilities,
-                a.description as asset_description
+                a.description as asset_description,
+                a.name as asset_name
             FROM npcs n
             LEFT JOIN assets a ON n.asset_id = a.asset_id AND a.game_id = n.game_id
             WHERE n.npc_id = ?
         """, (npc_id,))
         result = cursor.fetchone()
         
-        print(f"Query result: {result}")
         if not result:
             return None
             
         return {
             "npc_id": result["npc_id"],
             "display_name": result["display_name"],
-            "system_prompt": result["system_prompt"],
+            "system_prompt": f"""
+                {result["system_prompt"]}
+                
+                Appearance: {result["asset_description"] or f'You are a {result["asset_name"]}'}
+            """.strip(),
             "abilities": json.loads(result["abilities"] or "[]"),
             "description": result["asset_description"]
         }
@@ -521,6 +525,21 @@ def debug_show_npc(npc_id: str):
                 print(f"{key}: {result[key]}")
         else:
             print(f"No NPC found with ID: {npc_id}")
+
+def store_player_description(player_id: str, description: str) -> None:
+    """Store player description in database.
+    
+    Args:
+        player_id: The player's ID
+        description: Generated description of player's avatar
+    """
+    with get_db() as db:
+        db.execute("""
+            INSERT OR REPLACE INTO player_descriptions 
+            (player_id, description, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+        """, (player_id, description))
+        db.commit()
 
 # Add to the bottom of the file:
 if __name__ == "__main__":
