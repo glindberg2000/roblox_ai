@@ -1,15 +1,17 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
+from letta import ChatMemory, LLMConfig
 from letta_roblox.client import LettaRobloxClient
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 from .database import get_npc_context, create_agent_mapping, get_agent_mapping, get_db
+from .mock_player import MockPlayer
 import logging
 
 logger = logging.getLogger("roblox_app")
 
 # Initialize router and client
 router = APIRouter(prefix="/letta/v1", tags=["letta"])
-letta_client = LettaRobloxClient("http://localhost:8283")
+letta_client = LettaRobloxClient("http://localhost:8333")
 
 """
 Letta AI Integration Router
@@ -61,10 +63,11 @@ async def debug_chat_request(request: Request):
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_with_npc(request: ChatRequest):
-    print("Received request:", request.model_dump_json())
+    logger.info(f"Received request from game: {request.model_dump_json()}")
     try:
         # Get NPC context
         npc_context = get_npc_context(request.npc_id)
+        logger.info(f"Got NPC context: {npc_context}")
         if not npc_context:
             raise HTTPException(status_code=404, detail="NPC not found")
 
@@ -79,17 +82,24 @@ async def chat_with_npc(request: ChatRequest):
             # Get NPC details for memory
             npc_details = get_npc_context(request.npc_id)
             
-            # Create new agent with full memory
+            # Create memory using proper class
+            memory = ChatMemory(
+                human=f"You are talking to {request_context.get('participant_name', 'a player')}",
+                persona=npc_details['system_prompt']
+            )
+            
+            # Create new agent with proper config
             agent = letta_client.create_agent(
-                npc_type="npc",
-                initial_memory={
-                    "persona": f"""You are {npc_details['display_name']}.
-                               Role: {npc_details['system_prompt']}
-                               Abilities: {', '.join(npc_details.get('abilities', []))}
-                               Description: {npc_details.get('description', '')}""".strip(),
-                    "human": f"""You are talking to {request_context.get('participant_name', 'a player')}.
-                            Player Description: {request_context.get('player_description', '')}""".strip()
-                }
+                name=f"npc_{npc_details['display_name']}",
+                memory=memory,
+                llm_config=LLMConfig(
+                    model="gpt-4o-mini",
+                    model_endpoint_type="openai",
+                    model_endpoint="https://api.openai.com/v1",
+                    context_window=128000
+                ),
+                system=npc_details['system_prompt'],
+                include_base_tools=True
             )
             
             # Store new agent mapping
@@ -103,18 +113,27 @@ async def chat_with_npc(request: ChatRequest):
             print(f"Using existing agent {agent_mapping['letta_agent_id']} for {request.participant_id}")
         
         # Send message to agent
-        response = letta_client.send_message(
-            agent_mapping["letta_agent_id"],
-            request.message
-        )
-        
-        print(f"Got response from Letta: {response}")
+        logger.info(f"Sending message to agent {agent_mapping['letta_agent_id']}")
+        try:
+            response = letta_client.send_message(
+                agent_mapping["letta_agent_id"],
+                request.message
+            )
+            logger.info(f"Got response from Letta: {response}")
+        except Exception as e:
+            logger.error(f"Error sending message to Letta: {str(e)}")
+            raise
         
         # Format response
         return ChatResponse(
             message=response if isinstance(response, str) else response.get("message", ""),
             conversation_id=response.get("conversation_id") if isinstance(response, dict) else None,
-            metadata=response.get("metadata") if isinstance(response, dict) else None,
+            metadata={
+                **(response.get("metadata", {}) if isinstance(response, dict) else {}),
+                "participant_type": request_context.get("participant_type", "player"),
+                "interaction_id": request_context.get("interaction_id"),
+                "is_npc_chat": request_context.get("participant_type") == "npc"
+            },
             action=response.get("action") if isinstance(response, dict) else None
         )
 
@@ -145,6 +164,52 @@ async def delete_agent(npc_id: int, participant_id: str):
     except Exception as e:
         logger.error(f"Error deleting agent: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) 
+
+def create_mock_participant(npc_context: Dict) -> MockPlayer:
+    """Create a mock participant for NPC-NPC interactions"""
+    return MockPlayer(
+        display_name=npc_context["display_name"],
+        npc_id=npc_context["id"]
+    )
+
+@router.post("/npc-chat", response_model=ChatResponse)
+async def npc_to_npc_chat(
+    npc_id: str,
+    target_npc_id: str,
+    message: str
+):
+    """Handle NPC to NPC chat"""
+    try:
+        # Get both NPCs' context
+        npc1_context = get_npc_context(npc_id)
+        npc2_context = get_npc_context(target_npc_id)
+        
+        if not npc1_context or not npc2_context:
+            raise HTTPException(status_code=404, detail="NPC not found")
+            
+        # Create mock participants
+        npc1_participant = create_mock_participant(npc1_context)
+        npc2_participant = create_mock_participant(npc2_context)
+        
+        # Get or create agent mappings
+        npc1_agent = get_or_create_agent_mapping(npc_id, f"npc_{target_npc_id}")
+        npc2_agent = get_or_create_agent_mapping(target_npc_id, f"npc_{npc_id}")
+        
+        # Send message from NPC1 to NPC2
+        response = letta_client.send_message(
+            npc2_agent["letta_agent_id"],
+            message
+        )
+        
+        return ChatResponse(
+            message=response.get("message", ""),
+            conversation_id=response.get("conversation_id"),
+            metadata=response.get("metadata"),
+            action=response.get("action")
+        )
+    except Exception as e:
+        logger.error(f"Error in NPC-NPC chat: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Add to router startup
 @router.on_event("startup")

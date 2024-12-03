@@ -1,13 +1,42 @@
 -- Logger.lua
 local Logger = {}
 
--- Define log levels
-Logger.LogLevel = {
-    DEBUG = 1,
-    INFO = 2,
-    WARN = 3,
-    ERROR = 4,
-    NONE = 5
+-- Define log categories and their enabled state
+local LOG_CATEGORIES = {
+    SYSTEM = true,
+    ERROR = true,
+    WARN = true,
+    DEBUG = true,
+    CHAT = true,
+    INTERACTION = true,
+    STATE = true,
+    DATABASE = true,
+    NPC = true,
+    ASSET = true,
+    API = true,
+    SPAWN = true,
+    LOCK = true,
+    UNLOCK = true,
+    MOVEMENT = true,
+    ACTION = true,
+    RESPONSE = true,
+    VISION = true,        -- Enable vision logging
+    PERCEPTION = true,    -- Enable perception logging
+    DISTANCE = true,      -- Enable distance calculations
+    TRIGGER = true,       -- Enable interaction trigger logging
+}
+
+-- Define log levels and their colors
+local LOG_COLORS = {
+    SYSTEM = Color3.fromRGB(255, 255, 255),    -- White
+    ERROR = Color3.fromRGB(255, 0, 0),         -- Red
+    WARN = Color3.fromRGB(255, 165, 0),        -- Orange
+    DEBUG = Color3.fromRGB(173, 216, 230),     -- Light blue
+    VISION = Color3.fromRGB(144, 238, 144),    -- Light green
+    PERCEPTION = Color3.fromRGB(147, 112, 219), -- Purple
+    DISTANCE = Color3.fromRGB(255, 218, 185),  -- Peach
+    TRIGGER = Color3.fromRGB(255, 192, 203),   -- Pink
+    -- ... rest of colors
 }
 
 -- Current log level - can be changed at runtime
@@ -116,14 +145,22 @@ end
 
 -- Example usage:
 -- To disable vision logs, uncomment this line:
-Logger.categoryFilters.VISION = false
-Logger.categoryFilters.MOVEMENT = false
-Logger.categoryFilters.ANIMATION = false
+-- Logger.categoryFilters.VISION = false
+-- Logger.categoryFilters.MOVEMENT = false
+-- Logger.categoryFilters.ANIMATION = false
 -- To re-enable vision logs, uncomment this line:
 -- Logger.categoryFilters.VISION = true
 
 -- You can also use these functions in your code:
 -- Logger:disableCategory("VISION")
 -- Logger:enableCategory("VISION")
+
+-- Enable categories we want to debug
+Logger.categoryFilters.VISION = true
+Logger.categoryFilters.PERCEPTION = true
+Logger.categoryFilters.DISTANCE = true
+Logger.categoryFilters.TRIGGER = true
+Logger.categoryFilters.MOVEMENT = true
+Logger.categoryFilters.INTERACTION = true
 
 return Logger
