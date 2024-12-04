@@ -3,7 +3,7 @@ from letta import ChatMemory, LLMConfig
 from letta_roblox.client import LettaRobloxClient
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
-from .database import get_npc_context, create_agent_mapping, get_agent_mapping, get_db
+from .database import get_npc_context, create_agent_mapping, get_agent_mapping, get_db, get_player_info
 from .mock_player import MockPlayer
 import logging
 
@@ -82,14 +82,17 @@ async def chat_with_npc(request: ChatRequest):
             # Get NPC details for memory
             npc_details = get_npc_context(request.npc_id)
             
+            # Get player info including display name
+            player_info = get_player_info(request.participant_id)
+            
             # Create memory using proper class
             memory = ChatMemory(
-                human=f"""You are talking to {request_context.get('participant_name', 'a player')}.
-                        Description: {get_player_description(request.participant_id)}""".strip(),
-                persona=f"""Name: {npc_details['display_name']}
-                          {npc_details['system_prompt']}
-                          
-                          Appearance: {npc_details.get('description', 'No description available')}""".strip()
+                human=f"""This is what I know about the player:
+Name: {player_info['display_name'] or request_context.get('participant_name', 'a player')}
+Description: {player_info['description']}""".strip(),
+                
+                persona=f"""My name is {npc_details['display_name']}.
+{npc_details['system_prompt']}""".strip()
             )
             
             # Create new agent with proper config

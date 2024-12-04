@@ -24,7 +24,8 @@ from .image_utils import (
     download_avatar_image,
     download_asset_image,
     generate_image_description,
-    get_asset_description
+    get_asset_description,
+    get_roblox_display_name
 )
 from .database import get_db, store_player_description
 from .storage import FileStorageManager
@@ -115,7 +116,10 @@ async def get_player_description_endpoint(data: PlayerDescriptionRequest):
         # Download image and get its path
         image_path = await download_avatar_image(data.user_id)
         
-        # Generate description using the generic description function
+        # Get display name from Roblox
+        display_name = await get_roblox_display_name(data.user_id)
+        
+        # Generate description using AI
         prompt = (
             "Please provide a detailed description of this Roblox avatar. "
             "Include details about the avatar's clothing, accessories, colors, "
@@ -125,7 +129,11 @@ async def get_player_description_endpoint(data: PlayerDescriptionRequest):
         
         # Store description using database function
         try:
-            store_player_description(data.user_id, description)
+            store_player_description(
+                player_id=data.user_id,
+                description=description,
+                display_name=display_name
+            )
             logger.info(f"Stored description for player {data.user_id}: {description[:50]}...")
         except Exception as e:
             logger.error(f"Failed to store player description for {data.user_id}: {e}")

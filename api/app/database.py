@@ -4,8 +4,17 @@ from pathlib import Path
 import json
 from .config import SQLITE_DB_PATH
 from .paths import get_database_paths
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 from .models import AgentMapping
+
+__all__ = [
+    'get_db',
+    'store_player_description',
+    'get_player_description',
+    'get_npc_context',
+    'create_agent_mapping',
+    'get_agent_mapping'
+]
 
 @contextmanager
 def get_db():
@@ -424,7 +433,7 @@ def fetch_npcs_by_game(game_id: int):
         """, (game_id,))
         return [dict(row) for row in cursor.fetchall()]
 
-def get_npc_context(npc_id: str) -> Optional[Dict[str, Any]]:
+def get_npc_context(npc_id: str):
     """Get complete NPC context including asset info"""
     print(f"Looking up NPC with ID: {npc_id}")
     with get_db() as db:
@@ -450,8 +459,10 @@ def get_npc_context(npc_id: str) -> Optional[Dict[str, Any]]:
             "display_name": result["display_name"],
             "system_prompt": f"""
                 {result["system_prompt"]}
-                
-                Appearance: {result["asset_description"] or f'You are a {result["asset_name"]}'}
+
+My appearance: {result["asset_description"] or f'You are a {result["asset_name"]}'}
+
+- I communicate in short messages that fit naturally in chat bubbles. My responses are concise and match the flow of in-game conversations. I avoid long paragraphs or complex explanations.
             """.strip(),
             "abilities": json.loads(result["abilities"] or "[]"),
             "description": result["asset_description"]
@@ -526,20 +537,40 @@ def debug_show_npc(npc_id: str):
         else:
             print(f"No NPC found with ID: {npc_id}")
 
-def store_player_description(player_id: str, description: str) -> None:
-    """Store player description in database.
-    
-    Args:
-        player_id: The player's ID
-        description: Generated description of player's avatar
-    """
+def store_player_description(
+    player_id: str, 
+    description: str,
+    display_name: str = None
+) -> None:
+    """Store player description in database."""
     with get_db() as db:
         db.execute("""
             INSERT OR REPLACE INTO player_descriptions 
-            (player_id, description, updated_at)
-            VALUES (?, ?, CURRENT_TIMESTAMP)
-        """, (player_id, description))
+            (player_id, description, display_name, updated_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        """, (player_id, description, display_name))
         db.commit()
+
+def get_player_description(participant_id: str) -> str:
+    """Get stored player description from database"""
+    with get_db() as db:
+        result = db.execute(
+            "SELECT description FROM player_descriptions WHERE player_id = ?",
+            (participant_id,)
+        ).fetchone()
+        return result['description'] if result else ""
+
+def get_player_info(participant_id: str) -> Dict[str, str]:
+    """Get full player info from database"""
+    with get_db() as db:
+        result = db.execute(
+            "SELECT description, display_name FROM player_descriptions WHERE player_id = ?",
+            (participant_id,)
+        ).fetchone()
+        return {
+            "description": result['description'] if result else "",
+            "display_name": result['display_name'] if result else None
+        }
 
 # Add to the bottom of the file:
 if __name__ == "__main__":
