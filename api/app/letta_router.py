@@ -91,7 +91,7 @@ async def chat_with_npc(request: ChatRequest):
             
             # Create new agent with proper config
             agent = letta_client.create_agent(
-                name=f"npc_{npc_details['display_name']}",
+                name=f"npc_{npc_details['display_name']}_{request.npc_id[:8]}_{request.participant_id[:8]}",
                 memory=memory,
                 llm_config=LLMConfig(
                     model="gpt-4o-mini",
