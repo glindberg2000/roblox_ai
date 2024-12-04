@@ -462,7 +462,7 @@ def get_npc_context(npc_id: str):
 
 My appearance: {result["asset_description"] or f'You are a {result["asset_name"]}'}
 
-- I communicate in short messages that fit naturally in chat bubbles. My responses are concise and match the flow of in-game conversations. I avoid long paragraphs or complex explanations.
+- I communicate in short messages that fit naturally in chat bubbles. My responses are concise and match the flow of in-game conversations. I avoid long paragraphs or complex explanations. I use very few emojis - only occasional basic face emojis like :) or :D when it really fits the mood.
             """.strip(),
             "abilities": json.loads(result["abilities"] or "[]"),
             "description": result["asset_description"]
