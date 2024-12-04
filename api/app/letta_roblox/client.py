@@ -46,4 +46,11 @@ class LettaRobloxClient:
             return response.json()
         except Exception as e:
             print(f"Error getting agent details: {str(e)}")
-            return {} 
+            return {}
+
+    def list_agents(self):
+        """List all agents"""
+        url = f"{self.base_url}/agents"
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.json()

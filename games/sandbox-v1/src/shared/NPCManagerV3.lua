@@ -72,7 +72,6 @@ function NPCManagerV3.getInstance()
     end
     return instance
 end
-
 -- Replace .new() with getInstance()
 function NPCManagerV3.new()
     return NPCManagerV3.getInstance()
