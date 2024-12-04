@@ -86,7 +86,10 @@ async def chat_with_npc(request: ChatRequest):
             memory = ChatMemory(
                 human=f"""You are talking to {request_context.get('participant_name', 'a player')}.
                         Description: {get_player_description(request.participant_id)}""".strip(),
-                persona=npc_details['system_prompt']
+                persona=f"""Name: {npc_details['display_name']}
+                          {npc_details['system_prompt']}
+                          
+                          Appearance: {npc_details.get('description', 'No description available')}""".strip()
             )
             
             # Create new agent with proper config

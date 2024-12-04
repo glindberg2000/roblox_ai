@@ -47,11 +47,11 @@ def cleanup_database():
 
 def list_letta_agents():
     """List agents using letta-manage"""
-    subprocess.run(["letta-manage", "list"])
+    subprocess.run(["letta-manage", "--server", "http://localhost:8333", "list"])
 
 def delete_all_letta_agents():
     """Delete all agents using letta-manage"""
-    subprocess.run(["letta-manage", "delete-all"])
+    subprocess.run(["letta-manage", "--server", "http://localhost:8333", "delete-all"])
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
