@@ -1,17 +1,21 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
-from letta import ChatMemory, LLMConfig
+from letta import ChatMemory, LLMConfig, EmbeddingConfig, create_client
 from letta_roblox.client import LettaRobloxClient
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 from .database import get_npc_context, create_agent_mapping, get_agent_mapping, get_db, get_player_info
 from .mock_player import MockPlayer
 import logging
+import json
 
 logger = logging.getLogger("roblox_app")
 
 # Initialize router and client
 router = APIRouter(prefix="/letta/v1", tags=["letta"])
 letta_client = LettaRobloxClient("http://localhost:8333")
+
+# Initialize direct SDK client (keeping old client for backwards compatibility)
+direct_client = create_client(base_url="http://localhost:8333")
 
 """
 Letta AI Integration Router
@@ -122,26 +126,41 @@ Description: {player_info['description']}""".strip(),
         # Send message to agent
         logger.info(f"Sending message to agent {agent_mapping['letta_agent_id']}")
         try:
-            response = letta_client.send_message(
-                agent_mapping["letta_agent_id"],
-                request.message
+            logger.info(f"Using direct_client: {direct_client}")
+            logger.info(f"Agent ID: {agent_mapping['letta_agent_id']}")
+            logger.info(f"Message: {request.message}")
+            response = direct_client.send_message(
+                agent_id=agent_mapping["letta_agent_id"],
+                role="user",
+                message=request.message
             )
             logger.info(f"Got response from Letta: {response}")
         except Exception as e:
-            logger.error(f"Error sending message to Letta: {str(e)}")
+            logger.error(f"Error sending message to Letta: {str(e)}", exc_info=True)
             raise
         
+        # Extract message from function call
+        message = None
+        for msg in response.messages:
+            if msg.message_type == "function_call":
+                try:
+                    args = json.loads(msg.function_call.arguments)
+                    if "message" in args:
+                        message = args["message"]
+                        break
+                except:
+                    continue
+
         # Format response
         return ChatResponse(
-            message=response if isinstance(response, str) else response.get("message", ""),
-            conversation_id=response.get("conversation_id") if isinstance(response, dict) else None,
+            message=message or "I'm having trouble responding right now.",
+            conversation_id=None,
             metadata={
-                **(response.get("metadata", {}) if isinstance(response, dict) else {}),
                 "participant_type": request_context.get("participant_type", "player"),
                 "interaction_id": request_context.get("interaction_id"),
                 "is_npc_chat": request_context.get("participant_type") == "npc"
             },
-            action=response.get("action") if isinstance(response, dict) else None
+            action={"type": "none"}
         )
 
     except Exception as e:
@@ -231,3 +250,102 @@ def get_player_description(participant_id: str) -> str:
             (participant_id,)
         ).fetchone()
         return result['description'] if result else ""
+
+@router.post("/chat/v2", response_model=ChatResponse)
+async def chat_with_npc_v2(request: ChatRequest):
+    """New endpoint using direct Letta SDK"""
+    logger.info(f"Received request from game: {request.model_dump_json()}")
+    try:
+        # Get NPC context
+        npc_details = get_npc_context(request.npc_id)
+        if not npc_details:
+            raise HTTPException(status_code=404, detail="NPC not found")
+
+        # Initialize context if None
+        request_context = request.context or {}
+        
+        # Get existing agent mapping
+        agent_mapping = get_agent_mapping(request.npc_id, request.participant_id)
+        print(f"Found agent mapping: {agent_mapping}")
+
+        if not agent_mapping:
+            # Get player info
+            player_info = get_player_info(request.participant_id)
+            
+            # Create agent using new structure from quickstart
+            agent = create_roblox_agent(
+                client=direct_client,
+                name=f"npc_{npc_details['display_name']}_{request.npc_id[:8]}_{request.participant_id[:8]}",
+                embedding_config=EmbeddingConfig(
+                    embedding_endpoint_type="openai",
+                    embedding_endpoint="https://api.openai.com/v1",
+                    embedding_model="text-embedding-ada-002",
+                    embedding_dim=1536,
+                ),
+                llm_config=LLMConfig(
+                    model="gpt-4o-mini",
+                    model_endpoint_type="openai",
+                    model_endpoint="https://api.openai.com/v1",
+                    context_window=8000,
+                ),
+                memory=ChatMemory(
+                    human=f"""This is what I know about the player:
+Name: {player_info['display_name'] or request_context.get('participant_name', 'a player')}
+Description: {player_info['description']}""".strip(),
+                    persona=f"""My name is {npc_details['display_name']}.
+{npc_details['system_prompt']}""".strip()
+                ),
+                system=npc_details['system_prompt']
+            )
+            
+            # Store mapping
+            agent_mapping = create_agent_mapping(
+                npc_id=request.npc_id,
+                participant_id=request.participant_id,
+                agent_id=agent.id  # Note: agent.id instead of agent["id"]
+            )
+            print(f"Created new agent mapping: {agent_mapping}")
+        else:
+            print(f"Using existing agent {agent_mapping['letta_agent_id']} for {request.participant_id}")
+        
+        # Send message to agent
+        logger.info(f"Sending message to agent {agent_mapping['letta_agent_id']}")
+        try:
+            response = direct_client.send_message(
+                agent_id=agent_mapping["letta_agent_id"],
+                role="user",
+                message=request.message
+            )
+            logger.info(f"Got response from Letta: {response}")
+        except Exception as e:
+            logger.error(f"Error sending message to Letta: {str(e)}")
+            raise
+        
+        # Extract message from function call
+        message = None
+        for msg in response.messages:
+            if msg.message_type == "function_call":
+                try:
+                    args = json.loads(msg.function_call.arguments)
+                    if "message" in args:
+                        message = args["message"]
+                        break
+                except:
+                    continue
+
+        # Format response
+        return ChatResponse(
+            message=message or "I'm having trouble responding right now.",
+            conversation_id=None,
+            metadata={
+                "participant_type": request_context.get("participant_type", "player"),
+                "interaction_id": request_context.get("interaction_id"),
+                "is_npc_chat": request_context.get("participant_type") == "npc"
+            },
+            action={"type": "none"}
+        )
+
+    except Exception as e:
+        logger.error(f"Error in chat endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
