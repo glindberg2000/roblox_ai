@@ -141,18 +141,20 @@ function V4ChatClient:SendMessageV4(originalRequest)
     return result
 end
 
-function V4ChatClient:SendMessage(originalRequest)
+function V4ChatClient:SendMessage(data)
     print("V4ChatClient:SendMessage called")
     -- Try Letta first
-    local lettaResponse = handleLettaChat(originalRequest)
+    local lettaResponse = handleLettaChat(data)
     if lettaResponse then
-        print("Letta response successful")
         return lettaResponse
     end
 
-    print("Letta failed, falling back to V4")
-    -- Fall back to V4 if Letta fails
-    return self:SendMessageV4(originalRequest)
+    print("Letta failed - fallback disabled for testing")
+    return {
+        message = "Sorry, I'm having trouble connecting right now.",
+        action = { type = "none" },
+        metadata = {}
+    }
 end
 
 function V4ChatClient:EndConversation(conversationId)

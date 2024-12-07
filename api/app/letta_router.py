@@ -8,14 +8,26 @@ from .mock_player import MockPlayer
 import logging
 import json
 
+def create_roblox_agent(client, name: str, embedding_config: EmbeddingConfig, llm_config: LLMConfig, memory: ChatMemory, system: str):
+    """Create a Letta agent configured for Roblox NPCs"""
+    return client.create_agent(
+        name=name,
+        embedding_config=embedding_config,
+        llm_config=llm_config,
+        memory=memory,
+        system=system,
+        include_base_tools=True,
+        description="A Roblox NPC"
+    )
+
 logger = logging.getLogger("roblox_app")
 
 # Initialize router and client
 router = APIRouter(prefix="/letta/v1", tags=["letta"])
-letta_client = LettaRobloxClient("http://localhost:8333")
+letta_client = LettaRobloxClient("http://localhost:8283")
 
 # Initialize direct SDK client (keeping old client for backwards compatibility)
-direct_client = create_client(base_url="http://localhost:8333")
+direct_client = create_client(base_url="http://localhost:8283")
 
 """
 Letta AI Integration Router
