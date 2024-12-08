@@ -253,10 +253,12 @@ local function checkNPCProximity()
                 tostring(isInRange)
             ))
 
-            -- Only proceed if in range
+            -- Only proceed if in range and not already in conversation
             if not isInRange then continue end
+            if activeConversations.npcToNPC[npc1.id] then continue end
+            if activeConversations.npcToNPC[npc2.id] then continue end
 
-            -- Rest of interaction code...
+            -- Check cooldown
             local cooldownKey = npc1.id .. "_" .. npc2.id
             local lastGreeting = greetingCooldowns[cooldownKey]
             if lastGreeting then
@@ -266,6 +268,10 @@ local function checkNPCProximity()
 
             Logger:log("INTERACTION", string.format("%s sees %s and can initiate chat", 
                 npc1.displayName, npc2.displayName))
+            
+            -- Lock conversation
+            activeConversations.npcToNPC[npc1.id] = {partner = npc2}
+            activeConversations.npcToNPC[npc2.id] = {partner = npc1}
             
             -- Create mock participant and initiate
             local mockParticipant = npcManagerV3:createMockParticipant(npc2)
