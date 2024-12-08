@@ -11,9 +11,9 @@ return {
             responseRadius = 4, 
             spawnPosition = Vector3.new(8.0, 18.0, -12.0), 
             abilities = {
-            "move", 
-            "chat", 
-        }, 
+                "move", 
+                "chat", 
+            }, 
             shortTermMemory = {}, 
         },        {
             id = "e43613f0-cc70-4e98-9b61-2a39fecfa443", 
@@ -26,8 +26,9 @@ return {
             responseRadius = 4, 
             spawnPosition = Vector3.new(10.0, 18.0, -12.0), 
             abilities = {
-            "chat", 
-        }, 
+                "move", 
+                "chat", 
+            }, 
             shortTermMemory = {}, 
         },        {
             id = "0544b51c-1009-4231-ac6e-053626135ed4", 
@@ -40,13 +41,13 @@ return {
             responseRadius = 4, 
             spawnPosition = Vector3.new(6.0, 18.0, -12.0), 
             abilities = {
-            "move", 
-            "chat", 
-            "trade", 
-            "quest", 
-            "combat", 
-            "initiate_chat",
-        }, 
+                "move", 
+                "chat", 
+                "trade", 
+                "quest", 
+                "combat", 
+                "initiate_chat",
+            }, 
             shortTermMemory = {}, 
         },        {
             id = "3cff63ac-9960-46bb-af7f-88e824d68dbe", 
@@ -59,12 +60,13 @@ return {
             responseRadius = 4, 
             spawnPosition = Vector3.new(0.0, 18.0, -6.0), 
             abilities = {
-            "chat", 
-            "trade", 
-            "quest", 
-            "combat", 
-            "initiate_chat",
-        }, 
+                "move", 
+                "chat", 
+                "trade", 
+                "quest", 
+                "combat", 
+                "initiate_chat",
+            }, 
             shortTermMemory = {}, 
         },        {
             id = "b11fbfb5-5f46-40cb-9c4c-84ca72b55ac7", 
@@ -73,13 +75,13 @@ return {
             assetId = "7315192066", 
             model = "7315192066", 
             modelName = "Pete", 
-            system_prompt = "I sell awesome merch and love to chat about it. My boss, Valterpoop—better known as KrushKen—expects me to keep an eye out for him and his dad, GreggytheEgg, just in case they drop by. Let me know if you’re interested in our products or have any questions; I’m always happy to help!", 
+            system_prompt = "I sell awesome merch and love to chat about it. My boss, Valterpoop—better known as KrushKen—expects me to keep an eye out for him and his dad, GreggytheEgg, just in case they drop by. Let me know if you're interested in our products or have any questions; I'm always happy to help!", 
             responseRadius = 4, 
             spawnPosition = Vector3.new(12.0, 18.0, -12.0), 
             abilities = {
-            "move", 
-            "chat"
-        }, 
+                "move", 
+                "chat"
+            }, 
             shortTermMemory = {}, 
         },        {
             id = "9db3e3e8-78ff-405b-a11b-240c4afc251e", 
@@ -92,9 +94,9 @@ return {
             responseRadius = 4, 
             spawnPosition = Vector3.new(10.0, 18.0, -12.0), 
             abilities = {
-            "move", 
-            "chat"
-        }, 
+                "move", 
+                "chat"
+            }, 
             shortTermMemory = {}, 
         },
     },

@@ -350,7 +350,7 @@ local function updateNPCMovement()
                not activeConversations.npcToPlayer[npc.id] then
                 
                 -- Random chance to start moving
-                if math.random() < 0.3 then -- 30% chance each update
+                if math.random() < 0.8 then -- 80% chance each update
                     local spawnPos = npc.spawnPosition or npc.model.PrimaryPart.Position
                     local targetPos = getRandomPosition(spawnPos, 10) -- 10 stud radius
                     
