@@ -59,6 +59,31 @@ NPCManagerV3.__index = NPCManagerV3
 -- Add singleton instance variable
 local instance = nil
 
+-- Add near the top with other local variables
+local ThreadManager = {
+    activeThreads = {},
+    maxThreads = 10
+}
+
+-- Add this new function for thread management
+function NPCManagerV3:initializeThreadManager()
+    -- Initialize thread pool
+    self.threadPool = {
+        interactionThreads = {},
+        movementThreads = {},
+        visionThreads = {}
+    }
+    
+    -- Thread limits
+    self.threadLimits = {
+        interaction = 5,
+        movement = 3,
+        vision = 2
+    }
+    
+    Logger:log("SYSTEM", "Thread manager initialized")
+end
+
 function NPCManagerV3.getInstance()
     if not instance then
         instance = setmetatable({}, NPCManagerV3)
@@ -70,14 +95,26 @@ function NPCManagerV3.getInstance()
         instance.activeConversations = {}  -- Track active conversations
         instance.lastInteractionTime = {}  -- Track timing
         instance.conversationCooldowns = {} -- Track cooldowns between NPCs
+        
+        -- Add thread manager initialization
+        instance:initializeThreadManager()
+        
+        -- Initialize immediately
         Logger:log("SYSTEM", "Initializing NPCManagerV3")
         instance:loadNPCDatabase()
     end
     return instance
 end
--- Replace .new() with getInstance()
+
+-- Replace .new() with modified version
 function NPCManagerV3.new()
-    return NPCManagerV3.getInstance()
+    local manager = NPCManagerV3.getInstance()
+    -- Ensure database is loaded
+    if not manager.databaseLoaded then
+        manager:loadNPCDatabase()
+        manager.databaseLoaded = true
+    end
+    return manager
 end
 
 local API_URL = "https://roblox.ella-ai-care.com/robloxgpt/v3"
@@ -149,17 +186,33 @@ function NPCManagerV3:handlePlayerMessage(player, data)
 end
 
 function NPCManagerV3:loadNPCDatabase()
+    if self.databaseLoaded then
+        Logger:log("DATABASE", "Database already loaded, skipping...")
+        return
+    end
+    
     local npcDatabase = require(ReplicatedStorage:WaitForChild("NPCDatabaseV3"))
     Logger:log("DATABASE", string.format("Loading NPCs from database: %d NPCs found", #npcDatabase.npcs))
     
     for _, npcData in ipairs(npcDatabase.npcs) do
         self:createNPC(npcData)
     end
+    
+    self.databaseLoaded = true
+    Logger:log("DATABASE", "NPC Database loaded successfully")
 end
 
 function NPCManagerV3:createNPC(npcData)
     Logger:log("NPC", string.format("Creating NPC: %s", npcData.displayName))
     
+    -- Debug log NPC data
+    Logger:log("DEBUG", string.format("Creating NPC with data: %s", 
+        HttpService:JSONEncode({
+            displayName = npcData.displayName,
+            abilities = npcData.abilities
+        })
+    ))
+
     if not workspace:FindFirstChild("NPCs") then
         Instance.new("Folder", workspace).Name = "NPCs"
         Logger:log("SYSTEM", "Created NPCs folder in workspace")
@@ -198,6 +251,8 @@ function NPCManagerV3:createNPC(npcData)
         displayName = npcData.displayName,
         responseRadius = npcData.responseRadius,
         system_prompt = npcData.system_prompt,
+        abilities = npcData.abilities or {},
+        playersInRange = {},
         lastResponseTime = 0,
         isMoving = false,
         isInteracting = false,
@@ -234,20 +289,6 @@ function NPCManagerV3:testAllNPCChat()
         end
     end
     Logger:log("TEST", "Chat testing complete")
-end
-
--- Update loadNPCDatabase to run chat test after all NPCs are created
-function NPCManagerV3:loadNPCDatabase()
-    local npcDatabase = require(ReplicatedStorage:WaitForChild("NPCDatabaseV3"))
-    Logger:log("DATABASE", string.format("Loading NPCs from database: %d NPCs found", #npcDatabase.npcs))
-    
-    for _, npcData in ipairs(npcDatabase.npcs) do
-        self:createNPC(npcData)
-    end
-    
-    -- Test chat after all NPCs are created
-    wait(1) -- Give a moment for everything to settle
-    self:testAllNPCChat()
 end
 
 -- Modify the createNPC function to initialize chat speaker
@@ -717,87 +758,117 @@ function NPCManagerV3:stopFollowing(npc)
 end
 
 function NPCManagerV3:handleNPCInteraction(npc, participant, message)
-    -- Check cooldown
-    local cooldownKey = npc.id .. "_" .. participant.UserId
-    local lastInteraction = self.conversationCooldowns[cooldownKey]
-    if lastInteraction and (os.time() - lastInteraction) < 30 then
-        Logger:log("CHAT", string.format(
-            "Interaction between %s and %s is on cooldown for %d more seconds",
-            npc.displayName,
-            participant.Name,
-            30 - (os.time() - lastInteraction)
-        ))
-        return nil
-    end
-
-    print("Handling NPC interaction:", {
-        from = npc.displayName,
-        to = participant.Name,
-        message = message
-    })
-
-    -- Lock movement at start of interaction
-    if npc.model and npc.model:FindFirstChild("Humanoid") then
-        npc.model.Humanoid.WalkSpeed = 0
-        npc.isMovementLocked = true
-        Logger:log("MOVEMENT", string.format("Locked movement for %s during interaction", npc.displayName))
-    end
-
-    -- Check for conversation ending phrases
-    local endPhrases = {
-        "gotta run",
-        "goodbye",
-        "see you later",
-        "bye",
-        "talk to you later"
-    }
+    -- Generate unique interaction ID
+    local interactionId = HttpService:GenerateGUID()
     
-    for _, phrase in ipairs(endPhrases) do
-        if string.lower(message):find(phrase) then
-            -- Set cooldown
-            self.conversationCooldowns[cooldownKey] = os.time()
-            
-            -- Send goodbye response
-            self:displayMessage(npc, "Goodbye! Talk to you later!", participant)
-            
-            -- Unlock movement
+    -- Check if we can create new interaction thread
+    if #self.threadPool.interactionThreads >= self.threadLimits.interaction then
+        Logger:log("THREAD", "Maximum interaction threads reached, queuing interaction")
+        return
+    end
+    
+    -- Create new thread for interaction
+    local thread = task.spawn(function()
+        -- Add thread to pool
+        table.insert(self.threadPool.interactionThreads, interactionId)
+        
+        -- Original interaction logic
+        local cooldownKey = npc.id .. "_" .. participant.UserId
+        local lastInteraction = self.conversationCooldowns[cooldownKey]
+        
+        if lastInteraction and (os.time() - lastInteraction) < 30 then
+            Logger:log("CHAT", string.format(
+                "Interaction between %s and %s is on cooldown",
+                npc.displayName,
+                participant.Name
+            ))
+            return
+        end
+
+        -- Lock movement at start of interaction
+        if npc.model and npc.model:FindFirstChild("Humanoid") then
+            npc.model.Humanoid.WalkSpeed = 0
+            npc.isMovementLocked = true
+            Logger:log("MOVEMENT", string.format("Locked movement for %s during interaction", npc.displayName))
+        end
+
+        -- Check for conversation ending phrases
+        local endPhrases = {
+            "gotta run",
+            "goodbye",
+            "see you later",
+            "bye",
+            "talk to you later"
+        }
+        
+        for _, phrase in ipairs(endPhrases) do
+            if string.lower(message):find(phrase) then
+                -- Set cooldown
+                self.conversationCooldowns[cooldownKey] = os.time()
+                
+                -- Send goodbye response
+                self:displayMessage(npc, "Goodbye! Talk to you later!", participant)
+                
+                -- Unlock movement
+                if npc.model and npc.model:FindFirstChild("Humanoid") then
+                    npc.model.Humanoid.WalkSpeed = npc.defaultWalkSpeed or 16
+                    npc.isMovementLocked = false
+                end
+                
+                return nil
+            end
+        end
+
+        local response = NPCChatHandler:HandleChat({
+            message = message,
+            npc_id = npc.id,
+            participant_id = participant.UserId,
+            context = {
+                participant_type = "npc",
+                participant_name = participant.Name,
+                is_new_conversation = false,
+                interaction_history = {},
+                nearby_players = self:getVisiblePlayers(npc),
+                npc_location = "Unknown"
+            }
+        })
+        
+        if not response then
+            -- Unlock movement on failure
             if npc.model and npc.model:FindFirstChild("Humanoid") then
                 npc.model.Humanoid.WalkSpeed = npc.defaultWalkSpeed or 16
                 npc.isMovementLocked = false
+                Logger:log("MOVEMENT", string.format("Unlocked movement for %s after failed interaction", npc.displayName))
             end
-            
             return nil
         end
-    end
 
-    local response = NPCChatHandler:HandleChat({
-        message = message,
-        npc_id = npc.id,
-        participant_id = participant.UserId,
-        context = {
-            participant_type = "npc",
-            participant_name = participant.Name,
-            is_new_conversation = false,
-            interaction_history = {},
-            nearby_players = self:getVisiblePlayers(npc),
-            npc_location = "Unknown"
-        }
-    })
-    
-    if not response then
-        -- Unlock movement on failure
-        if npc.model and npc.model:FindFirstChild("Humanoid") then
-            npc.model.Humanoid.WalkSpeed = npc.defaultWalkSpeed or 16
-            npc.isMovementLocked = false
-            Logger:log("MOVEMENT", string.format("Unlocked movement for %s after failed interaction", npc.displayName))
+        -- Process response (this handles chat bubbles and actions)
+        self:processAIResponse(npc, participant, response)
+
+        -- Clean up thread when done
+        for i, threadId in ipairs(self.threadPool.interactionThreads) do
+            if threadId == interactionId then
+                table.remove(self.threadPool.interactionThreads, i)
+                break
+            end
         end
-        return nil
-    end
-
-    -- Process response (this handles chat bubbles and actions)
-    self:processAIResponse(npc, participant, response)
-
-    return response
+    end)
+    
+    -- Monitor thread
+    task.spawn(function()
+        local success, result = pcall(function()
+            task.wait(30) -- Timeout after 30 seconds
+            if thread then
+                task.cancel(thread)
+                Logger:log("THREAD", string.format("Terminated hung interaction thread %s", interactionId))
+            end
+        end)
+        
+        if not success then
+            Logger:log("ERROR", string.format("Thread monitoring failed: %s", result))
+        end
+    end)
 end
 
 function NPCManagerV3:canNPCsInteract(npc1, npc2)
@@ -875,5 +946,26 @@ end
 function NPCManagerV3:getNPCMovementState(npc)
     return self.movementStates[npc.id]
 end
+
+-- Add thread cleanup function
+function NPCManagerV3:cleanupThreads()
+    for threadType, threads in pairs(self.threadPool) do
+        for i = #threads, 1, -1 do
+            local threadId = threads[i]
+            if not ThreadManager.activeThreads[threadId] then
+                table.remove(threads, i)
+                Logger:log("THREAD", string.format("Cleaned up inactive %s thread %s", threadType, threadId))
+            end
+        end
+    end
+end
+
+-- Add periodic thread cleanup
+task.spawn(function()
+    while true do
+        task.wait(60) -- Clean up every minute
+        NPCManagerV3:getInstance():cleanupThreads()
+    end
+end)
 
 return NPCManagerV3

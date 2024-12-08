@@ -1,42 +1,40 @@
-local function createMockParticipant(npc)
-    return {
-        Name = npc.displayName,
-        displayName = npc.displayName,
-        UserId = npc.id,
-        npcId = npc.id,
-        Type = "npc"
-    }
-end
+function runNPCInteractionTests()
+    -- ... existing setup ...
 
-function NPCInteractionTest:testBasicInteraction()
+    -- Test 1: Basic NPC-to-NPC interaction
     print("Test 1: Initiating basic NPC-to-NPC interaction")
+    local mockParticipant = npcManager:createMockParticipant(npc1)
     
-    local npc1 = self.npcManager:getNPCByName("Goldie")
-    local npc2 = self.npcManager:getNPCByName("Pete")
+    -- Verify mock participant
+    assert(mockParticipant.Type == "npc", "Mock participant should be of type 'npc'")
+    assert(mockParticipant.model == npc1.model, "Mock participant should have correct model reference")
+    assert(mockParticipant.npcId == npc1.id, "Mock participant should have correct NPC ID")
     
-    local mockParticipant = self.npcManager:createMockParticipant(npc2)
-    assert(mockParticipant, "Mock participant should have been created")
-    
-    -- Initialize chat service
-    local ChatService = game:GetService("Chat")
-    local success = pcall(function()
-        ChatService:SetBubbleChatSettings({
-            BubbleDuration = 10,
-            MaxDistance = 80
-        })
+    -- Start interaction
+    local success, err = pcall(function()
+        npcManager:handleNPCInteraction(npc2, mockParticipant, "Hello!")
+        wait(2) -- Wait for the interaction to process
+        
+        -- Verify states
+        assert(npc2.isInteracting, "NPC2 should be in interaction state")
+        assert(npc2.model.Humanoid.WalkSpeed == 0, "NPC2 should be locked in place")
+        
+        -- Check for response
+        assert(#npc2.chatHistory > 0, "NPC2 should have responded")
+        print("NPC2 response: " .. npc2.chatHistory[#npc2.chatHistory])
     end)
-    print("Chat service initialized:", success)
     
-    -- Test interaction
-    print("Starting interaction between", npc1.displayName, "and", npc2.displayName)
-    local response = self.npcManager:handleNPCInteraction(npc1, mockParticipant, "Hello!")
+    if not success then
+        error("Interaction test failed: " .. tostring(err))
+    end
     
-    -- Verify response
-    assert(response, "Should have received a response")
-    print("Got response:", response.message)
-    
-    -- Wait for chat bubble
+    -- Clean up
+    npcManager:endInteraction(npc2, mockParticipant)
     wait(1)
     
-    return true
+    -- Verify cleanup
+    assert(not npc2.isInteracting, "NPC2 should not be in interaction state")
+    assert(npc2.model.Humanoid.WalkSpeed > 0, "NPC2 should be unlocked")
+
+    print("All NPC-to-NPC interaction tests passed!")
 end 

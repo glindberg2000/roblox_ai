@@ -62,6 +62,7 @@ return {
             "trade", 
             "quest", 
             "combat", 
+            "initiate_chat",
         }, 
             shortTermMemory = {}, 
         },        {
@@ -76,7 +77,7 @@ return {
             spawnPosition = Vector3.new(12.0, 18.0, -12.0), 
             abilities = {
             "move", 
-            "chat", 
+            "chat"
         }, 
             shortTermMemory = {}, 
         },        {
@@ -91,7 +92,7 @@ return {
             spawnPosition = Vector3.new(10.0, 18.0, -12.0), 
             abilities = {
             "move", 
-            "chat", 
+            "chat"
         }, 
             shortTermMemory = {}, 
         },

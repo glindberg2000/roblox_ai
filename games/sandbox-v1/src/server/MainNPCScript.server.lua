@@ -64,6 +64,14 @@ Logger:log("SYSTEM", "Starting NPC initialization")
 local npcManagerV3 = NPCManagerV3.new()
 Logger:log("SYSTEM", "NPC Manager created")
 
+-- Debug NPC abilities
+for npcId, npcData in pairs(npcManagerV3.npcs) do
+	Logger:log("DEBUG", string.format("NPC %s abilities: %s", 
+		npcData.displayName,
+		table.concat(npcData.abilities or {}, ", ")
+	))
+end
+
 for npcId, npcData in pairs(npcManagerV3.npcs) do
 	Logger:log("STATE", string.format("NPC spawned: %s", npcData.displayName))
 end
@@ -72,6 +80,10 @@ local interactionController = npcManagerV3.interactionController
 
 Logger:log("SYSTEM", "NPC system V3 initialized")
 
+-- Add cooldown tracking
+local greetingCooldowns = {}
+local GREETING_COOLDOWN = 30 -- seconds between greetings
+
 local function checkPlayerProximity()
 	for _, player in ipairs(Players:GetPlayers()) do
 		local playerPosition = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
@@ -79,11 +91,46 @@ local function checkPlayerProximity()
 			for _, npc in pairs(npcManagerV3.npcs) do
 				if npc.model and npc.model.PrimaryPart then
 					local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
-					if distance <= npc.responseRadius and not npc.isInteracting then
-						if interactionController:canInteract(player) then
-							Logger:log("INTERACTION", string.format("Auto-interaction triggered for %s with %s", 
+					-- Only greet if player just entered range
+					local wasInRange = npc.playersInRange and npc.playersInRange[player.UserId]
+					local isInRange = distance <= npc.responseRadius
+					
+					-- Track players in range
+					npc.playersInRange = npc.playersInRange or {}
+					npc.playersInRange[player.UserId] = isInRange
+					
+					-- Only initiate if player just entered range and NPC isn't busy
+					if isInRange and not wasInRange and not npc.isInteracting then
+						-- Check cooldown first
+						local cooldownKey = npc.id .. "_" .. player.UserId
+						local lastGreeting = greetingCooldowns[cooldownKey]
+						if lastGreeting then
+							local timeSinceLastGreeting = os.time() - lastGreeting
+							if timeSinceLastGreeting < GREETING_COOLDOWN then
+								Logger:log("DEBUG", string.format(
+									"Skipping greeting - on cooldown for %d more seconds",
+									GREETING_COOLDOWN - timeSinceLastGreeting
+								))
+								continue
+							end
+						end
+
+						-- Check if NPC has initiate_chat ability
+						local hasInitiateAbility = false
+						if npc.abilities then
+							for _, ability in ipairs(npc.abilities) do
+								if ability == "initiate_chat" then
+									hasInitiateAbility = true
+									break
+								end
+							end
+						end
+
+						if hasInitiateAbility and interactionController:canInteract(player) then
+							Logger:log("DEBUG", string.format("Attempting to initiate chat: %s -> %s", 
 								npc.displayName, player.Name))
 							npcManagerV3:handleNPCInteraction(npc, player, "Hello")
+							greetingCooldowns[cooldownKey] = os.time()
 						end
 					end
 				end
@@ -106,16 +153,35 @@ local function onPlayerChatted(player, message)
 	for _, npc in pairs(npcManagerV3.npcs) do
 		if npc.model and npc.model.PrimaryPart then
 			local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
-			if distance <= npc.responseRadius and distance < closestDistance then
+			if distance <= npc.responseRadius and distance < closestDistance and not npc.isInteracting then
 				closestNPC, closestDistance = npc, distance
 			end
 		end
 	end
 
 	if closestNPC then
+		local cooldownKey = closestNPC.id .. "_" .. player.UserId
+		local lastGreeting = greetingCooldowns[cooldownKey]
+		local isGreeting = message:lower():match("^h[ae][yl]l?o+!?$") or message:lower() == "hi"
+		
+		if isGreeting and lastGreeting then
+			local timeSinceLastGreeting = os.time() - lastGreeting
+			if timeSinceLastGreeting < GREETING_COOLDOWN then
+				Logger:log("DEBUG", string.format(
+					"Skipping player greeting - on cooldown for %d more seconds",
+					GREETING_COOLDOWN - timeSinceLastGreeting
+				))
+				return
+			end
+		end
+
 		Logger:log("INTERACTION", string.format("Routing chat from %s to NPC %s", 
 			player.Name, closestNPC.displayName))
 		npcManagerV3:handleNPCInteraction(closestNPC, player, message)
+		
+		if isGreeting then
+			greetingCooldowns[cooldownKey] = os.time()
+		end
 	end
 end
 
@@ -135,9 +201,6 @@ local function updateNPCs()
 	Logger:log("SYSTEM", "Starting NPC update loop")
 	while true do
 		checkPlayerProximity()
-		for _, npc in pairs(npcManagerV3.npcs) do
-			npcManagerV3:updateNPCState(npc)
-		end
 		wait(1)
 	end
 end

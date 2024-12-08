@@ -55,6 +55,6 @@ end
 
 Logger:log("SYSTEM", "NPC System initialized. Using V3 system.")
 
--- Create and store NPCManager instance (it will return the same instance if already created)
-local npcManager = NPCManagerV3.new()
+-- Create and store NPCManager instance
+local npcManager = NPCManagerV3.getInstance()
 _G.NPCManager = npcManager
