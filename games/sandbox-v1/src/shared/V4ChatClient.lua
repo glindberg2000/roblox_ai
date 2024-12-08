@@ -18,6 +18,29 @@ local ENDPOINTS = {
     END_CONVERSATION = "/v4/conversations"
 }
 
+-- Track conversation history
+local conversationHistory = {}
+
+local function getConversationKey(npc_id, participant_id)
+    return npc_id .. "_" .. participant_id
+end
+
+local function addToHistory(npc_id, participant_id, message, sender)
+    local key = getConversationKey(npc_id, participant_id)
+    conversationHistory[key] = conversationHistory[key] or {}
+    
+    table.insert(conversationHistory[key], {
+        message = message,
+        sender = sender,
+        timestamp = os.time()
+    })
+    
+    -- Keep last 10 messages
+    while #conversationHistory[key] > 10 do
+        table.remove(conversationHistory[key], 1)
+    end
+end
+
 -- Adapter to convert V3 format to V4
 local function adaptV3ToV4Request(v3Request)
     local is_new = not (v3Request.metadata and v3Request.metadata.conversation_id)
@@ -55,58 +78,74 @@ end
 
 local function handleLettaChat(data)
     print("Attempting Letta chat first...")
-    print("Incoming data:", HttpService:JSONEncode(data))
-
-    local success, response = pcall(function()
-        local lettaData = {
-            npc_id = data.npc_id,
-            participant_id = tostring(data.player_id),
-            message = data.message
+    print("Raw incoming data:", HttpService:JSONEncode(data))
+    
+    -- Get participant type from context or data
+    local participantType = (data.context and data.context.participant_type) or data.participant_type or "player"
+    print("Determined participant type:", participantType)
+    
+    -- Get conversation key and history
+    local convKey = getConversationKey(data.npc_id, data.participant_id)
+    local history = conversationHistory[convKey] or {}
+    
+    -- Check if conversation has gone on too long
+    if #history >= 5 then  -- After 5 messages
+        return {
+            message = "I've got to run now! Thanks for the chat! See you later! 👋",
+            action = { type = "none" },
+            metadata = {
+                participant_type = "npc",
+                is_npc_chat = true,
+                should_end = true  -- Signal to end conversation
+            }
         }
+    end
+    
+    -- Add current message to history
+    addToHistory(data.npc_id, data.participant_id, data.message, data.context.participant_name)
+    
+    local lettaData = {
+        npc_id = data.npc_id,
+        participant_id = tostring(data.participant_id),
+        message = data.message,
+        participant_type = participantType,
+        context = {
+            participant_type = participantType,
+            participant_name = data.context and data.context.participant_name,
+            interaction_history = history,
+            nearby_players = data.context and data.context.nearby_players or {},
+            npc_location = data.context and data.context.npc_location or "Unknown",
+            is_new_conversation = #history == 1  -- Only new if this is first message
+        }
+    }
 
-        print("Sending to Letta - npc_id:", data.npc_id)
-        print("Full Letta request:", HttpService:JSONEncode(lettaData))
-
+    print("Final Letta request:", HttpService:JSONEncode(lettaData))
+    
+    local success, response = pcall(function()
         local jsonData = HttpService:JSONEncode(lettaData)
         local url = LETTA_BASE_URL .. LETTA_ENDPOINT
         print("Sending to URL:", url)
-        local response = HttpService:PostAsync(
+        return HttpService:PostAsync(
             url,
             jsonData,
             Enum.HttpContentType.ApplicationJson,
             false
         )
-        
-        print("Letta response:", response)
-        local decoded = HttpService:JSONDecode(response)
-        
-        -- Fix action type format
-        if decoded.action and decoded.action.type then
-            decoded.action.type = "none"  -- Default to none if invalid
-        end
-        
-        return decoded
     end)
-
-    if success then
-        if response.error then
-            warn("Letta error:", HttpService:JSONEncode(response))
-            return nil
-        end
-
-        print("Letta success:", HttpService:JSONEncode(response))
-        return {
-            message = response.message,
-            action = response.action or { type = "none" },
-            metadata = {
-                conversation_id = response.conversation_id,
-                v4_metadata = response.metadata
-            }
-        }
-    else
-        warn("Letta request failed:", response)
+    
+    if not success then
+        warn("HTTP request failed:", response)
         return nil
     end
+    
+    print("Raw Letta response:", response)
+    local success2, decoded = pcall(HttpService.JSONDecode, HttpService, response)
+    if not success2 then
+        warn("JSON decode failed:", decoded)
+        return nil
+    end
+    
+    return decoded
 end
 
 function V4ChatClient:SendMessageV4(originalRequest)
@@ -149,12 +188,9 @@ function V4ChatClient:SendMessage(data)
         return lettaResponse
     end
 
-    print("Letta failed - fallback disabled for testing")
-    return {
-        message = "Sorry, I'm having trouble connecting right now.",
-        action = { type = "none" },
-        metadata = {}
-    }
+    -- Return nil on failure to prevent error message loops
+    print("Letta failed - returning nil")
+    return nil
 end
 
 function V4ChatClient:EndConversation(conversationId)

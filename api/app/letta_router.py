@@ -281,7 +281,7 @@ async def chat_with_npc_v2(request: ChatRequest):
         request_context = request.context or {}
         
         # Determine message role
-        message_role = "npc" if request_context.get("participant_type") == "npc" else "user"
+        message_role = "user"  # Always treat incoming messages as user messages
         logger.info(f"Message role: {message_role} for {request.participant_id} -> {request.npc_id}")
         
         # Get existing agent mapping with strict ordering

@@ -11,16 +11,24 @@ function NPCChatHandler:HandleChat(request)
     
     -- Try V4 first
     print("NPCChatHandler: Attempting V4")
-    local response = V4ChatClient:SendMessage(request)
+    local v4Response = V4ChatClient:SendMessage(request)
     
-    -- Fall back to V3 if needed
-    if not response.success and response.shouldFallback then
-        print("NPCChatHandler: Falling back to V3", response.error)
-        return V3ChatClient:SendMessage(request)
+    if v4Response then
+        print("NPCChatHandler: V4 succeeded", HttpService:JSONEncode(v4Response))
+        -- Ensure we have a valid message
+        if not v4Response.message then
+            v4Response.message = "I'm having trouble understanding right now."
+        end
+        return v4Response
     end
     
-    print("NPCChatHandler: V4 succeeded", HttpService:JSONEncode(response))
-    return response
+    -- If V4 failed, return error response
+    print("NPCChatHandler: V4 failed, returning error response")
+    return {
+        message = "I'm having trouble understanding right now.",
+        action = { type = "none" },
+        metadata = {}
+    }
 end
 
 return NPCChatHandler 
