@@ -62,14 +62,14 @@ class AgentMapping(BaseModel):
         id: Internal database ID
         npc_id: References the NPC in our system
         participant_id: Unique identifier for the participant
-        agent_id: The AI agent ID (e.g., Letta agent ID)
+        letta_agent_id: The AI agent ID (e.g., Letta agent ID)
         agent_type: Type of AI agent (e.g., 'letta')
         created_at: When this mapping was created
     """
     id: Optional[int] = None
     npc_id: str
     participant_id: str
-    agent_id: str
+    letta_agent_id: str
     agent_type: str = "letta"
     created_at: Optional[datetime] = None
 

@@ -468,7 +468,7 @@ My appearance: {result["asset_description"] or f'You are a {result["asset_name"]
             "description": result["asset_description"]
         }
 
-def create_agent_mapping(npc_id: str, participant_id: str, agent_id: str) -> Dict[str, Any]:
+def create_agent_mapping(npc_id: str, participant_id: str, agent_id: str) -> AgentMapping:
     """Create a new agent mapping"""
     with get_db() as db:
         cursor = db.execute("""
@@ -478,22 +478,32 @@ def create_agent_mapping(npc_id: str, participant_id: str, agent_id: str) -> Dic
         """, (npc_id, participant_id, agent_id))
         result = cursor.fetchone()
         db.commit()
-        return dict(result)
+        return AgentMapping(**dict(result))
 
-def get_agent_mapping(npc_id: str, participant_id: str) -> Optional[Dict[str, Any]]:
-    """Get existing agent mapping"""
+def get_agent_mapping(npc_id: str, participant_id: str, strict_order: bool = True) -> Optional[AgentMapping]:
+    """Get existing NPC agent mapping"""
     with get_db() as db:
-        print(f"Looking up agent mapping for npc_id: {npc_id}, participant_id: {participant_id}")
-        cursor = db.execute("""
-            SELECT * FROM npc_agents 
-            WHERE npc_id = ? AND participant_id = ?
-        """, (npc_id, participant_id))
-        result = cursor.fetchone()
-        if result:
-            print(f"Found existing agent mapping: {dict(result)}")
+        if strict_order:
+            # Only get exact match with correct order
+            cursor = db.execute("""
+                SELECT * FROM npc_agents 
+                WHERE npc_id = ? AND participant_id = ?
+            """, (npc_id, participant_id))
         else:
-            print("No existing agent mapping found")
-        return dict(result) if result else None
+            # Check both directions (legacy behavior)
+            cursor = db.execute("""
+                SELECT * FROM npc_agents 
+                WHERE (npc_id = ? AND participant_id = ?) OR
+                      (npc_id = ? AND participant_id = ?)
+            """, (npc_id, participant_id, participant_id, npc_id))
+            results = cursor.fetchall()
+            if len(results) > 1:
+                logger.warning(f"Found multiple mappings for {npc_id}:{participant_id}!")
+                for r in results:
+                    logger.warning(f"  {r['npc_id']} -> {r['participant_id']}: {r['letta_agent_id']}")
+        
+        result = cursor.fetchone()
+        return AgentMapping(**dict(result)) if result else None
 
 def debug_list_npcs():
     """Debug function to list all NPCs"""

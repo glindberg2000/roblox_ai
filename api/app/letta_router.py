@@ -7,6 +7,8 @@ from .database import get_npc_context, create_agent_mapping, get_agent_mapping, 
 from .mock_player import MockPlayer
 import logging
 import json
+import uuid
+import time
 
 def create_roblox_agent(client, name: str, embedding_config: EmbeddingConfig, llm_config: LLMConfig, memory: ChatMemory, system: str):
     """Create a Letta agent configured for Roblox NPCs"""
@@ -133,16 +135,16 @@ Description: {player_info['description']}""".strip(),
             )
             print(f"Created new agent mapping: {agent_mapping}")
         else:
-            print(f"Using existing agent {agent_mapping['letta_agent_id']} for {request.participant_id}")
+            print(f"Using existing agent {agent_mapping.letta_agent_id} for {request.participant_id}")
         
         # Send message to agent
-        logger.info(f"Sending message to agent {agent_mapping['letta_agent_id']}")
+        logger.info(f"Sending message to agent {agent_mapping.letta_agent_id}")
         try:
             logger.info(f"Using direct_client: {direct_client}")
-            logger.info(f"Agent ID: {agent_mapping['letta_agent_id']}")
+            logger.info(f"Agent ID: {agent_mapping.letta_agent_id}")
             logger.info(f"Message: {request.message}")
             response = direct_client.send_message(
-                agent_id=agent_mapping["letta_agent_id"],
+                agent_id=agent_mapping.letta_agent_id,
                 role="user",
                 message=request.message
             )
@@ -266,7 +268,9 @@ def get_player_description(participant_id: str) -> str:
 @router.post("/chat/v2", response_model=ChatResponse)
 async def chat_with_npc_v2(request: ChatRequest):
     """New endpoint using direct Letta SDK"""
+    # Basic request logging
     logger.info(f"Received request from game: {request.model_dump_json()}")
+
     try:
         # Get NPC context
         npc_details = get_npc_context(request.npc_id)
@@ -276,10 +280,17 @@ async def chat_with_npc_v2(request: ChatRequest):
         # Initialize context if None
         request_context = request.context or {}
         
-        # Get existing agent mapping
-        agent_mapping = get_agent_mapping(request.npc_id, request.participant_id)
-        print(f"Found agent mapping: {agent_mapping}")
-
+        # Determine message role
+        message_role = "npc" if request_context.get("participant_type") == "npc" else "user"
+        logger.info(f"Message role: {message_role} for {request.participant_id} -> {request.npc_id}")
+        
+        # Get existing agent mapping with strict ordering
+        agent_mapping = get_agent_mapping(
+            npc_id=request.npc_id,
+            participant_id=request.participant_id,
+            strict_order=True  # Ensure we get the right direction
+        )
+        
         if not agent_mapping:
             # Get player info
             player_info = get_player_info(request.participant_id)
@@ -318,14 +329,14 @@ Description: {player_info['description']}""".strip(),
             )
             print(f"Created new agent mapping: {agent_mapping}")
         else:
-            print(f"Using existing agent {agent_mapping['letta_agent_id']} for {request.participant_id}")
+            print(f"Using existing agent {agent_mapping.letta_agent_id} for {request.participant_id}")
         
         # Send message to agent
-        logger.info(f"Sending message to agent {agent_mapping['letta_agent_id']}")
+        logger.info(f"Sending message to agent {agent_mapping.letta_agent_id}")
         try:
             response = direct_client.send_message(
-                agent_id=agent_mapping["letta_agent_id"],
-                role="user",
+                agent_id=agent_mapping.letta_agent_id,
+                role=message_role,
                 message=request.message
             )
             logger.info(f"Got response from Letta: {response}")
