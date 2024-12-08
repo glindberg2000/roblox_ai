@@ -8,7 +8,7 @@ return {
             model = "4446576906", 
             modelName = "Diamond", 
             system_prompt = "I'm sharp as a tack both verbally and emotionally.", 
-            responseRadius = 20, 
+            responseRadius = 4, 
             spawnPosition = Vector3.new(8.0, 18.0, -12.0), 
             abilities = {
             "move", 
@@ -23,7 +23,7 @@ return {
             model = "4446576906", 
             modelName = "Goldie", 
             system_prompt = "I'm golden and love luxury and wealth, glamour and glitz.", 
-            responseRadius = 20, 
+            responseRadius = 4, 
             spawnPosition = Vector3.new(10.0, 18.0, -12.0), 
             abilities = {
             "chat", 
@@ -37,7 +37,7 @@ return {
             model = "4446576906", 
             modelName = "Noobster", 
             system_prompt = "I'm clueless but also can learn fast. I keep on moving in random ways.", 
-            responseRadius = 20, 
+            responseRadius = 4, 
             spawnPosition = Vector3.new(6.0, 18.0, -12.0), 
             abilities = {
             "move", 
@@ -56,7 +56,7 @@ return {
             model = "7315192066", 
             modelName = "Oscar", 
             system_prompt = "I am Oscar, twin brother of Pete and I love chasing trouble.", 
-            responseRadius = 20, 
+            responseRadius = 4, 
             spawnPosition = Vector3.new(0.0, 18.0, -6.0), 
             abilities = {
             "chat", 
@@ -74,7 +74,7 @@ return {
             model = "7315192066", 
             modelName = "Pete", 
             system_prompt = "I sell awesome merch and love to chat about it. My boss, Valterpoop—better known as KrushKen—expects me to keep an eye out for him and his dad, GreggytheEgg, just in case they drop by. Let me know if you’re interested in our products or have any questions; I’m always happy to help!", 
-            responseRadius = 20, 
+            responseRadius = 4, 
             spawnPosition = Vector3.new(12.0, 18.0, -12.0), 
             abilities = {
             "move", 
@@ -89,7 +89,7 @@ return {
             model = "128282678684676", 
             modelName = "Pete", 
             system_prompt = "A young boy who is curious and always discovering new things.", 
-            responseRadius = 20, 
+            responseRadius = 4, 
             spawnPosition = Vector3.new(10.0, 18.0, -12.0), 
             abilities = {
             "move", 

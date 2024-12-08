@@ -145,49 +145,63 @@ local function checkPlayerProximity()
 end
 
 local function onPlayerChatted(player, message)
-	Logger:log("INTERACTION", string.format("Player %s chatted: %s", player.Name, message))
-	
-	local playerPosition = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if not playerPosition then
-		Logger:log("ERROR", string.format("Cannot process chat for %s: Character not found", player.Name))
-		return
-	end
+    -- Get player position
+    local playerPosition = player.Character and player.Character.PrimaryPart
+    if not playerPosition then return end
 
-	local closestNPC, closestDistance = nil, math.huge
+    -- Find closest NPC in range
+    local closestNPC, closestDistance = nil, math.huge
 
-	for _, npc in pairs(npcManagerV3.npcs) do
-		if npc.model and npc.model.PrimaryPart then
-			local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
-			if distance <= npc.responseRadius and distance < closestDistance and not npc.isInteracting then
-				closestNPC, closestDistance = npc, distance
-			end
-		end
-	end
+    for _, npc in pairs(npcManagerV3.npcs) do
+        if npc.model and npc.model.PrimaryPart then
+            local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
+            
+            -- Log range check for debugging
+            Logger:log("RANGE", string.format(
+                "Distance between player %s and NPC %s: %.2f studs (Radius: %d, InRange: %s)",
+                player.Name,
+                npc.displayName,
+                distance,
+                npc.responseRadius,
+                tostring(distance <= npc.responseRadius)
+            ))
 
-	if closestNPC then
-		local cooldownKey = closestNPC.id .. "_" .. player.UserId
-		local lastGreeting = greetingCooldowns[cooldownKey]
-		local isGreeting = message:lower():match("^h[ae][yl]l?o+!?$") or message:lower() == "hi"
-		
-		if isGreeting and lastGreeting then
-			local timeSinceLastGreeting = os.time() - lastGreeting
-			if timeSinceLastGreeting < GREETING_COOLDOWN then
-				Logger:log("DEBUG", string.format(
-					"Skipping player greeting - on cooldown for %d more seconds",
-					GREETING_COOLDOWN - timeSinceLastGreeting
-				))
-				return
-			end
-		end
+            -- Only consider NPCs in range and not already interacting
+            if distance <= npc.responseRadius and distance < closestDistance and not npc.isInteracting then
+                closestNPC, closestDistance = npc, distance
+            end
+        end
+    end
 
-		Logger:log("INTERACTION", string.format("Routing chat from %s to NPC %s", 
-			player.Name, closestNPC.displayName))
-		npcManagerV3:handleNPCInteraction(closestNPC, player, message)
-		
-		if isGreeting then
-			greetingCooldowns[cooldownKey] = os.time()
-		end
-	end
+    if closestNPC then
+        local cooldownKey = closestNPC.id .. "_" .. player.UserId
+        local lastGreeting = greetingCooldowns[cooldownKey]
+        local isGreeting = message:lower():match("^h[ae][yl]l?o+!?$") or message:lower() == "hi"
+        
+        if isGreeting and lastGreeting then
+            local timeSinceLastGreeting = os.time() - lastGreeting
+            if timeSinceLastGreeting < GREETING_COOLDOWN then
+                Logger:log("DEBUG", string.format(
+                    "Skipping player greeting - on cooldown for %d more seconds",
+                    GREETING_COOLDOWN - timeSinceLastGreeting
+                ))
+                return
+            end
+        end
+
+        Logger:log("INTERACTION", string.format("Routing chat from %s to NPC %s (Distance: %.2f)", 
+            player.Name, closestNPC.displayName, closestDistance))
+        npcManagerV3:handleNPCInteraction(closestNPC, player, message)
+        
+        if isGreeting then
+            greetingCooldowns[cooldownKey] = os.time()
+        end
+    else
+        Logger:log("INTERACTION", string.format(
+            "No NPCs in range for player %s chat", 
+            player.Name
+        ))
+    end
 end
 
 local function setupChatConnections()
@@ -214,61 +228,74 @@ local function checkNPCProximity()
         end
         if not hasInitiateAbility then continue end
 
-        -- Skip if already interacting
-        if npc1.isInteracting then continue end
-
-        -- Skip if reached max concurrent chats
-        local activeChats = 0
-        for _, thread in pairs(npcManagerV3.threadPool.interactionThreads or {}) do
-            if thread.npc == npc1 then
-                activeChats = activeChats + 1
-            end
-        end
-        if activeChats >= 1 then continue end
-
         -- Scan for other NPCs in range
         for _, npc2 in pairs(npcManagerV3.npcs) do
             if npc1 == npc2 or npc2.isInteracting then continue end
             if not npc2.model or not npc2.model.PrimaryPart then continue end
 
             local distance = (npc1.model.PrimaryPart.Position - npc2.model.PrimaryPart.Position).Magnitude
-            
-            -- Check if they just came into range
-            local wasInRange = npc1.npcsInRange and npc1.npcsInRange[npc2.id]
             local isInRange = distance <= npc1.responseRadius
+            
+            Logger:log("RANGE", string.format(
+                "Distance between %s and %s: %.2f studs (Radius: %d, InRange: %s)",
+                npc1.displayName,
+                npc2.displayName,
+                distance,
+                npc1.responseRadius,
+                tostring(isInRange)
+            ))
 
-            -- Track NPCs in range
-            npc1.npcsInRange = npc1.npcsInRange or {}
-            npc1.npcsInRange[npc2.id] = isInRange
+            -- Only proceed if in range
+            if not isInRange then continue end
 
-            if isInRange and not wasInRange then
-                -- Check cooldown
-                local cooldownKey = npc1.id .. "_" .. npc2.id
-                local lastGreeting = greetingCooldowns[cooldownKey]
-                if lastGreeting then
-                    local timeSinceLastGreeting = os.time() - lastGreeting
-                    if timeSinceLastGreeting < GREETING_COOLDOWN then continue end
-                end
+            -- Rest of interaction code...
+            local cooldownKey = npc1.id .. "_" .. npc2.id
+            local lastGreeting = greetingCooldowns[cooldownKey]
+            if lastGreeting then
+                local timeSinceLastGreeting = os.time() - lastGreeting
+                if timeSinceLastGreeting < GREETING_COOLDOWN then continue end
+            end
 
-                -- Also check reverse cooldown
-                local reverseCooldownKey = npc2.id .. "_" .. npc1.id
-                local reverseLastGreeting = greetingCooldowns[reverseCooldownKey]
-                if reverseLastGreeting then
-                    local reverseTimeSinceLastGreeting = os.time() - reverseLastGreeting
-                    if reverseTimeSinceLastGreeting < GREETING_COOLDOWN then continue end
-                end
+            Logger:log("INTERACTION", string.format("%s sees %s and can initiate chat", 
+                npc1.displayName, npc2.displayName))
+            
+            -- Create mock participant and initiate
+            local mockParticipant = npcManagerV3:createMockParticipant(npc2)
+            local systemMessage = string.format(
+                "[SYSTEM] Another NPC (%s) has entered your area. You can initiate a conversation if you'd like.",
+                npc2.displayName
+            )
+            npcManagerV3:handleNPCInteraction(npc1, mockParticipant, systemMessage)
+            greetingCooldowns[cooldownKey] = os.time()
+        end
+    end
+end
 
-                Logger:log("INTERACTION", string.format("%s sees %s and can initiate chat", 
-                    npc1.displayName, npc2.displayName))
-                
-                -- Create mock participant and initiate
-                local mockParticipant = npcManagerV3:createMockParticipant(npc2)
-                local systemMessage = string.format(
-                    "[SYSTEM] Another NPC (%s) has entered your area. You can initiate a conversation if you'd like.",
+local function checkOngoingConversations()
+    for npc1Id, conversationData in pairs(activeConversations.npcToNPC) do
+        local npc1 = npcManagerV3.npcs[npc1Id]
+        local npc2 = conversationData.partner
+        
+        if npc1 and npc2 and npc1.model and npc2.model then
+            local distance = (npc1.model.PrimaryPart.Position - npc2.model.PrimaryPart.Position).Magnitude
+            local isInRange = distance <= npc1.responseRadius
+            
+            Logger:log("RANGE", string.format(
+                "[ONGOING] Distance between %s and %s: %.2f studs (Radius: %d, InRange: %s)",
+                npc1.displayName,
+                npc2.displayName,
+                distance,
+                npc1.responseRadius,
+                tostring(isInRange)
+            ))
+
+            if not isInRange then
+                Logger:log("INTERACTION", string.format(
+                    "Ending conversation - NPCs out of range (%s <-> %s)",
+                    npc1.displayName,
                     npc2.displayName
-                )
-                npcManagerV3:handleNPCInteraction(npc1, mockParticipant, systemMessage)
-                greetingCooldowns[cooldownKey] = os.time()
+                ))
+                npcManagerV3:endInteraction(npc1, npc2)
             end
         end
     end
@@ -279,6 +306,7 @@ local function updateNPCs()
     while true do
         checkPlayerProximity()
         checkNPCProximity()
+        checkOngoingConversations()
         wait(1)
     end
 end

@@ -996,4 +996,30 @@ task.spawn(function()
     end
 end)
 
+function NPCManagerV3:checkRangeAndEndConversation(npc1, npc2)
+    if not npc1.model or not npc2.model then return end
+    if not npc1.model.PrimaryPart or not npc2.model.PrimaryPart then return end
+
+    local distance = (npc1.model.PrimaryPart.Position - npc2.model.PrimaryPart.Position).Magnitude
+    if distance > npc1.responseRadius then
+        Logger:log("INTERACTION", string.format("%s and %s are out of range, ending conversation",
+            npc1.displayName, npc2.displayName))
+        self:endInteraction(npc1, npc2)
+        return true
+    end
+    return false
+end
+
+-- Add this to the update loop in MainNPCScript.server.lua
+local function checkOngoingConversations()
+    for npc1Id, conversationData in pairs(activeConversations.npcToNPC) do
+        local npc1 = npcManagerV3.npcs[npc1Id]
+        local npc2 = conversationData.partner
+        
+        if npc1 and npc2 then
+            npcManagerV3:checkRangeAndEndConversation(npc1, npc2)
+        end
+    end
+end
+
 return NPCManagerV3

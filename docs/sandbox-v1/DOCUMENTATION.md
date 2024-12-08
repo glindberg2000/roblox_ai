@@ -24,6 +24,7 @@
 │   ├── MainNPCScript.server.lua
 │   ├── MockPlayer.lua
 │   ├── MockPlayerTest.server.lua
+│   ├── NPCChatHandler.lua
 │   ├── NPCConfigurations.lua
 │   ├── NPCInteractionTest.server.lua
 │   ├── NPCSystemInitializer.server.lua
@@ -34,7 +35,9 @@
 │   │   └── V4ChatClient.lua
 │   ├── AnimationManager.lua
 │   ├── AssetModule.lua
+│   ├── ChatRouter.lua
 │   ├── ChatUtils.lua
+│   ├── ConversationManager.lua
 │   ├── ConversationManagerV2.lua
 │   ├── LettaConfig.lua
 │   ├── NPCChatHandler.lua
@@ -399,12 +402,85 @@ end
 
 setupChatConnections()
 
+local function checkNPCProximity()
+    for _, npc1 in pairs(npcManagerV3.npcs) do
+        -- Skip if no initiate_chat
+        local hasInitiateAbility = false
+        for _, ability in ipairs(npc1.abilities or {}) do
+            if ability == "initiate_chat" then
+                hasInitiateAbility = true
+                break
+            end
+        end
+        if not hasInitiateAbility then continue end
+
+        -- Skip if already interacting
+        if npc1.isInteracting then continue end
+
+        -- Skip if reached max concurrent chats
+        local activeChats = 0
+        for _, thread in pairs(npcManagerV3.threadPool.interactionThreads or {}) do
+            if thread.npc == npc1 then
+                activeChats = activeChats + 1
+            end
+        end
+        if activeChats >= 1 then continue end
+
+        -- Scan for other NPCs in range
+        for _, npc2 in pairs(npcManagerV3.npcs) do
+            if npc1 == npc2 or npc2.isInteracting then continue end
+            if not npc2.model or not npc2.model.PrimaryPart then continue end
+
+            local distance = (npc1.model.PrimaryPart.Position - npc2.model.PrimaryPart.Position).Magnitude
+            
+            -- Check if they just came into range
+            local wasInRange = npc1.npcsInRange and npc1.npcsInRange[npc2.id]
+            local isInRange = distance <= npc1.responseRadius
+
+            -- Track NPCs in range
+            npc1.npcsInRange = npc1.npcsInRange or {}
+            npc1.npcsInRange[npc2.id] = isInRange
+
+            if isInRange and not wasInRange then
+                -- Check cooldown
+                local cooldownKey = npc1.id .. "_" .. npc2.id
+                local lastGreeting = greetingCooldowns[cooldownKey]
+                if lastGreeting then
+                    local timeSinceLastGreeting = os.time() - lastGreeting
+                    if timeSinceLastGreeting < GREETING_COOLDOWN then continue end
+                end
+
+                -- Also check reverse cooldown
+                local reverseCooldownKey = npc2.id .. "_" .. npc1.id
+                local reverseLastGreeting = greetingCooldowns[reverseCooldownKey]
+                if reverseLastGreeting then
+                    local reverseTimeSinceLastGreeting = os.time() - reverseLastGreeting
+                    if reverseTimeSinceLastGreeting < GREETING_COOLDOWN then continue end
+                end
+
+                Logger:log("INTERACTION", string.format("%s sees %s and can initiate chat", 
+                    npc1.displayName, npc2.displayName))
+                
+                -- Create mock participant and initiate
+                local mockParticipant = npcManagerV3:createMockParticipant(npc2)
+                local systemMessage = string.format(
+                    "[SYSTEM] Another NPC (%s) has entered your area. You can initiate a conversation if you'd like.",
+                    npc2.displayName
+                )
+                npcManagerV3:handleNPCInteraction(npc1, mockParticipant, systemMessage)
+                greetingCooldowns[cooldownKey] = os.time()
+            end
+        end
+    end
+end
+
 local function updateNPCs()
-	Logger:log("SYSTEM", "Starting NPC update loop")
-	while true do
-		checkPlayerProximity()
-		wait(1)
-	end
+    Logger:log("SYSTEM", "Starting NPC update loop")
+    while true do
+        checkPlayerProximity()
+        checkNPCProximity()
+        wait(1)
+    end
 end
 
 spawn(updateNPCs)
@@ -547,6 +623,61 @@ return {
 	},
 }
 
+```
+
+### server/NPCChatHandler.lua
+
+```lua
+function NPCChatHandler:handleResponse(response, npc, participant)
+    -- Check if this is a player interaction
+    local participantType = typeof(participant) == "Instance" and participant:IsA("Player") and "player" or "npc"
+    
+    -- Store conversation history
+    npc.chatHistory = npc.chatHistory or {}
+    table.insert(npc.chatHistory, {
+        message = response.message,
+        timestamp = os.time(),
+        sender = npc.displayName
+    })
+
+    -- Handle player interactions
+    if participantType == "player" then
+        -- Always prioritize player interactions
+        npc.isInteracting = true
+        npc.interactingPlayer = participant
+        npc.isWindingDown = false
+        npc.isEndingConversation = false
+        
+        -- Remove any end conversation flags
+        if response.metadata then
+            response.metadata.should_end = nil
+        end
+        
+        -- Force end any NPC conversations
+        if npc.currentParticipant and typeof(npc.currentParticipant) ~= "Instance" then
+            NPCManagerV3:endInteraction(npc, npc.currentParticipant)
+        end
+    else
+        -- For NPC conversations
+        if npc.interactingPlayer then
+            -- If talking to a player, don't process NPC chat
+            return nil
+        end
+        
+        -- Only allow natural endings for NPC-NPC conversations
+        if response.metadata and response.metadata.should_end then
+            npc.isWindingDown = true
+        end
+    end
+
+    -- Include chat history in context
+    if not response.context then
+        response.context = {}
+    end
+    response.context.interaction_history = npc.chatHistory
+
+    return response
+end 
 ```
 
 ### server/Logger.lua
@@ -1272,6 +1403,86 @@ function V4ChatClient:GetConversationMetrics()
 end
 
 return V4ChatClient 
+```
+
+### shared/ChatRouter.lua
+
+```lua
+local ChatRouter = {}
+
+function ChatRouter.new()
+    local self = setmetatable({}, {__index = ChatRouter})
+    self.activeConversations = {
+        playerToNPC = {}, -- player UserId -> NPC reference
+        npcToPlayer = {}, -- NPC id -> player reference
+        npcToNPC = {}     -- NPC id -> NPC reference
+    }
+    return self
+end
+
+function ChatRouter:isInConversation(participant)
+    if typeof(participant) == "Instance" and participant:IsA("Player") then
+        return self.activeConversations.playerToNPC[participant.UserId] ~= nil
+    else
+        return self.activeConversations.npcToPlayer[participant.npcId] ~= nil or 
+               self.activeConversations.npcToNPC[participant.npcId] ~= nil
+    end
+end
+
+function ChatRouter:getCurrentPartner(participant)
+    if typeof(participant) == "Instance" and participant:IsA("Player") then
+        return self.activeConversations.playerToNPC[participant.UserId]
+    else
+        return self.activeConversations.npcToPlayer[participant.npcId] or
+               self.activeConversations.npcToNPC[participant.npcId]
+    end
+end
+
+function ChatRouter:lockConversation(participant1, participant2)
+    if typeof(participant1) == "Instance" and participant1:IsA("Player") then
+        self.activeConversations.playerToNPC[participant1.UserId] = participant2
+        self.activeConversations.npcToPlayer[participant2.npcId] = participant1
+    else
+        self.activeConversations.npcToNPC[participant1.npcId] = participant2
+        self.activeConversations.npcToNPC[participant2.npcId] = participant1
+    end
+end
+
+function ChatRouter:unlockConversation(participant)
+    if typeof(participant) == "Instance" and participant:IsA("Player") then
+        local npc = self.activeConversations.playerToNPC[participant.UserId]
+        if npc then
+            self.activeConversations.playerToNPC[participant.UserId] = nil
+            self.activeConversations.npcToPlayer[npc.npcId] = nil
+        end
+    else
+        local partner = self.activeConversations.npcToNPC[participant.npcId]
+        if partner then
+            self.activeConversations.npcToNPC[participant.npcId] = nil
+            self.activeConversations.npcToNPC[partner.npcId] = nil
+        end
+    end
+end
+
+function ChatRouter:routeMessage(message, sender, intendedReceiver)
+    -- Get current conversation partner if any
+    local currentPartner = self:getCurrentPartner(sender)
+    
+    -- If in conversation, force route to current partner
+    if currentPartner then
+        return currentPartner
+    end
+    
+    -- If not in conversation and both participants are free, lock them
+    if not self:isInConversation(sender) and not self:isInConversation(intendedReceiver) then
+        self:lockConversation(sender, intendedReceiver)
+        return intendedReceiver
+    end
+    
+    return nil -- Cannot route message
+end
+
+return ChatRouter 
 ```
 
 ### shared/AssetModule.lua
@@ -2163,6 +2374,27 @@ function NPCManagerV3:stopFollowing(npc)
 end
 
 function NPCManagerV3:handleNPCInteraction(npc, participant, message)
+    -- Determine participant type
+    local participantType = typeof(participant) == "Instance" and participant:IsA("Player") and "player" or "npc"
+    local participantId = participantType == "player" and participant.UserId or participant.npcId
+    local participantName = participant.Name or participant.displayName
+
+    -- Clean up any existing interactions
+    if npc.isInteracting then
+        self:endInteraction(npc)
+    end
+    if participantType == "npc" and participant.isInteracting then
+        self:endInteraction(participant)
+    end
+
+    Logger:log("DEBUG", string.format(
+        "Starting interaction - NPC: %s, Participant: %s (%s), Message: %s",
+        npc.displayName,
+        participantName,
+        participantType,
+        message
+    ))
+
     -- Generate unique interaction ID
     local interactionId = HttpService:GenerateGUID()
     
@@ -2298,6 +2530,8 @@ function NPCManagerV3:createMockParticipant(npc)
         UserId = npc.id,
         npcId = npc.id,
         Type = "npc",
+        GetParticipantType = function() return "npc" end,
+        GetParticipantId = function() return npc.id end,
         model = npc.model
     }
 end
@@ -2675,6 +2909,116 @@ function AnimationManager:stopAnimations(humanoid)
 end
 
 return AnimationManager
+```
+
+### shared/ConversationManager.lua
+
+```lua
+local ConversationManager = {}
+
+-- Track active conversations and message types
+local activeConversations = {
+    playerToNPC = {}, -- player UserId -> {npc = npcRef, lastMessage = time}
+    npcToNPC = {},    -- npc Id -> {partner = npcRef, lastMessage = time}
+    npcToPlayer = {}  -- npc Id -> {player = playerRef, lastMessage = time}
+}
+
+-- Message types
+local MessageType = {
+    SYSTEM = "system",
+    CHAT = "chat"
+}
+
+function ConversationManager:isSystemMessage(message)
+    return string.match(message, "^%[SYSTEM%]")
+end
+
+function ConversationManager:canStartConversation(sender, receiver)
+    -- Check if either participant is in conversation
+    if self:isInConversation(sender) or self:isInConversation(receiver) then
+        return false
+    end
+    return true
+end
+
+function ConversationManager:isInConversation(participant)
+    local id = self:getParticipantId(participant)
+    local participantType = self:getParticipantType(participant)
+    
+    if participantType == "player" then
+        return activeConversations.playerToNPC[id] ~= nil
+    else
+        return activeConversations.npcToPlayer[id] ~= nil or 
+               activeConversations.npcToNPC[id] ~= nil
+    end
+end
+
+function ConversationManager:lockConversation(sender, receiver)
+    local senderId = self:getParticipantId(sender)
+    local receiverId = self:getParticipantId(receiver)
+    local senderType = self:getParticipantType(sender)
+    local receiverType = self:getParticipantType(receiver)
+    
+    if senderType == "player" and receiverType == "npc" then
+        activeConversations.playerToNPC[senderId] = {
+            npc = receiver,
+            lastMessage = os.time()
+        }
+        activeConversations.npcToPlayer[receiverId] = {
+            player = sender,
+            lastMessage = os.time()
+        }
+    elseif senderType == "npc" and receiverType == "npc" then
+        activeConversations.npcToNPC[senderId] = {
+            partner = receiver,
+            lastMessage = os.time()
+        }
+        activeConversations.npcToNPC[receiverId] = {
+            partner = sender,
+            lastMessage = os.time()
+        }
+    end
+end
+
+function ConversationManager:routeMessage(message, sender, intendedReceiver)
+    -- Allow system messages to pass through
+    if self:isSystemMessage(message) then
+        return intendedReceiver
+    end
+    
+    -- Get current conversation partner if any
+    local currentPartner = self:getCurrentPartner(sender)
+    if currentPartner then
+        return currentPartner
+    end
+    
+    -- If no active conversation, try to start one
+    if self:canStartConversation(sender, intendedReceiver) then
+        self:lockConversation(sender, intendedReceiver)
+        return intendedReceiver
+    end
+    
+    return nil
+end
+
+-- Helper functions
+function ConversationManager:getParticipantId(participant)
+    if typeof(participant) == "Instance" and participant:IsA("Player") then
+        return participant.UserId
+    else
+        return participant.npcId
+    end
+end
+
+function ConversationManager:getParticipantType(participant)
+    if typeof(participant) == "Instance" and participant:IsA("Player") then
+        return "player"
+    else
+        return "npc"
+    end
+end
+
+return ConversationManager 
 ```
 
 ### shared/NPCSystem/V4ChatClient.lua
