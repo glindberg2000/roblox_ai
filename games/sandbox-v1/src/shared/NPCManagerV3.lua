@@ -332,7 +332,12 @@ function NPCManagerV3:setupClickDetector(npc)
 	end
 
 	clickDetector.MouseClick:Connect(function(player)
-		self:handleNPCInteraction(npc, player, "Hello")
+		-- Send system message about player clicking
+		local systemMessage = string.format(
+			"[SYSTEM] %s has clicked to interact with you. You can start a conversation.",
+			player.Name
+		)
+		self:handleNPCInteraction(npc, player, systemMessage)
 	end)
 end
 

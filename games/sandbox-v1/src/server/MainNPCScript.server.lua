@@ -129,7 +129,12 @@ local function checkPlayerProximity()
 						if hasInitiateAbility and interactionController:canInteract(player) then
 							Logger:log("DEBUG", string.format("Attempting to initiate chat: %s -> %s", 
 								npc.displayName, player.Name))
-							npcManagerV3:handleNPCInteraction(npc, player, "Hello")
+							-- Send system message about player entering range
+							local systemMessage = string.format(
+								"[SYSTEM] A player (%s) has entered your area. You can initiate a conversation if you'd like.",
+								player.Name
+							)
+							npcManagerV3:handleNPCInteraction(npc, player, systemMessage)
 							greetingCooldowns[cooldownKey] = os.time()
 						end
 					end
