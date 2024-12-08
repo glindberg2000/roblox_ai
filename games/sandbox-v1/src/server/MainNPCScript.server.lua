@@ -315,8 +315,65 @@ local function checkOngoingConversations()
     end
 end
 
+-- Add near the top with other functions
+local function getRandomPosition(origin, radius)
+    local angle = math.random() * math.pi * 2
+    local distance = math.random() * radius
+    return Vector3.new(
+        origin.X + math.cos(angle) * distance,
+        origin.Y,
+        origin.Z + math.sin(angle) * distance
+    )
+end
+
+local function moveNPC(npc, targetPosition)
+    if not npc.model or not npc.model.PrimaryPart or not npc.model:FindFirstChild("Humanoid") then return end
+    
+    local humanoid = npc.model:FindFirstChild("Humanoid")
+    humanoid:MoveTo(targetPosition)
+end
+
+local function updateNPCMovement()
+    while true do
+        for _, npc in pairs(npcManagerV3.npcs) do
+            -- Check if NPC can move and isn't busy
+            local canMove = false
+            for _, ability in ipairs(npc.abilities or {}) do
+                if ability == "move" then
+                    canMove = true
+                    break
+                end
+            end
+
+            if canMove and not npc.isInteracting and 
+               not activeConversations.npcToNPC[npc.id] and 
+               not activeConversations.npcToPlayer[npc.id] then
+                
+                -- Random chance to start moving
+                if math.random() < 0.3 then -- 30% chance each update
+                    local spawnPos = npc.spawnPosition or npc.model.PrimaryPart.Position
+                    local targetPos = getRandomPosition(spawnPos, 10) -- 10 stud radius
+                    
+                    Logger:log("MOVEMENT", string.format(
+                        "Moving %s to random position (%.1f, %.1f, %.1f)",
+                        npc.displayName,
+                        targetPos.X,
+                        targetPos.Y,
+                        targetPos.Z
+                    ))
+                    
+                    moveNPC(npc, targetPos)
+                end
+            end
+        end
+        wait(5) -- Check every 5 seconds
+    end
+end
+
+-- Add to the main update loop
 local function updateNPCs()
     Logger:log("SYSTEM", "Starting NPC update loop")
+    spawn(updateNPCMovement) -- Start movement system in parallel
     while true do
         checkPlayerProximity()
         checkNPCProximity()
