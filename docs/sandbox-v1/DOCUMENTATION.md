@@ -25,11 +25,13 @@
 │   ├── MockPlayer.lua
 │   ├── MockPlayerTest.server.lua
 │   ├── NPCConfigurations.lua
-│   ├── NPCInteractionTest.lua
 │   ├── NPCInteractionTest.server.lua
 │   ├── NPCSystemInitializer.server.lua
 │   └── PlayerJoinHandler.server.lua
 ├── shared
+│   ├── NPCSystem
+│   │   ├── NPCChatHandler.lua
+│   │   └── V4ChatClient.lua
 │   ├── AnimationManager.lua
 │   ├── AssetModule.lua
 │   ├── ChatUtils.lua
@@ -49,47 +51,45 @@
 ### test/NPCInteractionTest.lua
 
 ```lua
-local function createMockParticipant(npc)
-    return {
-        Name = npc.displayName,
-        displayName = npc.displayName,
-        UserId = npc.id,
-        npcId = npc.id,
-        Type = "npc"
-    }
-end
+function runNPCInteractionTests()
+    -- ... existing setup ...
 
-function NPCInteractionTest:testBasicInteraction()
+    -- Test 1: Basic NPC-to-NPC interaction
     print("Test 1: Initiating basic NPC-to-NPC interaction")
+    local mockParticipant = npcManager:createMockParticipant(npc1)
     
-    local npc1 = self.npcManager:getNPCByName("Goldie")
-    local npc2 = self.npcManager:getNPCByName("Pete")
+    -- Verify mock participant
+    assert(mockParticipant.Type == "npc", "Mock participant should be of type 'npc'")
+    assert(mockParticipant.model == npc1.model, "Mock participant should have correct model reference")
+    assert(mockParticipant.npcId == npc1.id, "Mock participant should have correct NPC ID")
     
-    local mockParticipant = self.npcManager:createMockParticipant(npc2)
-    assert(mockParticipant, "Mock participant should have been created")
-    
-    -- Initialize chat service
-    local ChatService = game:GetService("Chat")
-    local success = pcall(function()
-        ChatService:SetBubbleChatSettings({
-            BubbleDuration = 10,
-            MaxDistance = 80
-        })
+    -- Start interaction
+    local success, err = pcall(function()
+        npcManager:handleNPCInteraction(npc2, mockParticipant, "Hello!")
+        wait(2) -- Wait for the interaction to process
+        
+        -- Verify states
+        assert(npc2.isInteracting, "NPC2 should be in interaction state")
+        assert(npc2.model.Humanoid.WalkSpeed == 0, "NPC2 should be locked in place")
+        
+        -- Check for response
+        assert(#npc2.chatHistory > 0, "NPC2 should have responded")
+        print("NPC2 response: " .. npc2.chatHistory[#npc2.chatHistory])
     end)
-    print("Chat service initialized:", success)
     
-    -- Test interaction
-    print("Starting interaction between", npc1.displayName, "and", npc2.displayName)
-    local response = self.npcManager:handleNPCInteraction(npc1, mockParticipant, "Hello!")
+    if not success then
+        error("Interaction test failed: " .. tostring(err))
+    end
     
-    -- Verify response
-    assert(response, "Should have received a response")
-    print("Got response:", response.message)
-    
-    -- Wait for chat bubble
+    -- Clean up
+    npcManager:endInteraction(npc2, mockParticipant)
     wait(1)
     
-    return true
+    -- Verify cleanup
+    assert(not npc2.isInteracting, "NPC2 should not be in interaction state")
+    assert(npc2.model.Humanoid.WalkSpeed > 0, "NPC2 should be unlocked")
+
+    print("All NPC-to-NPC interaction tests passed!")
 end 
 ```
 
@@ -261,6 +261,14 @@ Logger:log("SYSTEM", "Starting NPC initialization")
 local npcManagerV3 = NPCManagerV3.new()
 Logger:log("SYSTEM", "NPC Manager created")
 
+-- Debug NPC abilities
+for npcId, npcData in pairs(npcManagerV3.npcs) do
+	Logger:log("DEBUG", string.format("NPC %s abilities: %s", 
+		npcData.displayName,
+		table.concat(npcData.abilities or {}, ", ")
+	))
+end
+
 for npcId, npcData in pairs(npcManagerV3.npcs) do
 	Logger:log("STATE", string.format("NPC spawned: %s", npcData.displayName))
 end
@@ -269,42 +277,62 @@ local interactionController = npcManagerV3.interactionController
 
 Logger:log("SYSTEM", "NPC system V3 initialized")
 
+-- Add cooldown tracking
+local greetingCooldowns = {}
+local GREETING_COOLDOWN = 30 -- seconds between greetings
+
 local function checkPlayerProximity()
 	for _, player in ipairs(Players:GetPlayers()) do
 		local playerPosition = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 		if playerPosition then
 			for _, npc in pairs(npcManagerV3.npcs) do
-				Logger:log("DEBUG", string.format("Checking NPC %s (ID: %s)", npc.displayName, npc.id))
 				if npc.model and npc.model.PrimaryPart then
 					local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
-					if distance <= npc.responseRadius and not npc.isInteracting then
-						print(string.format("[DEBUG] Checking NPC %s - Distance: %.2f, Abilities: %s", 
-							npc.displayName,
-							distance,
-							table.concat(npc.abilities or {}, ", ")
-						))
+					-- Only greet if player just entered range
+					local wasInRange = npc.playersInRange and npc.playersInRange[player.UserId]
+					local isInRange = distance <= npc.responseRadius
+					
+					-- Track players in range
+					npc.playersInRange = npc.playersInRange or {}
+					npc.playersInRange[player.UserId] = isInRange
+					
+					-- Only initiate if player just entered range and NPC isn't busy
+					if isInRange and not wasInRange and not npc.isInteracting then
+						-- Check cooldown first
+						local cooldownKey = npc.id .. "_" .. player.UserId
+						local lastGreeting = greetingCooldowns[cooldownKey]
+						if lastGreeting then
+							local timeSinceLastGreeting = os.time() - lastGreeting
+							if timeSinceLastGreeting < GREETING_COOLDOWN then
+								Logger:log("DEBUG", string.format(
+									"Skipping greeting - on cooldown for %d more seconds",
+									GREETING_COOLDOWN - timeSinceLastGreeting
+								))
+								continue
+							end
+						end
+
 						-- Check if NPC has initiate_chat ability
 						local hasInitiateAbility = false
 						if npc.abilities then
-							Logger:log("DEBUG", string.format("Checking abilities for %s: %s", 
-								npc.displayName,
-								table.concat(npc.abilities, ", ")
-							))
 							for _, ability in ipairs(npc.abilities) do
 								if ability == "initiate_chat" then
 									hasInitiateAbility = true
-									Logger:log("DEBUG", string.format("%s has initiate_chat ability", npc.displayName))
 									break
 								end
 							end
 						end
-						
+
 						if hasInitiateAbility and interactionController:canInteract(player) then
-							Logger:log("INTERACTION", string.format(
-								"Auto-interaction triggered for %s with %s (has initiate_chat ability)", 
-								npc.displayName, player.Name
-							))
-							npcManagerV3:handleNPCInteraction(npc, player, "Hello")
+							Logger:log("DEBUG", string.format("Attempting to initiate chat: %s -> %s", 
+								npc.displayName, player.Name))
+							-- Send system message about player entering range
+							local systemMessage = string.format(
+								"[SYSTEM] A player (%s) has entered your area. You can initiate a conversation if you'd like.",
+								player.Name
+							)
+							npcManagerV3:handleNPCInteraction(npc, player, systemMessage)
+							greetingCooldowns[cooldownKey] = os.time()
 						end
 					end
 				end
@@ -327,16 +355,35 @@ local function onPlayerChatted(player, message)
 	for _, npc in pairs(npcManagerV3.npcs) do
 		if npc.model and npc.model.PrimaryPart then
 			local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
-			if distance <= npc.responseRadius and distance < closestDistance then
+			if distance <= npc.responseRadius and distance < closestDistance and not npc.isInteracting then
 				closestNPC, closestDistance = npc, distance
 			end
 		end
 	end
 
 	if closestNPC then
+		local cooldownKey = closestNPC.id .. "_" .. player.UserId
+		local lastGreeting = greetingCooldowns[cooldownKey]
+		local isGreeting = message:lower():match("^h[ae][yl]l?o+!?$") or message:lower() == "hi"
+		
+		if isGreeting and lastGreeting then
+			local timeSinceLastGreeting = os.time() - lastGreeting
+			if timeSinceLastGreeting < GREETING_COOLDOWN then
+				Logger:log("DEBUG", string.format(
+					"Skipping player greeting - on cooldown for %d more seconds",
+					GREETING_COOLDOWN - timeSinceLastGreeting
+				))
+				return
+			end
+		end
+
 		Logger:log("INTERACTION", string.format("Routing chat from %s to NPC %s", 
 			player.Name, closestNPC.displayName))
 		npcManagerV3:handleNPCInteraction(closestNPC, player, message)
+		
+		if isGreeting then
+			greetingCooldowns[cooldownKey] = os.time()
+		end
 	end
 end
 
@@ -356,9 +403,6 @@ local function updateNPCs()
 	Logger:log("SYSTEM", "Starting NPC update loop")
 	while true do
 		checkPlayerProximity()
-		for _, npc in pairs(npcManagerV3.npcs) do
-			npcManagerV3:updateNPCState(npc)
-		end
 		wait(1)
 	end
 end
@@ -390,7 +434,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local Logger = require(ServerScriptService:WaitForChild("Logger"))
-local NPCManagerV3 = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("NPCManagerV3"))
+local NPCManagerV3 = require(ReplicatedStorage:WaitForChild("NPCManagerV3"))
 
 -- Initialize storage structure first
 local function ensureStorage()
@@ -443,60 +487,10 @@ end
 
 Logger:log("SYSTEM", "NPC System initialized. Using V3 system.")
 
--- Create and store NPCManager instance (it will return the same instance if already created)
-local manager = NPCManagerV3.getInstance()
-manager:initialize() -- Explicitly initialize when ready
-_G.NPCManager = manager
+-- Create and store NPCManager instance
+local npcManager = NPCManagerV3.getInstance()
+_G.NPCManager = npcManager
 
--- Log NPC count after initialization
-task.wait(1) -- Give time for NPCs to spawn
-Logger:log("SYSTEM", string.format("NPC System ready with %d NPCs", manager:getNPCCount()))
-
-```
-
-### server/NPCInteractionTest.lua
-
-```lua
-function runNPCInteractionTests()
-    -- ... existing setup ...
-
-    -- Test 1: Basic NPC-to-NPC interaction
-    print("Test 1: Initiating basic NPC-to-NPC interaction")
-    local mockParticipant = npcManager:createMockParticipant(npc1)
-    
-    -- Verify mock participant
-    assert(mockParticipant.Type == "npc", "Mock participant should be of type 'npc'")
-    assert(mockParticipant.model == npc1.model, "Mock participant should have correct model reference")
-    assert(mockParticipant.npcId == npc1.id, "Mock participant should have correct NPC ID")
-    
-    -- Start interaction
-    local success, err = pcall(function()
-        npcManager:handleNPCInteraction(npc2, mockParticipant, "Hello!")
-        wait(2) -- Wait for the interaction to process
-        
-        -- Verify states
-        assert(npc2.isInteracting, "NPC2 should be in interaction state")
-        assert(npc2.model.Humanoid.WalkSpeed == 0, "NPC2 should be locked in place")
-        
-        -- Check for response
-        assert(#npc2.chatHistory > 0, "NPC2 should have responded")
-        print("NPC2 response: " .. npc2.chatHistory[#npc2.chatHistory])
-    end)
-    
-    if not success then
-        error("Interaction test failed: " .. tostring(err))
-    end
-    
-    -- Clean up
-    npcManager:endInteraction(npc2, mockParticipant)
-    wait(1)
-    
-    -- Verify cleanup
-    assert(not npc2.isInteracting, "NPC2 should not be in interaction state")
-    assert(npc2.model.Humanoid.WalkSpeed > 0, "NPC2 should be unlocked")
-
-    print("All NPC-to-NPC interaction tests passed!")
-end 
 ```
 
 ### server/MainNPCScript.lua
@@ -1611,6 +1605,14 @@ end
 function NPCManagerV3:createNPC(npcData)
     Logger:log("NPC", string.format("Creating NPC: %s", npcData.displayName))
     
+    -- Debug log NPC data
+    Logger:log("DEBUG", string.format("Creating NPC with data: %s", 
+        HttpService:JSONEncode({
+            displayName = npcData.displayName,
+            abilities = npcData.abilities
+        })
+    ))
+
     if not workspace:FindFirstChild("NPCs") then
         Instance.new("Folder", workspace).Name = "NPCs"
         Logger:log("SYSTEM", "Created NPCs folder in workspace")
@@ -1649,6 +1651,8 @@ function NPCManagerV3:createNPC(npcData)
         displayName = npcData.displayName,
         responseRadius = npcData.responseRadius,
         system_prompt = npcData.system_prompt,
+        abilities = npcData.abilities or {},
+        playersInRange = {},
         lastResponseTime = 0,
         isMoving = false,
         isInteracting = false,
@@ -1728,7 +1732,12 @@ function NPCManagerV3:setupClickDetector(npc)
 	end
 
 	clickDetector.MouseClick:Connect(function(player)
-		self:handleNPCInteraction(npc, player, "Hello")
+		-- Send system message about player clicking
+		local systemMessage = string.format(
+			"[SYSTEM] %s has clicked to interact with you. You can start a conversation.",
+			player.Name
+		)
+		self:handleNPCInteraction(npc, player, systemMessage)
 	end)
 end
 
@@ -2668,6 +2677,111 @@ end
 return AnimationManager
 ```
 
+### shared/NPCSystem/V4ChatClient.lua
+
+```lua
+local V4ChatClient = {}
+
+-- Update SendMessage signature to include participant
+function V4ChatClient:SendMessage(npcId, message, participant, context)
+    Logger:log("DEBUG", "V4ChatClient:SendMessage called")
+    
+    -- Try Letta chat first
+    local response = self:handleLettaChat(npcId, message, participant, context)
+    if response then
+        return response
+    end
+    
+    -- If Letta fails, try fallback
+    return self:handleFallbackChat(npcId, message, participant, context)
+end
+
+-- Update handleLettaChat to handle NPC participants
+function V4ChatClient:handleLettaChat(npcId, message, participant, context)
+    Logger:log("DEBUG", "Attempting Letta chat first...")
+    
+    -- Log raw incoming data
+    Logger:log("DEBUG", string.format("Raw incoming data: %s", HttpService:JSONEncode({
+        message = message,
+        npc_id = npcId,
+        context = context
+    })))
+    
+    -- Determine participant type and ID
+    local participantType = "player"
+    local participantId = participant.UserId
+    local participantName = participant.Name
+    
+    if typeof(participant) ~= "Instance" or not participant:IsA("Player") then
+        participantType = "npc"
+        participantId = participant.id
+        participantName = participant.displayName
+    end
+    Logger:log("DEBUG", string.format("Determined participant type: %s", participantType))
+    
+    -- Build request data
+    local requestData = {
+        message = message,
+        npc_id = npcId,
+        participant_type = participantType,
+        participant_id = participantId,
+        context = {
+            participant_name = participantName,
+            interaction_history = context.interaction_history or {},
+            participant_type = participantType,
+            is_new_conversation = context.is_new_conversation or false,
+            npc_location = context.npc_location or "Unknown",
+            nearby_players = context.nearby_players or {}
+        }
+    }
+end 
+```
+
+### shared/NPCSystem/NPCChatHandler.lua
+
+```lua
+local function HandleChat(npcId, message, participant, context)
+    Logger:log("DEBUG", string.format("NPCChatHandler: Received request %s", 
+        HttpService:JSONEncode({
+            message = message,
+            npc_id = npcId,
+            context = context
+        })
+    ))
+
+    -- Try V4 first
+    Logger:log("DEBUG", "NPCChatHandler: Attempting V4")
+    local success, response = pcall(function()
+        return V4ChatClient:SendMessage(npcId, message, participant, context)
+    end)
+
+    if success and response then
+        Logger:log("DEBUG", string.format("NPCChatHandler: V4 succeeded %s", 
+            HttpService:JSONEncode(response)
+        ))
+        return response
+    end
+
+    -- If V4 fails, try V3
+    Logger:log("DEBUG", "NPCChatHandler: V4 failed, attempting V3")
+    success, response = pcall(function()
+        return V3ChatClient:SendMessage(npcId, message, participant, context)
+    end)
+
+    if success and response then
+        Logger:log("DEBUG", "NPCChatHandler: V3 succeeded")
+        return response
+    end
+
+    -- If both fail, return error
+    Logger:log("ERROR", "NPCChatHandler: All chat attempts failed")
+    return {
+        message = "Sorry, I'm having trouble understanding right now.",
+        action = { type = "none" }
+    }
+end 
+```
+
 ### data/AssetDatabase.lua
 
 ```lua
@@ -2742,6 +2856,7 @@ return {
             "trade", 
             "quest", 
             "combat", 
+            "initiate_chat",
         }, 
             shortTermMemory = {}, 
         },        {

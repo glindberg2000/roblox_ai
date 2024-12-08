@@ -45,6 +45,7 @@ return {
             "trade", 
             "quest", 
             "combat", 
+            "initiate_chat",
         }, 
             shortTermMemory = {}, 
         },        {

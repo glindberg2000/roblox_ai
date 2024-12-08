@@ -763,6 +763,27 @@ function NPCManagerV3:stopFollowing(npc)
 end
 
 function NPCManagerV3:handleNPCInteraction(npc, participant, message)
+    -- Determine participant type
+    local participantType = typeof(participant) == "Instance" and participant:IsA("Player") and "player" or "npc"
+    local participantId = participantType == "player" and participant.UserId or participant.npcId
+    local participantName = participant.Name or participant.displayName
+
+    -- Clean up any existing interactions
+    if npc.isInteracting then
+        self:endInteraction(npc)
+    end
+    if participantType == "npc" and participant.isInteracting then
+        self:endInteraction(participant)
+    end
+
+    Logger:log("DEBUG", string.format(
+        "Starting interaction - NPC: %s, Participant: %s (%s), Message: %s",
+        npc.displayName,
+        participantName,
+        participantType,
+        message
+    ))
+
     -- Generate unique interaction ID
     local interactionId = HttpService:GenerateGUID()
     
@@ -898,6 +919,8 @@ function NPCManagerV3:createMockParticipant(npc)
         UserId = npc.id,
         npcId = npc.id,
         Type = "npc",
+        GetParticipantType = function() return "npc" end,
+        GetParticipantId = function() return npc.id end,
         model = npc.model
     }
 end
