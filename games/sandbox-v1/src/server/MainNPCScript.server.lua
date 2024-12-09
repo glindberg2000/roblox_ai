@@ -58,33 +58,117 @@ end
 -- Call ensureStorage first
 ensureStorage()
 
--- Define animation functions first
+-- Add near the top with other constants
+local ANIMATIONS = {
+    -- Basic locomotion
+    WALK = "rbxassetid://180426354",
+    IDLE = "rbxassetid://180435571",
+    RUN = "rbxassetid://180426354",
+    JUMP = "rbxassetid://125750702",
+    
+    -- Emotes
+    WAVE = "rbxassetid://507770239",
+    DANCE = "rbxassetid://507771019",
+    LAUGH = "rbxassetid://507770818",
+    POINT = "rbxassetid://507770453",
+}
+
+-- Modify loadAnimations to support more animations
 local function loadAnimations(npc)
     if not npc.model or not npc.model:FindFirstChild("Humanoid") then 
         Logger:log("ERROR", string.format("Cannot load animations for %s - missing model or humanoid", npc.displayName))
         return 
     end
     
-    Logger:log("DEBUG", string.format("Loading animations for %s", npc.displayName))
-    
     local humanoid = npc.model:FindFirstChild("Humanoid")
     local animator = humanoid:FindFirstChild("Animator") or Instance.new("Animator", humanoid)
     
-    local animations = {
-        walk = Instance.new("Animation"),
-        idle = Instance.new("Animation"),
-    }
+    -- Create animation objects
+    npc.animTracks = {}
     
-    -- Use R6 animations
-    animations.walk.AnimationId = "rbxassetid://180426354"  -- R6 walk
-    animations.idle.AnimationId = "rbxassetid://180435571"  -- R6 idle
+    -- Load all animations
+    for name, id in pairs(ANIMATIONS) do
+        local anim = Instance.new("Animation")
+        anim.AnimationId = id
+        
+        local success, track = pcall(function()
+            return animator:LoadAnimation(anim)
+        end)
+        
+        if success then
+            npc.animTracks[name:lower()] = track
+            Logger:log("DEBUG", string.format("Loaded animation '%s' for %s", name, npc.displayName))
+        else
+            Logger:log("ERROR", string.format("Failed to load animation '%s' for %s", name, npc.displayName))
+        end
+    end
     
-    npc.animTracks = {
-        walk = animator:LoadAnimation(animations.walk),
-        idle = animator:LoadAnimation(animations.idle),
-    }
+    -- Start with idle
+    if npc.animTracks.idle then
+        npc.animTracks.idle:Play()
+    end
+end
+
+-- Add animation control function
+local function playAnimation(npc, animName, options)
+    options = options or {}
     
-    Logger:log("ANIMATION", string.format("Successfully loaded animations for NPC: %s", npc.displayName))
+    if not npc.animTracks then return end
+    
+    -- Convert to lowercase for consistency
+    animName = animName:lower()
+    
+    -- Get the requested animation track
+    local track = npc.animTracks[animName]
+    if not track then
+        Logger:log("ERROR", string.format("Animation '%s' not found for %s", animName, npc.displayName))
+        return
+    end
+    
+    -- Stop other animations unless specified not to
+    if not options.keepOthers then
+        for name, otherTrack in pairs(npc.animTracks) do
+            if name ~= animName then
+                otherTrack:Stop()
+            end
+        end
+    end
+    
+    -- Play the animation
+    if not track.IsPlaying then
+        track:Play()
+        
+        -- Handle one-shot animations
+        if options.oneShot then
+            track.Stopped:Wait()
+            -- Return to idle
+            if npc.animTracks.idle then
+                npc.animTracks.idle:Play()
+            end
+        end
+    end
+end
+
+-- Add function to handle animation actions from LLM
+local function handleAnimationAction(npc, action)
+    if not action or not action.type then return end
+    
+    if action.type == "animate" then
+        local animName = action.animation
+        local options = {
+            oneShot = action.oneShot,
+            keepOthers = action.keepOthers
+        }
+        
+        -- Handle the animation in a new thread if it's one-shot
+        if options.oneShot then
+            spawn(function()
+                playAnimation(npc, animName, options)
+            end)
+        else
+            playAnimation(npc, animName, options)
+        end
+    end
 end
 
 -- Then initialize NPC system
@@ -462,3 +546,16 @@ EndInteractionEvent.OnServerEvent:Connect(function(player)
 end)
 
 Logger:log("SYSTEM", "NPC system V3 main script running")
+
+-- In your interaction handler
+local function handleNPCResponse(npc, response)
+    -- Handle chat message
+    if response.message then
+        -- Existing chat handling...
+    end
+    
+    -- Handle action if present
+    if response.action then
+        handleAnimationAction(npc, response.action)
+    end
+end
