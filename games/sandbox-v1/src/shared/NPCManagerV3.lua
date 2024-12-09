@@ -1022,4 +1022,25 @@ local function checkOngoingConversations()
     end
 end
 
+function NPCManagerV3:moveNPCToPosition(npc, targetPosition)
+    if not npc or not npc.model then return end
+    
+    local humanoid = npc.model:FindFirstChild("Humanoid")
+    if not humanoid then return end
+    
+    -- Get current position
+    local currentPosition = npc.model:GetPrimaryPartCFrame().Position
+    local distance = (targetPosition - currentPosition).Magnitude
+    
+    -- Set appropriate walk speed
+    if distance > 20 then
+        humanoid.WalkSpeed = 16  -- Run speed
+    else
+        humanoid.WalkSpeed = 8   -- Walk speed
+    end
+    
+    -- Move to position
+    humanoid:MoveTo(targetPosition)
+end
+
 return NPCManagerV3

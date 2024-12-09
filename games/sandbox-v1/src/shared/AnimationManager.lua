@@ -1,70 +1,163 @@
 local AnimationManager = {}
-local ServerScriptService = game:GetService("ServerScriptService")
-local Logger = require(ServerScriptService:WaitForChild("Logger"))
+local Logger = require(game:GetService("ServerScriptService"):WaitForChild("Logger"))
 
+-- Different animation IDs for R6 and R15
 local animations = {
-    walk = "rbxassetid://180426354", -- Replace with your walk animation asset ID
-    jump = "rbxassetid://125750702", -- Replace with your jump animation asset ID
-    idle = "rbxassetid://507766388", -- Replace with your idle animation asset ID
+    R6 = {
+        idle = "rbxassetid://180435571",    -- R6 idle
+        walk = "rbxassetid://180426354",    -- R6 walk
+        run = "rbxassetid://180426354"      -- R6 run (same as walk but faster)
+    },
+    R15 = {
+        idle = "rbxassetid://507766666",    -- R15 idle
+        walk = "rbxassetid://507777826",    -- R15 walk
+        run = "rbxassetid://507767714"      -- R15 run
+    }
 }
 
--- Table to store animations per humanoid
-local animationTracks = {}
+-- Table to store current animations per humanoid
+local currentAnimations = {}
 
--- Apply animations to NPC's humanoid
+-- Add this helper function at the top
+local function isMoving(humanoid)
+    -- Check if the humanoid is actually moving by looking at velocity
+    local rootPart = humanoid.Parent and humanoid.Parent:FindFirstChild("HumanoidRootPart")
+    if rootPart then
+        -- Use velocity magnitude to determine if actually moving
+        return rootPart.Velocity.Magnitude > 0.1
+    end
+    return false
+end
+
+function AnimationManager:getRigType(humanoid)
+    if not humanoid then return nil end
+    
+    local character = humanoid.Parent
+    if character then
+        if character:FindFirstChild("UpperTorso") then
+            return "R15"
+        else
+            return "R6"
+        end
+    end
+    return nil
+end
+
 function AnimationManager:applyAnimations(humanoid)
     if not humanoid then
         Logger:log("ERROR", "Cannot apply animations: Humanoid is nil")
         return
     end
-
-    local animator = humanoid:FindFirstChild("Animator") or Instance.new("Animator", humanoid)
-
-    -- Initialize animationTracks for this humanoid
-    animationTracks[humanoid] = {}
-
-    -- Preload animations
-    for name, id in pairs(animations) do
+    
+    local rigType = self:getRigType(humanoid)
+    if not rigType then
+        Logger:log("ERROR", string.format("Cannot determine rig type for humanoid: %s", 
+            humanoid.Parent and humanoid.Parent.Name or "unknown"))
+        return
+    end
+    
+    Logger:log("ANIMATION", string.format("Detected %s rig for %s", 
+        rigType, humanoid.Parent.Name))
+    
+    -- Get or create animator
+    local animator = humanoid:FindFirstChild("Animator")
+    if not animator then
+        animator = Instance.new("Animator")
+        animator.Parent = humanoid
+    end
+    
+    -- Initialize animations table for this humanoid
+    if not currentAnimations[humanoid] then
+        currentAnimations[humanoid] = {
+            rigType = rigType,
+            tracks = {}
+        }
+    end
+    
+    -- Preload all animations for this rig type
+    for name, id in pairs(animations[rigType]) do
         local animation = Instance.new("Animation")
         animation.AnimationId = id
-
-        local animationTrack = animator:LoadAnimation(animation)
-        animationTracks[humanoid][name] = animationTrack
-        Logger:log("ANIMATION", string.format("Loaded animation '%s' for humanoid: %s", 
-            name, 
-            humanoid.Parent.Name
-        ))
+        local track = animator:LoadAnimation(animation)
+        currentAnimations[humanoid].tracks[name] = track
+        Logger:log("ANIMATION", string.format("Loaded %s animation for %s (%s)", 
+            name, humanoid.Parent.Name, rigType))
     end
-
-    Logger:log("ANIMATION", string.format("Animations applied to humanoid: %s", humanoid.Parent.Name))
-end
-
--- Play a specific animation
-function AnimationManager:playAnimation(humanoid, animationName)
-    if animationTracks[humanoid] and animationTracks[humanoid][animationName] then
-        Logger:log("ANIMATION", string.format("Playing animation '%s' for humanoid: %s", 
-            animationName, 
-            humanoid.Parent.Name
-        ))
-        animationTracks[humanoid][animationName]:Play()
-    else
-        Logger:log("ERROR", string.format("No animation track found: %s for humanoid: %s", 
-            animationName, 
-            humanoid and humanoid.Parent and humanoid.Parent.Name or "unknown"
-        ))
-    end
-end
-
--- Stop all animations
-function AnimationManager:stopAnimations(humanoid)
-    if animationTracks[humanoid] then
-        for name, track in pairs(animationTracks[humanoid]) do
-            track:Stop()
-            Logger:log("ANIMATION", string.format("Stopped animation '%s' for humanoid: %s", 
-                name, 
-                humanoid.Parent.Name
-            ))
+    
+    -- Connect to state changes for animation updates
+    humanoid.StateChanged:Connect(function(_, new_state)
+        if (new_state == Enum.HumanoidStateType.Running or 
+            new_state == Enum.HumanoidStateType.Walking) and 
+            isMoving(humanoid) then
+            -- Only play walk/run if actually moving
+            local speed = humanoid.WalkSpeed
+            self:playAnimation(humanoid, speed > 8 and "run" or "walk")
+        else
+            -- Play idle for any other state or when not moving
+            self:playAnimation(humanoid, "idle")
         end
+    end)
+    
+    -- Also connect to physics updates to catch movement changes
+    local rootPart = humanoid.Parent and humanoid.Parent:FindFirstChild("HumanoidRootPart")
+    if rootPart then
+        game:GetService("RunService").Heartbeat:Connect(function()
+            if humanoid.Parent and not humanoid.Parent.Parent then return end -- Check if destroyed
+            
+            if isMoving(humanoid) then
+                local speed = humanoid.WalkSpeed
+                self:playAnimation(humanoid, speed > 8 and "run" or "walk")
+            else
+                self:playAnimation(humanoid, "idle")
+            end
+        end)
+    end
+    
+    -- Start with idle animation
+    self:playAnimation(humanoid, "idle")
+end
+
+function AnimationManager:playAnimation(humanoid, animationName)
+    if not humanoid or not currentAnimations[humanoid] then return end
+    
+    local animData = currentAnimations[humanoid]
+    local track = animData.tracks and animData.tracks[animationName]
+    
+    if not track then
+        Logger:log("ERROR", string.format("No %s animation track found for %s", 
+            animationName, humanoid.Parent.Name))
+        return
+    end
+    
+    -- Stop other animations
+    for name, otherTrack in pairs(animData.tracks) do
+        if name ~= animationName and otherTrack.IsPlaying then
+            otherTrack:Stop()
+        end
+    end
+    
+    -- Play the requested animation if it's not already playing
+    if not track.IsPlaying then
+        -- Adjust speed for running
+        if animationName == "walk" and humanoid.WalkSpeed > 8 then
+            track:AdjustSpeed(1.5)  -- Speed up walk animation for running
+        else
+            track:AdjustSpeed(1.0)  -- Normal speed for other animations
+        end
+        
+        track:Play()
+        Logger:log("ANIMATION", string.format("Playing %s animation for %s", 
+            animationName, humanoid.Parent.Name))
+    end
+end
+
+function AnimationManager:stopAnimations(humanoid)
+    if currentAnimations[humanoid] and currentAnimations[humanoid].tracks then
+        for _, track in pairs(currentAnimations[humanoid].tracks) do
+            track:Stop()
+        end
+        Logger:log("ANIMATION", string.format("Stopped all animations for %s", 
+            humanoid.Parent.Name))
     end
 end
 
