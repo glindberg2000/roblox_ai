@@ -58,11 +58,56 @@ end
 -- Call ensureStorage first
 ensureStorage()
 
+-- Define animation functions first
+local function loadAnimations(npc)
+    if not npc.model or not npc.model:FindFirstChild("Humanoid") then 
+        Logger:log("ERROR", string.format("Cannot load animations for %s - missing model or humanoid", npc.displayName))
+        return 
+    end
+    
+    Logger:log("DEBUG", string.format("Loading animations for %s", npc.displayName))
+    
+    local humanoid = npc.model:FindFirstChild("Humanoid")
+    local animator = humanoid:FindFirstChild("Animator") or Instance.new("Animator", humanoid)
+    
+    local animations = {
+        walk = Instance.new("Animation"),
+        idle = Instance.new("Animation"),
+    }
+    
+    -- Use R6 animations
+    animations.walk.AnimationId = "rbxassetid://180426354"  -- R6 walk
+    animations.idle.AnimationId = "rbxassetid://180435571"  -- R6 idle
+    
+    npc.animTracks = {
+        walk = animator:LoadAnimation(animations.walk),
+        idle = animator:LoadAnimation(animations.idle),
+    }
+    
+    Logger:log("ANIMATION", string.format("Successfully loaded animations for NPC: %s", npc.displayName))
+end
+
 -- Then initialize NPC system
 local NPCManagerV3 = require(ReplicatedStorage:WaitForChild("NPCManagerV3"))
 Logger:log("SYSTEM", "Starting NPC initialization")
 local npcManagerV3 = NPCManagerV3.new()
-Logger:log("SYSTEM", "NPC Manager created")
+
+-- Load animations after NPCs are created
+for _, npc in pairs(npcManagerV3.npcs) do
+    if npc.model then
+        -- Log model state
+        Logger:log("DEBUG", string.format("[MODEL] %s model state: %s", 
+            npc.displayName,
+            npc.model.Parent and "Loaded" or "Not in workspace"
+        ))
+        
+        -- Wait a short time for model to fully load
+        wait(0.1)
+        loadAnimations(npc)
+    else
+        Logger:log("ERROR", string.format("[MODEL] %s has no model", npc.displayName))
+    end
+end
 
 -- Debug NPC abilities
 for npcId, npcData in pairs(npcManagerV3.npcs) do
@@ -330,7 +375,25 @@ local function moveNPC(npc, targetPosition)
     if not npc.model or not npc.model.PrimaryPart or not npc.model:FindFirstChild("Humanoid") then return end
     
     local humanoid = npc.model:FindFirstChild("Humanoid")
+    
+    -- Play walk animation
+    if npc.animTracks and npc.animTracks.walk then
+        npc.animTracks.walk:Play()
+    end
+    
     humanoid:MoveTo(targetPosition)
+    
+    -- Switch to idle when done moving
+    humanoid.MoveToFinished:Wait()
+    
+    if npc.animTracks then
+        if npc.animTracks.walk then
+            npc.animTracks.walk:Stop()
+        end
+        if npc.animTracks.idle then
+            npc.animTracks.idle:Play()
+        end
+    end
 end
 
 local function updateNPCMovement()
