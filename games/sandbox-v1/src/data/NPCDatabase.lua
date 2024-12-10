@@ -9,7 +9,7 @@ return {
             modelName = "Diamond", 
             system_prompt = "I'm sharp as a tack both verbally and emotionally.", 
             responseRadius = 4, 
-            spawnPosition = Vector3.new(8.0, 18.0, -12.0), 
+            spawnPosition = Vector3.new(-15.0, 20.0, -20.0), 
             abilities = {
                 "move", 
                 "chat", 
@@ -24,7 +24,7 @@ return {
             modelName = "Goldie", 
             system_prompt = "I'm golden and love luxury and wealth, glamour and glitz.", 
             responseRadius = 4, 
-            spawnPosition = Vector3.new(10.0, 18.0, -12.0), 
+            spawnPosition = Vector3.new(-9, 20.0, -127.0),
             abilities = {
                 "move", 
                 "chat", 
@@ -39,7 +39,7 @@ return {
             modelName = "Noobster", 
             system_prompt = "I'm clueless but also can learn fast. I keep on moving in random ways.", 
             responseRadius = 4, 
-            spawnPosition = Vector3.new(6.0, 18.0, -12.0), 
+            spawnPosition = Vector3.new(48, 20.0, -86.0), 
             abilities = {
                 "move", 
                 "chat", 
@@ -58,7 +58,7 @@ return {
             modelName = "Oscar", 
             system_prompt = "I am Oscar, twin brother of Pete and I love chasing trouble.", 
             responseRadius = 4, 
-            spawnPosition = Vector3.new(0.0, 18.0, -6.0), 
+            spawnPosition = Vector3.new(-16, 20.0, -26.0), 
             abilities = {
                 "move", 
                 "chat", 
@@ -77,7 +77,7 @@ return {
             modelName = "Pete", 
             system_prompt = "I sell awesome merch and love to chat about it. My boss, Valterpoop—better known as KrushKen—expects me to keep an eye out for him and his dad, GreggytheEgg, just in case they drop by. Let me know if you're interested in our products or have any questions; I'm always happy to help!", 
             responseRadius = 4, 
-            spawnPosition = Vector3.new(12.0, 18.0, -12.0), 
+            spawnPosition = Vector3.new(-12.4, 20.0, -127.0), 
             abilities = {
                 "move", 
                 "chat"
@@ -92,7 +92,7 @@ return {
             modelName = "Pete", 
             system_prompt = "A young boy who is curious and always discovering new things.", 
             responseRadius = 4, 
-            spawnPosition = Vector3.new(10.0, 18.0, -12.0), 
+            spawnPosition = Vector3.new(-50.0, 20.0, -60.0), 
             abilities = {
                 "move", 
                 "chat"

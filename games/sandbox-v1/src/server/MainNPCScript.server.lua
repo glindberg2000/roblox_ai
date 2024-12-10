@@ -61,7 +61,7 @@ ensureStorage()
 -- Then initialize NPC system
 local NPCManagerV3 = require(ReplicatedStorage:WaitForChild("NPCManagerV3"))
 Logger:log("SYSTEM", "Starting NPC initialization")
-local npcManagerV3 = NPCManagerV3.new()
+local npcManagerV3 = NPCManagerV3.getInstance()
 Logger:log("SYSTEM", "NPC Manager created")
 
 -- Debug NPC abilities
@@ -92,61 +92,42 @@ local activeConversations = {
 }
 
 local function checkPlayerProximity()
-    for _, player in ipairs(Players:GetPlayers()) do
-        local playerPosition = player.Character and player.Character.PrimaryPart
-        if playerPosition then
-            for _, npc in pairs(npcManagerV3.npcs) do
-                if npc.model and npc.model.PrimaryPart then
-                    local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
-                    local isInRange = distance <= npc.responseRadius
+    -- Only check every 5 seconds instead of 2
+    wait(5)
+    
+    local players = Players:GetPlayers()
+    for _, npc in pairs(npcManagerV3.npcs) do
+        for _, player in ipairs(players) do
+            local distance = calculateDistance(player, npc)
+            if distance <= npc.responseRadius then
+                -- Only log when entering/leaving range
+                if not lastPlayerDistances[player.UserId .. npc.id] or 
+                   (lastPlayerDistances[player.UserId .. npc.id] > npc.responseRadius) then
+                    Logger:log("RANGE", string.format("Player %s entered range of %s", 
+                        player.Name, npc.displayName))
+                end
+            end
+            lastPlayerDistances[player.UserId .. npc.id] = distance
+        end
+    end
+end
 
-                    -- Log range check for debugging
-                    Logger:log("RANGE", string.format(
-                        "[PLAYER] Distance between %s and %s: %.2f studs (Radius: %d, InRange: %s)",
-                        player.Name,
-                        npc.displayName,
-                        distance,
-                        npc.responseRadius,
-                        tostring(isInRange)
-                    ))
-
-                    -- Only proceed if in range and NPC isn't busy
-                    if isInRange and not npc.isInteracting and not activeConversations.npcToPlayer[npc.id] then
-                        -- Check if NPC has initiate_chat ability
-                        local hasInitiateAbility = false
-                        for _, ability in ipairs(npc.abilities or {}) do
-                            if ability == "initiate_chat" then
-                                hasInitiateAbility = true
-                                break
-                            end
-                        end
-
-                        if hasInitiateAbility and interactionController:canInteract(player) then
-                            -- Check cooldown
-                            local cooldownKey = npc.id .. "_" .. player.UserId
-                            local lastGreeting = greetingCooldowns[cooldownKey]
-                            if lastGreeting then
-                                local timeSinceLastGreeting = os.time() - lastGreeting
-                                if timeSinceLastGreeting < GREETING_COOLDOWN then continue end
-                            end
-
-                            Logger:log("DEBUG", string.format("NPC initiating chat: %s -> %s", 
-                                npc.displayName, player.Name))
-
-                            -- Lock conversation
-                            activeConversations.npcToPlayer[npc.id] = player.UserId
-                            activeConversations.playerToNPC[player.UserId] = npc.id
-
-                            -- Send system message about player in range
-                            local systemMessage = string.format(
-                                "[SYSTEM] A player (%s) has entered your area. You can initiate a conversation if you'd like.",
-                                player.Name
-                            )
-                            npcManagerV3:handleNPCInteraction(npc, player, systemMessage)
-                            greetingCooldowns[cooldownKey] = os.time()
-                        end
+local function checkNPCProximity() 
+    wait(5) -- Check every 5 seconds
+    
+    for _, npc1 in pairs(npcManagerV3.npcs) do
+        for _, npc2 in pairs(npcManagerV3.npcs) do
+            if npc1.id ~= npc2.id then
+                local distance = calculateDistance(npc1, npc2)
+                -- Only log when entering/leaving range
+                if distance <= npc1.responseRadius then
+                    if not lastNPCDistances[npc1.id .. npc2.id] or
+                       (lastNPCDistances[npc1.id .. npc2.id] > npc1.responseRadius) then
+                        Logger:log("RANGE", string.format("NPC %s entered range of %s",
+                            npc1.displayName, npc2.displayName))
                     end
                 end
+                lastNPCDistances[npc1.id .. npc2.id] = distance
             end
         end
     end
@@ -223,67 +204,6 @@ local function setupChatConnections()
 end
 
 setupChatConnections()
-
-local function checkNPCProximity()
-    for _, npc1 in pairs(npcManagerV3.npcs) do
-        -- Skip if no initiate_chat
-        local hasInitiateAbility = false
-        for _, ability in ipairs(npc1.abilities or {}) do
-            if ability == "initiate_chat" then
-                hasInitiateAbility = true
-                break
-            end
-        end
-        if not hasInitiateAbility then continue end
-
-        -- Scan for other NPCs in range
-        for _, npc2 in pairs(npcManagerV3.npcs) do
-            if npc1 == npc2 or npc2.isInteracting then continue end
-            if not npc2.model or not npc2.model.PrimaryPart then continue end
-
-            local distance = (npc1.model.PrimaryPart.Position - npc2.model.PrimaryPart.Position).Magnitude
-            local isInRange = distance <= npc1.responseRadius
-            
-            Logger:log("RANGE", string.format(
-                "Distance between %s and %s: %.2f studs (Radius: %d, InRange: %s)",
-                npc1.displayName,
-                npc2.displayName,
-                distance,
-                npc1.responseRadius,
-                tostring(isInRange)
-            ))
-
-            -- Only proceed if in range and not already in conversation
-            if not isInRange then continue end
-            if activeConversations.npcToNPC[npc1.id] then continue end
-            if activeConversations.npcToNPC[npc2.id] then continue end
-
-            -- Check cooldown
-            local cooldownKey = npc1.id .. "_" .. npc2.id
-            local lastGreeting = greetingCooldowns[cooldownKey]
-            if lastGreeting then
-                local timeSinceLastGreeting = os.time() - lastGreeting
-                if timeSinceLastGreeting < GREETING_COOLDOWN then continue end
-            end
-
-            Logger:log("INTERACTION", string.format("%s sees %s and can initiate chat", 
-                npc1.displayName, npc2.displayName))
-            
-            -- Lock conversation
-            activeConversations.npcToNPC[npc1.id] = {partner = npc2}
-            activeConversations.npcToNPC[npc2.id] = {partner = npc1}
-            
-            -- Create mock participant and initiate
-            local mockParticipant = npcManagerV3:createMockParticipant(npc2)
-            local systemMessage = string.format(
-                "[SYSTEM] Another NPC (%s) has entered your area. You can initiate a conversation if you'd like.",
-                npc2.displayName
-            )
-            npcManagerV3:handleNPCInteraction(npc1, mockParticipant, systemMessage)
-            greetingCooldowns[cooldownKey] = os.time()
-        end
-    end
-end
 
 local function checkOngoingConversations()
     for npc1Id, conversationData in pairs(activeConversations.npcToNPC) do
@@ -378,7 +298,7 @@ local function updateNPCs()
         checkPlayerProximity()
         checkNPCProximity()
         checkOngoingConversations()
-        wait(1)
+        wait(2) -- Increase wait time from 1 to 2 seconds
     end
 end
 

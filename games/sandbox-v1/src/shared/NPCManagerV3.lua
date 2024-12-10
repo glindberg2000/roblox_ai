@@ -90,18 +90,21 @@ function NPCManagerV3.getInstance()
         instance.npcs = {}
         instance.responseCache = {}
         instance.interactionController = require(game.ServerScriptService.InteractionController).new()
-        instance.activeInteractions = {} -- Track ongoing interactions
-        instance.movementStates = {} -- Track movement states per NPC
-        instance.activeConversations = {}  -- Track active conversations
-        instance.lastInteractionTime = {}  -- Track timing
-        instance.conversationCooldowns = {} -- Track cooldowns between NPCs
+        instance.activeInteractions = {}
+        instance.movementStates = {}
+        instance.activeConversations = {}
+        instance.lastInteractionTime = {}
+        instance.conversationCooldowns = {}
         
-        -- Add thread manager initialization
-        instance:initializeThreadManager()
-        
-        -- Initialize immediately
-        Logger:log("SYSTEM", "Initializing NPCManagerV3")
-        instance:loadNPCDatabase()
+        -- Add initialization guard
+        if not instance.initialized then
+            instance:initializeThreadManager()
+            instance:loadNPCDatabase()
+            instance.initialized = true
+            Logger:log("SYSTEM", "NPCManagerV3 initialized for first time")
+        else
+            Logger:log("WARN", "Attempted to initialize NPCManagerV3 again - skipping")
+        end
     end
     return instance
 end
@@ -109,11 +112,11 @@ end
 -- Replace .new() with modified version
 function NPCManagerV3.new()
     local manager = NPCManagerV3.getInstance()
-    -- Ensure database is loaded
-    if not manager.databaseLoaded then
-        manager:loadNPCDatabase()
-        manager.databaseLoaded = true
-    end
+    -- Remove redundant database loading
+    -- if not manager.databaseLoaded then
+    --     manager:loadNPCDatabase()
+    --     manager.databaseLoaded = true
+    -- end
     return manager
 end
 
@@ -186,20 +189,92 @@ function NPCManagerV3:handlePlayerMessage(player, data)
 end
 
 function NPCManagerV3:loadNPCDatabase()
-    if self.databaseLoaded then
-        Logger:log("DATABASE", "Database already loaded, skipping...")
-        return
+    -- Clear existing NPCs first
+    for _, npc in pairs(self.npcs) do
+        if npc.model then
+            npc.model:Destroy()
+        end
+    end
+    self.npcs = {}
+    
+    local NPCDatabase = require(ReplicatedStorage:WaitForChild("NPCDatabaseV3"))
+    Logger:log("DATABASE", string.format("Loading NPCs from database: %d NPCs found", #NPCDatabase.npcs))
+    
+    -- Create NPCs folder if it doesn't exist
+    local npcsFolder = workspace:FindFirstChild("NPCs")
+    if not npcsFolder then
+        npcsFolder = Instance.new("Folder")
+        npcsFolder.Name = "NPCs"
+        npcsFolder.Parent = workspace
+        Logger:log("SYSTEM", "Created NPCs folder in workspace")
+    else
+        -- Clear existing NPCs from workspace
+        npcsFolder:ClearAllChildren()
     end
     
-    local npcDatabase = require(ReplicatedStorage:WaitForChild("NPCDatabaseV3"))
-    Logger:log("DATABASE", string.format("Loading NPCs from database: %d NPCs found", #npcDatabase.npcs))
-    
-    for _, npcData in ipairs(npcDatabase.npcs) do
-        self:createNPC(npcData)
+    -- Load each NPC
+    for _, npcData in ipairs(NPCDatabase.npcs) do
+        -- Check if NPC already exists
+        if not self.npcs[npcData.id] then
+            -- Convert spawn position to Vector3 if it's not already
+            if npcData.spawnPosition then
+                if typeof(npcData.spawnPosition) == "table" then
+                    npcData.spawnPosition = Vector3.new(
+                        npcData.spawnPosition.X or npcData.spawnPosition[1] or 0,
+                        npcData.spawnPosition.Y or npcData.spawnPosition[2] or 0,
+                        npcData.spawnPosition.Z or npcData.spawnPosition[3] or 0
+                    )
+                end
+            else
+                -- Default spawn position if none provided
+                npcData.spawnPosition = Vector3.new(0, 5, 0)
+            end
+
+            Logger:log("NPC", string.format("Creating NPC: %s", npcData.displayName))
+            
+            -- Debug log NPC data
+            Logger:log("DEBUG", string.format("Creating NPC with data: %s", 
+                game:GetService("HttpService"):JSONEncode(npcData)))
+            
+            local npc = {
+                id = npcData.id,
+                displayName = npcData.displayName,
+                model = nil,  -- Will be set when model is loaded
+                spawnPosition = npcData.spawnPosition,
+                abilities = npcData.abilities or {},
+                responseRadius = npcData.responseRadius or 4,
+                system_prompt = npcData.system_prompt,
+                shortTermMemory = npcData.shortTermMemory or {},
+                isInteracting = false
+            }
+            
+            -- Load NPC model
+            local success, model = pcall(function()
+                return self:loadNPCModel(npcData, npcsFolder)
+            end)
+            
+            if success and model then
+                npc.model = model
+                self.npcs[npcData.id] = npc
+                Logger:log("NPC", string.format("NPC added: %s (Total NPCs: %d)", 
+                    npcData.displayName, self:getNPCCount()))
+            else
+                Logger:log("ERROR", string.format("Failed to load model for NPC %s: %s", 
+                    npcData.displayName, tostring(model)))
+            end
+        else
+            Logger:log("WARN", string.format("NPC %s already exists, skipping", npcData.displayName))
+        end
     end
-    
-    self.databaseLoaded = true
-    Logger:log("DATABASE", "NPC Database loaded successfully")
+end
+
+-- Add helper function to count NPCs
+function NPCManagerV3:getNPCCount()
+    local count = 0
+    for _ in pairs(self.npcs) do
+        count = count + 1
+    end
+    return count
 end
 
 function NPCManagerV3:createNPC(npcData)
@@ -302,15 +377,6 @@ function NPCManagerV3:createNPC(npcData)
         self:initializeNPCChatSpeaker(npc)
     end
     return npc
-end
-
-function NPCManagerV3:getNPCCount()
-	local count = 0
-	for _ in pairs(self.npcs) do
-		count = count + 1
-	end
-	Logger:log("DEBUG", string.format("Current NPC count: %d", count))
-	return count
 end
 
 function NPCManagerV3:setupClickDetector(npc)
@@ -1041,6 +1107,47 @@ function NPCManagerV3:moveNPCToPosition(npc, targetPosition)
     
     -- Move to position
     humanoid:MoveTo(targetPosition)
+end
+
+-- Add this function to NPCManagerV3
+function NPCManagerV3:loadNPCModel(npcData, npcsFolder)
+    -- Get model from ServerStorage
+    local model = ServerStorage.Assets.npcs:FindFirstChild(npcData.model)
+    if not model then
+        Logger:log("ERROR", string.format("Model %s not found for NPC: %s", 
+            npcData.model, npcData.displayName))
+        return nil
+    end
+
+    -- Clone the model
+    local npcModel = model:Clone()
+    npcModel.Name = npcData.displayName
+    npcModel.Parent = npcsFolder
+
+    -- Check for necessary parts
+    local humanoidRootPart = npcModel:FindFirstChild("HumanoidRootPart")
+    local humanoid = npcModel:FindFirstChildOfClass("Humanoid")
+    local head = npcModel:FindFirstChild("Head")
+
+    if not humanoidRootPart or not humanoid or not head then
+        Logger:log("ERROR", string.format("NPC model %s is missing essential parts", 
+            npcData.displayName))
+        npcModel:Destroy()
+        return nil
+    end
+
+    -- Set primary part
+    npcModel.PrimaryPart = humanoidRootPart
+
+    -- Apply animations
+    AnimationManager:applyAnimations(humanoid)
+
+    -- Position the NPC if spawn position is provided
+    if npcData.spawnPosition then
+        humanoidRootPart.CFrame = CFrame.new(npcData.spawnPosition)
+    end
+
+    return npcModel
 end
 
 return NPCManagerV3

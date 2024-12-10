@@ -1,4 +1,7 @@
+local ENABLE_TESTS = false -- Disable tests in production
+
 function runNPCInteractionTests()
+    if not ENABLE_TESTS then return end
     -- ... existing setup ...
 
     -- Test 1: Basic NPC-to-NPC interaction

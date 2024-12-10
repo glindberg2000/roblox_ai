@@ -2,29 +2,60 @@ local AnimationManager = {}
 local Logger = require(game:GetService("ServerScriptService"):WaitForChild("Logger"))
 
 -- Different animation IDs for R6 and R15
-local animations = {
+local customAnimations = {
     R6 = {
-        idle = "rbxassetid://180435571",    -- R6 idle
-        walk = "rbxassetid://180426354",    -- R6 walk
-        run = "rbxassetid://180426354"      -- R6 run (same as walk but faster)
+        idle = 132989623409836,  -- Custom idle
+        walk = 117532359621969,  -- Custom walk
+        run = 113904732335196    -- Custom run
     },
     R15 = {
-        idle = "rbxassetid://507766666",    -- R15 idle
-        walk = "rbxassetid://507777826",    -- R15 walk
-        run = "rbxassetid://507767714"      -- R15 run
+        idle = 132989623409836,  -- Custom idle
+        walk = 117532359621969,  -- Custom walk
+        run = 113904732335196    -- Custom run
+    }
+}
+
+-- Default fallback animations
+local defaultAnimations = {
+    R6 = {
+        idle = 180435571,    -- Default R6 idle
+        walk = 180426354,    -- Default R6 walk
+        run = 180426354     -- Default R6 run
+    },
+    R15 = {
+        idle = 2510197257,   -- Default R15 idle
+        walk = 2510198475,   -- Default R15 walk
+        run = 2510198475    -- Default R15 run
+    }
+}
+
+-- At the top, add emergency animations
+local emergencyAnimations = {
+    R6 = {
+        idle = 180435571,    -- Basic R6 idle
+        walk = 180426354,    -- Basic R6 walk
+        run = 180426354     -- Basic R6 run
+    },
+    R15 = {
+        idle = 2510197257,   -- Basic R15 idle
+        walk = 2510198475,   -- Basic R15 walk
+        run = 2510198475    -- Basic R15 run
     }
 }
 
 -- Table to store current animations per humanoid
 local currentAnimations = {}
 
--- Add this helper function at the top
+-- Add at the top with other variables
+local ANIMATION_DEBOUNCE = 0.2  -- Seconds between animation changes
+local lastAnimationChange = {}
+
+-- Modify isMoving to be more stable
 local function isMoving(humanoid)
-    -- Check if the humanoid is actually moving by looking at velocity
     local rootPart = humanoid.Parent and humanoid.Parent:FindFirstChild("HumanoidRootPart")
     if rootPart then
-        -- Use velocity magnitude to determine if actually moving
-        return rootPart.Velocity.Magnitude > 0.1
+        -- Use a higher threshold to prevent jitter
+        return rootPart.Velocity.Magnitude > 0.5
     end
     return false
 end
@@ -75,25 +106,65 @@ function AnimationManager:applyAnimations(humanoid)
     end
     
     -- Preload all animations for this rig type
-    for name, id in pairs(animations[rigType]) do
-        local animation = Instance.new("Animation")
-        animation.AnimationId = id
-        local track = animator:LoadAnimation(animation)
-        currentAnimations[humanoid].tracks[name] = track
-        Logger:log("ANIMATION", string.format("Loaded %s animation for %s (%s)", 
-            name, humanoid.Parent.Name, rigType))
+    local loadedAny = false
+    for name, _ in pairs(customAnimations[rigType]) do
+        local success, track = self:loadAnimation(animator, name, rigType)
+        
+        if success and track then
+            currentAnimations[humanoid].tracks[name] = track
+            loadedAny = true
+            Logger:log("ANIMATION", string.format("Successfully loaded %s animation for %s (%s)", 
+                name, humanoid.Parent.Name, rigType))
+        else
+            Logger:log("ERROR", string.format("Failed to load %s animation for %s", 
+                name, humanoid.Parent.Name))
+        end
+    end
+    
+    -- If no animations loaded at all, try emergency defaults
+    if not loadedAny then
+        Logger:log("ERROR", string.format("No animations loaded for %s, trying emergency defaults", 
+            humanoid.Parent.Name))
+            
+        for name, id in pairs(emergencyAnimations[rigType]) do
+            local animation = Instance.new("Animation")
+            animation.AnimationId = "rbxassetid://" .. tostring(id)
+            
+            local success, track = pcall(function()
+                local t = animator:LoadAnimation(animation)
+                -- Verify track loaded
+                if t and t.IsLoaded then
+                    return t
+                end
+                return nil
+            end)
+            
+            if success and track then
+                currentAnimations[humanoid].tracks[name] = track
+                Logger:log("ANIMATION", string.format("Loaded emergency %s animation for %s", 
+                    name, humanoid.Parent.Name))
+                loadedAny = true
+            else
+                Logger:log("ERROR", string.format("Failed to load emergency %s animation for %s", 
+                    name, humanoid.Parent.Name))
+            end
+        end
+        
+        -- If still no animations, log critical error
+        if not loadedAny then
+            Logger:log("ERROR", string.format("CRITICAL: No animations could be loaded for %s", 
+                humanoid.Parent.Name))
+        end
     end
     
     -- Connect to state changes for animation updates
     humanoid.StateChanged:Connect(function(_, new_state)
-        if (new_state == Enum.HumanoidStateType.Running or 
-            new_state == Enum.HumanoidStateType.Walking) and 
-            isMoving(humanoid) then
-            -- Only play walk/run if actually moving
-            local speed = humanoid.WalkSpeed
-            self:playAnimation(humanoid, speed > 8 and "run" or "walk")
+        if (new_state == Enum.HumanoidStateType.Running) then
+            if isMoving(humanoid) then
+                local speed = humanoid.WalkSpeed
+                self:playAnimation(humanoid, speed > 8 and "run" or "walk")
+            end
         else
-            -- Play idle for any other state or when not moving
             self:playAnimation(humanoid, "idle")
         end
     end)
@@ -120,6 +191,13 @@ end
 function AnimationManager:playAnimation(humanoid, animationName)
     if not humanoid or not currentAnimations[humanoid] then return end
     
+    -- Check debounce
+    local now = tick()
+    if lastAnimationChange[humanoid] and 
+       (now - lastAnimationChange[humanoid]) < ANIMATION_DEBOUNCE then
+        return
+    end
+    
     local animData = currentAnimations[humanoid]
     local track = animData.tracks and animData.tracks[animationName]
     
@@ -129,26 +207,29 @@ function AnimationManager:playAnimation(humanoid, animationName)
         return
     end
     
+    -- Only change animation if it's different
+    local currentTrack = animData.currentTrack
+    if currentTrack == track and track.IsPlaying then
+        return
+    end
+    
     -- Stop other animations
-    for name, otherTrack in pairs(animData.tracks) do
-        if name ~= animationName and otherTrack.IsPlaying then
+    for _, otherTrack in pairs(animData.tracks) do
+        if otherTrack.IsPlaying then
             otherTrack:Stop()
         end
     end
     
-    -- Play the requested animation if it's not already playing
-    if not track.IsPlaying then
-        -- Adjust speed for running
-        if animationName == "walk" and humanoid.WalkSpeed > 8 then
-            track:AdjustSpeed(1.5)  -- Speed up walk animation for running
-        else
-            track:AdjustSpeed(1.0)  -- Normal speed for other animations
-        end
-        
-        track:Play()
-        Logger:log("ANIMATION", string.format("Playing %s animation for %s", 
-            animationName, humanoid.Parent.Name))
-    end
+    -- Play the requested animation
+    track:AdjustSpeed(animationName == "walk" and humanoid.WalkSpeed > 8 and 1.5 or 1.0)
+    track:Play()
+    
+    -- Update tracking
+    animData.currentTrack = track
+    lastAnimationChange[humanoid] = now
+    
+    Logger:log("ANIMATION", string.format("Playing %s animation for %s", 
+        animationName, humanoid.Parent.Name))
 end
 
 function AnimationManager:stopAnimations(humanoid)
@@ -159,6 +240,53 @@ function AnimationManager:stopAnimations(humanoid)
         Logger:log("ANIMATION", string.format("Stopped all animations for %s", 
             humanoid.Parent.Name))
     end
+end
+
+local function tryLoadAnimation(animator, id)
+    local animation = Instance.new("Animation")
+    animation.AnimationId = "rbxassetid://" .. tostring(id)
+    
+    -- Add small delay to ensure animation is ready
+    wait(0.1)
+    
+    local success, result = pcall(function()
+        local track = animator:LoadAnimation(animation)
+        -- Verify track is valid
+        if track and track.Length > 0 then
+            return track
+        end
+        return nil
+    end)
+    
+    if success and result then
+        return result
+    end
+    
+    return nil
+end
+
+function AnimationManager:loadAnimation(animator, name, rigType)
+    -- Try custom animation
+    local track = tryLoadAnimation(animator, customAnimations[rigType][name])
+    if track then
+        Logger:log("ANIMATION", string.format("Loaded custom %s animation (Length: %.2f)", 
+            name, track.Length))
+        return true, track
+    end
+    
+    -- Log the failure details
+    Logger:log("DEBUG", string.format("Failed to load custom animation %s (ID: %s)", 
+        name, customAnimations[rigType][name]))
+        
+    -- Try default animation
+    track = tryLoadAnimation(animator, defaultAnimations[rigType][name])
+    if track then
+        Logger:log("ANIMATION", string.format("Loaded default %s animation (Length: %.2f)", 
+            name, track.Length))
+        return true, track
+    end
+    
+    return false, nil
 end
 
 return AnimationManager
