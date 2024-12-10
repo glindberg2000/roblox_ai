@@ -424,49 +424,64 @@ local function getAssetData(assetName)
 	return nil -- Return nil if the asset is not found
 end
 
-function NPCManagerV3:updateNPCVision(npc)
-    npc.visibleEntities = {}
-    local npcPosition = npc.model.PrimaryPart.Position
+function NPCManagerV3:updateNPCVision()
+    -- Early return if vision is disabled in config
+    if not PerformanceConfig.NPC.VisionEnabled then return end
 
-    -- First detect other NPCs
-    for id, otherNPC in pairs(self.npcs) do
-        if otherNPC ~= npc and otherNPC.model and otherNPC.model.PrimaryPart then
-            local distance = (otherNPC.model.PrimaryPart.Position - npcPosition).Magnitude
-            if distance <= VISION_RANGE then
-                table.insert(npc.visibleEntities, {
-                    type = "npc",
-                    instance = otherNPC,
-                    distance = distance,
-                    name = otherNPC.displayName
-                })
-                Logger:log("VISION", string.format("%s sees NPC: %s at distance: %.2f",
-                    npc.displayName,
-                    otherNPC.displayName,
-                    distance
-                ))
+    for _, npc in pairs(self.activeNPCs) do
+        -- Process in batches to spread load
+        if self.visionUpdateCount and self.visionUpdateCount % PerformanceConfig.NPC.RaycastBatchSize == 0 then
+            RunService.Heartbeat:Wait()
+        end
+        self.visionUpdateCount = (self.visionUpdateCount or 0) + 1
+
+        local model = npc.model
+        if not model then continue end
+
+        local head = model:FindFirstChild("Head")
+        if not head then continue end
+
+        -- Get nearby players
+        for _, player in pairs(game.Players:GetPlayers()) do
+            local character = player.Character
+            if not character then continue end
+
+            local targetHead = character:FindFirstChild("Head")
+            if not targetHead then continue end
+
+            local toTarget = (targetHead.Position - head.Position)
+            -- Check max vision distance from config
+            if toTarget.Magnitude > PerformanceConfig.NPC.MaxVisionDistance then
+                continue
+            end
+
+            -- Check vision cone angle from config
+            local forward = model.PrimaryPart.CFrame.LookVector
+            local angle = math.deg(math.acos(forward:Dot(toTarget.Unit)))
+            if angle > PerformanceConfig.NPC.VisionConeAngle/2 then
+                continue
+            end
+
+            -- Skip raycast if occlusion checks disabled
+            if PerformanceConfig.NPC.SkipOccludedTargets then
+                local params = RaycastParams.new()
+                params.FilterType = Enum.RaycastFilterType.Blacklist
+                params.FilterDescendantsInstances = {model}
+
+                local result = workspace:Raycast(head.Position, toTarget, params)
+                if result and result.Instance:IsDescendantOf(character) then
+                    -- Handle NPC seeing player...
+                    self:handleNPCVision(npc, player)
+                end
+            else
+                -- No occlusion check, just handle vision
+                self:handleNPCVision(npc, player)
             end
         end
     end
 
-    -- Then detect players
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local distance = (player.Character.HumanoidRootPart.Position - npcPosition).Magnitude
-            if distance <= VISION_RANGE then
-                table.insert(npc.visibleEntities, {
-                    type = "player",
-                    instance = player,
-                    distance = distance,
-                    name = player.Name
-                })
-                Logger:log("VISION", string.format("%s sees player: %s at distance: %.2f",
-                    npc.displayName,
-                    player.Name,
-                    distance
-                ))
-            end
-        end
-    end
+    -- Wait configured update interval before next vision update
+    wait(PerformanceConfig.NPC.VisionUpdateRate)
 end
 
 -- Update helper function to check if participant is NPC

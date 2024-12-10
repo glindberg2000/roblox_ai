@@ -20,6 +20,15 @@
         "$className": "Folder",
         "AnimationManager": {
           "$path": "src/shared/AnimationManager.lua"
+        },
+        "NPCSystem": {
+          "$className": "Folder",
+          "PerformanceConfig": {
+            "$path": "src/shared/PerformanceConfig.lua"
+          },
+          "NPCManagerV3": {
+            "$path": "src/shared/NPCManagerV3.lua"
+          }
         }
       },
       "NPCManagerV3": {
