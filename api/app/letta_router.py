@@ -101,15 +101,30 @@ async def chat_with_npc(request: ChatRequest):
             # Get NPC details for memory
             npc_details = get_npc_context(request.npc_id)
             
-            # Get player info including display name
-            player_info = get_player_info(request.participant_id)
+            # Add participant type handling
+            participant_type = request.context.get("participant_type", "player")
+            participant_info = None
             
-            # Create memory using proper class
-            memory = ChatMemory(
-                human=f"""This is what I know about the player:
+            if participant_type == "npc":
+                participant_info = get_npc_context(request.participant_id)
+                if participant_info:  # Only use NPC context if found
+                    human_description = f"""This is what I know about the NPC:
+Name: {participant_info['display_name']}
+Description: {participant_info['system_prompt']}"""
+                else:
+                    # Fallback to player lookup if NPC not found
+                    participant_type = "player"
+            
+            # Handle player case (either direct or fallback)
+            if participant_type == "player":
+                player_info = get_player_info(request.participant_id)
+                human_description = f"""This is what I know about the player:
 Name: {player_info['display_name'] or request_context.get('participant_name', 'a player')}
-Description: {player_info['description']}""".strip(),
-                
+Description: {player_info['description']}"""
+            
+            # Create memory using the appropriate description
+            memory = ChatMemory(
+                human=human_description.strip(),
                 persona=f"""My name is {npc_details['display_name']}.
 {npc_details['system_prompt']}""".strip()
             )
@@ -293,8 +308,36 @@ async def chat_with_npc_v2(request: ChatRequest):
         )
         
         if not agent_mapping:
-            # Get player info
-            player_info = get_player_info(request.participant_id)
+            # Get NPC details for memory
+            npc_details = get_npc_context(request.npc_id)
+            
+            # Add participant type handling
+            participant_type = request.context.get("participant_type", "player")
+            participant_info = None
+            
+            if participant_type == "npc":
+                participant_info = get_npc_context(request.participant_id)
+                if participant_info:  # Only use NPC context if found
+                    human_description = f"""This is what I know about the NPC:
+Name: {participant_info['display_name']}
+Description: {participant_info['system_prompt']}"""
+                else:
+                    # Fallback to player lookup if NPC not found
+                    participant_type = "player"
+            
+            # Handle player case (either direct or fallback)
+            if participant_type == "player":
+                player_info = get_player_info(request.participant_id)
+                human_description = f"""This is what I know about the player:
+Name: {player_info['display_name'] or request_context.get('participant_name', 'a player')}
+Description: {player_info['description']}"""
+            
+            # Create memory using the appropriate description
+            memory = ChatMemory(
+                human=human_description.strip(),
+                persona=f"""My name is {npc_details['display_name']}.
+{npc_details['system_prompt']}""".strip()
+            )
             
             # Create agent using new structure from quickstart
             agent = create_roblox_agent(
@@ -312,13 +355,7 @@ async def chat_with_npc_v2(request: ChatRequest):
                     model_endpoint="https://api.openai.com/v1",
                     context_window=8000,
                 ),
-                memory=ChatMemory(
-                    human=f"""This is what I know about the player:
-Name: {player_info['display_name'] or request_context.get('participant_name', 'a player')}
-Description: {player_info['description']}""".strip(),
-                    persona=f"""My name is {npc_details['display_name']}.
-{npc_details['system_prompt']}""".strip()
-                ),
+                memory=memory,
                 system=gpt_system.get_system_text("memgpt_chat")
             )
             

@@ -863,9 +863,9 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
         local response = NPCChatHandler:HandleChat({
             message = message,
             npc_id = npc.id,
-            participant_id = participant.UserId,
+            participant_id = participantType == "player" and participant.UserId or participant.npcId,
             context = {
-                participant_type = "npc",
+                participant_type = participantType,
                 participant_name = participant.Name,
                 is_new_conversation = false,
                 interaction_history = {},
