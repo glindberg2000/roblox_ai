@@ -17,7 +17,7 @@ function NPCChatHandler:HandleChat(request)
         print("NPCChatHandler: V4 succeeded", HttpService:JSONEncode(v4Response))
         -- Ensure we have a valid message
         if not v4Response.message then
-            v4Response.message = "I'm having trouble understanding right now."
+            v4Response.message = "..."
         end
         return v4Response
     end
@@ -25,7 +25,7 @@ function NPCChatHandler:HandleChat(request)
     -- If V4 failed, return error response
     print("NPCChatHandler: V4 failed, returning error response")
     return {
-        message = "I'm having trouble understanding right now.",
+        message = "...",
         action = { type = "none" },
         metadata = {}
     }

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from letta import ChatMemory, LLMConfig, EmbeddingConfig, create_client
+from letta.prompts import gpt_system
 from letta_roblox.client import LettaRobloxClient
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
@@ -123,7 +124,7 @@ Description: {player_info['description']}""".strip(),
                     model_endpoint="https://api.openai.com/v1",
                     context_window=128000
                 ),
-                system=npc_details['system_prompt'],
+                system=gpt_system.get_system_text("memgpt_chat"),
                 include_base_tools=True
             )
             
@@ -318,7 +319,7 @@ Description: {player_info['description']}""".strip(),
                     persona=f"""My name is {npc_details['display_name']}.
 {npc_details['system_prompt']}""".strip()
                 ),
-                system=npc_details['system_prompt']
+                system=gpt_system.get_system_text("memgpt_chat")
             )
             
             # Store mapping
