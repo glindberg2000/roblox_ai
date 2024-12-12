@@ -28,6 +28,18 @@
           },
           "NPCManagerV3": {
             "$path": "src/shared/NPCManagerV3.lua"
+          },
+          "services": {
+            "$className": "Folder",
+            "MovementService": {
+              "$path": "src/shared/services/MovementService.lua"
+            },
+            "VisionService": {
+              "$path": "src/shared/services/VisionService.lua"
+            },
+            "InteractionService": {
+              "$path": "src/shared/services/InteractionService.lua"
+            }
           }
         }
       },

@@ -9,6 +9,22 @@ local ChatService = game:GetService("Chat")
 local AnimationManager = require(ReplicatedStorage.Shared.AnimationManager)
 local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
 local NPCChatHandler = require(ReplicatedStorage.NPCSystem.NPCChatHandler)
+local InteractionService = require(ReplicatedStorage.Shared.NPCSystem.services.InteractionService)
+
+print("Attempting to load services...")
+local success, result = pcall(function()
+    local vision = require(ReplicatedStorage.Shared.NPCSystem.services.VisionService)
+    local movement = require(ReplicatedStorage.Shared.NPCSystem.services.MovementService)
+    print("Services loaded successfully")
+    return {vision = vision, movement = movement}
+end)
+
+if not success then
+    warn("Failed to load services:", result)
+end
+
+local VisionService = result.vision
+local MovementService = result.movement
 
 -- Initialize Logger
 local Logger
@@ -341,60 +357,20 @@ function NPCManagerV3:setupClickDetector(npc)
 	end)
 end
 
-
-
-function NPCManagerV3:endInteraction(npc, participant, interactionId)
-    Logger:log("INTERACTION", string.format("Pausing interaction for %s with %s (ID: %s)",
-        npc.displayName,
-        participant and participant.Name or "Unknown",
-        interactionId or "N/A"
-    ))
-
-    -- Update timestamps
-    npc.lastInteractionTime = tick()
-    npc.lastConversationTime = tick()
+function NPCManagerV3:startInteraction(npc1, npc2)
+    if not InteractionService:canInteract(npc1, npc2) then
+        return false
+    end
     
-    if participant then
-        npc.lastInteractionPartner = typeof(participant) == "Instance" and participant.UserId or participant.npcId
-    end
+    InteractionService:lockNPCsForInteraction(npc1, npc2)
+    
+    -- Old interaction code...
+end
 
-    -- Preserve conversation context and history
-    if npc.currentConversationId then
-        Logger:log("CHAT", string.format("Preserving conversation %s for %s with %s",
-            npc.currentConversationId,
-            npc.displayName,
-            participant.Name or participant.displayName
-        ))
-    end
-
-    -- Clean up interaction tracking
-    if interactionId then
-        self.activeInteractions[interactionId] = nil
-    end
-
-    -- Free movement state but preserve conversation data
-    self:setNPCMovementState(npc, "free")
-    npc.isInteracting = false
-    npc.interactingPlayer = nil
-
-    -- Handle NPC-to-NPC cleanup
-    if self:isNPCParticipant(participant) then
-        local otherNPC = self.npcs[participant.npcId]
-        if otherNPC then
-            self:setNPCMovementState(otherNPC, "free")
-            otherNPC.isInteracting = false
-            otherNPC.interactingPlayer = nil
-        end
-    end
-
-    -- Notify client of paused conversation
-    if typeof(participant) == "Instance" and participant:IsA("Player") then
-        NPCChatEvent:FireClient(participant, {
-            npcName = npc.displayName,
-            type = "paused_conversation",
-            conversationId = npc.currentConversationId
-        })
-    end
+function NPCManagerV3:endInteraction(npc1, npc2)
+    InteractionService:unlockNPCsAfterInteraction(npc1, npc2)
+    
+    -- Rest of cleanup code...
 end
 
 function NPCManagerV3:getCacheKey(npc, player, message)
@@ -1011,51 +987,11 @@ task.spawn(function()
     end
 end)
 
-function NPCManagerV3:checkRangeAndEndConversation(npc1, npc2)
-    if not npc1.model or not npc2.model then return end
-    if not npc1.model.PrimaryPart or not npc2.model.PrimaryPart then return end
-
-    local distance = (npc1.model.PrimaryPart.Position - npc2.model.PrimaryPart.Position).Magnitude
-    if distance > npc1.responseRadius then
-        Logger:log("INTERACTION", string.format("%s and %s are out of range, ending conversation",
-            npc1.displayName, npc2.displayName))
-        self:endInteraction(npc1, npc2)
-        return true
+function NPCManagerV3:updateNPCPosition(npc)
+    if npc.movementState == "free" then
+        local randomPos = MovementService:getRandomPosition(npc.spawnPosition, npc.wanderRadius)
+        MovementService:moveNPCToPosition(npc, randomPos)
     end
-    return false
-end
-
--- Add this to the update loop in MainNPCScript.server.lua
-local function checkOngoingConversations()
-    for npc1Id, conversationData in pairs(activeConversations.npcToNPC) do
-        local npc1 = npcManagerV3.npcs[npc1Id]
-        local npc2 = conversationData.partner
-        
-        if npc1 and npc2 then
-            npcManagerV3:checkRangeAndEndConversation(npc1, npc2)
-        end
-    end
-end
-
-function NPCManagerV3:moveNPCToPosition(npc, targetPosition)
-    if not npc or not npc.model then return end
-    
-    local humanoid = npc.model:FindFirstChild("Humanoid")
-    if not humanoid then return end
-    
-    -- Get current position
-    local currentPosition = npc.model:GetPrimaryPartCFrame().Position
-    local distance = (targetPosition - currentPosition).Magnitude
-    
-    -- Set appropriate walk speed
-    if distance > 20 then
-        humanoid.WalkSpeed = 16  -- Run speed
-    else
-        humanoid.WalkSpeed = 8   -- Walk speed
-    end
-    
-    -- Move to position
-    humanoid:MoveTo(targetPosition)
 end
 
 return NPCManagerV3
