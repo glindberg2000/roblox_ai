@@ -6,13 +6,40 @@ from typing import Dict, Any, Optional
 from pydantic import BaseModel
 from .database import get_npc_context, create_agent_mapping, get_agent_mapping, get_db, get_player_info
 from .mock_player import MockPlayer
+from .config import DEFAULT_LLM, LLM_CONFIGS, EMBEDDING_CONFIGS, DEFAULT_EMBEDDING
 import logging
 import json
 import uuid
 import time
 
-def create_roblox_agent(client, name: str, embedding_config: EmbeddingConfig, llm_config: LLMConfig, memory: ChatMemory, system: str):
+# Convert config to LLMConfig objects
+LLM_CONFIGS = {
+    name: LLMConfig(**config) 
+    for name, config in LLM_CONFIGS.items()
+}
+
+# Convert config to EmbeddingConfig objects
+EMBEDDING_CONFIGS = {
+    name: EmbeddingConfig(**config)
+    for name, config in EMBEDDING_CONFIGS.items()
+}
+
+def create_roblox_agent(
+    client, 
+    name: str,
+    memory: ChatMemory,
+    system: str,
+    embedding_config: Optional[EmbeddingConfig] = None,
+    llm_type: str = None
+):
     """Create a Letta agent configured for Roblox NPCs"""
+    # Use config default if no llm_type specified
+    llm_type = llm_type or DEFAULT_LLM
+    llm_config = LLM_CONFIGS.get(llm_type, LLM_CONFIGS[DEFAULT_LLM])
+    
+    # Use provided embedding config or default from config
+    embedding_config = embedding_config or EMBEDDING_CONFIGS[DEFAULT_EMBEDDING]
+    
     return client.create_agent(
         name=name,
         embedding_config=embedding_config,
@@ -131,7 +158,7 @@ Description: {player_info['description']}"""
             
             # Create new agent with proper config
             agent = letta_client.create_agent(
-                name=f"npc_{npc_details['display_name']}_{request.npc_id[:8]}_{request.participant_id[:8]}",
+                name=f"npc_{npc_details['display_name']}_{request.npc_id[:8]}_{request.participant_id[:8]}_{str(uuid.uuid4())[:8]}",
                 memory=memory,
                 llm_config=LLMConfig(
                     model="gpt-4o-mini",
@@ -342,21 +369,10 @@ Description: {player_info['description']}"""
             # Create agent using new structure from quickstart
             agent = create_roblox_agent(
                 client=direct_client,
-                name=f"npc_{npc_details['display_name']}_{request.npc_id[:8]}_{request.participant_id[:8]}",
-                embedding_config=EmbeddingConfig(
-                    embedding_endpoint_type="openai",
-                    embedding_endpoint="https://api.openai.com/v1",
-                    embedding_model="text-embedding-ada-002",
-                    embedding_dim=1536,
-                ),
-                llm_config=LLMConfig(
-                    model="gpt-4o-mini",
-                    model_endpoint_type="openai",
-                    model_endpoint="https://api.openai.com/v1",
-                    context_window=8000,
-                ),
+                name=f"npc_{npc_details['display_name']}_{request.npc_id[:8]}_{request.participant_id[:8]}_{str(uuid.uuid4())[:8]}",
                 memory=memory,
-                system=gpt_system.get_system_text("memgpt_chat")
+                system=gpt_system.get_system_text("memgpt_chat"),
+                llm_type=request.context.get("llm_type", "claude")
             )
             
             # Store mapping

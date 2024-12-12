@@ -57,3 +57,50 @@ When responding, always use the appropriate action type:
 
 Your response must always include an action, even if it's "none".
 """
+
+# API Configuration
+
+# Default LLM to use ("gpt4-mini", "claude", or "mixtral")
+DEFAULT_LLM = "claude"
+
+# LLM Configuration
+LLM_CONFIGS = {
+    "gpt4-mini": {
+        "model": "gpt-4o-mini",
+        "model_endpoint_type": "openai",
+        "model_endpoint": "https://api.openai.com/v1",
+        "context_window": 128000,
+    },
+    "claude": {
+        "model": "claude-3-haiku-20240307",
+        "model_endpoint_type": "anthropic",
+        "model_endpoint": "https://api.anthropic.com/v1",
+        "context_window": 200000,
+    },
+    "mixtral": {
+        "model": "mixtral-8x7b",
+        "model_endpoint_type": "ollama",
+        "model_endpoint": "http://localhost:11434",
+        "context_window": 32000,
+    }
+}
+
+# Embedding Configuration
+EMBEDDING_CONFIGS = {
+    "openai": {
+        "embedding_endpoint_type": "openai",
+        "embedding_endpoint": "https://api.openai.com/v1",
+        "embedding_model": "text-embedding-ada-002",
+        "embedding_dim": 1536,
+        "embedding_chunk_size": 300
+    },
+    "anthropic": {
+        "embedding_endpoint_type": "anthropic",
+        "embedding_endpoint": "https://api.anthropic.com/v1",
+        "embedding_model": "claude-3-haiku-20240307",
+        "embedding_dim": 1536
+    }
+}
+
+# Default embedding config to use ("openai" or "anthropic")
+DEFAULT_EMBEDDING = "anthropic"
