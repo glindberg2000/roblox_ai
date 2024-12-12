@@ -2,18 +2,6 @@
   "name": "Sandbox V1",
   "tree": {
     "$className": "DataModel",
-    "ServerStorage": {
-      "$className": "ServerStorage",
-      "Assets": {
-        "$className": "Folder",
-        "npcs": {
-          "$path": "src/assets/npcs"
-        },
-        "scripts": {
-          "$path": "src/assets/scripts"
-        }
-      }
-    },
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
       "Shared": {
@@ -24,7 +12,7 @@
             "$path": "src/shared/PerformanceConfig.lua"
           },
           "NPCManagerV3": {
-            "$path": "src/shared/NPCManagerV3.lua"
+            "$path": "src/shared/NPCSystem/NPCManagerV3.lua"
           },
           "services": {
             "$className": "Folder",
@@ -43,35 +31,35 @@
             "LoggerService": {
               "$path": "src/shared/services/LoggerService.lua"
             }
+          },
+          "chat": {
+            "$className": "Folder",
+            "V4ChatClient": {
+              "$path": "src/shared/NPCSystem/chat/V4ChatClient.lua"
+            },
+            "V3ChatClient": {
+              "$path": "src/shared/NPCSystem/chat/V3ChatClient.lua"
+            },
+            "NPCChatHandler": {
+              "$path": "src/shared/NPCSystem/chat/NPCChatHandler.lua"
+            },
+            "ChatUtils": {
+              "$path": "src/shared/NPCSystem/chat/ChatUtils.lua"
+            }
+          },
+          "config": {
+            "$className": "Folder",
+            "NPCConfig": {
+              "$path": "src/shared/NPCSystem/config/NPCConfig.lua"
+            },
+            "LettaConfig": {
+              "$path": "src/shared/NPCSystem/config/LettaConfig.lua"
+            }
           }
         }
       },
-      "NPCManagerV3": {
-        "$path": "src/shared/NPCManagerV3.lua"
-      },
       "NPCDatabaseV3": {
         "$path": "src/data/NPCDatabase.lua"
-      },
-      "NPCSystem": {
-        "$className": "Folder",
-        "V4ChatClient": {
-          "$path": "src/shared/V4ChatClient.lua"
-        },
-        "V3ChatClient": {
-          "$path": "src/shared/V3ChatClient.lua"
-        },
-        "NPCChatHandler": {
-          "$path": "src/shared/NPCChatHandler.lua"
-        },
-        "ChatUtils": {
-          "$path": "src/shared/ChatUtils.lua"
-        },
-        "NPCConfig": {
-          "$path": "src/shared/NPCConfig.lua"
-        },
-        "LettaConfig": {
-          "$path": "src/shared/LettaConfig.lua"
-        }
       }
     },
     "ServerScriptService": {
