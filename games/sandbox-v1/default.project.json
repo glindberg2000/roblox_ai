@@ -18,9 +18,6 @@
       "$className": "ReplicatedStorage",
       "Shared": {
         "$className": "Folder",
-        "AnimationManager": {
-          "$path": "src/shared/AnimationManager.lua"
-        },
         "NPCSystem": {
           "$className": "Folder",
           "PerformanceConfig": {
@@ -39,6 +36,12 @@
             },
             "InteractionService": {
               "$path": "src/shared/services/InteractionService.lua"
+            },
+            "AnimationService": {
+              "$path": "src/shared/services/AnimationService.lua"
+            },
+            "LoggerService": {
+              "$path": "src/shared/services/LoggerService.lua"
             }
           }
         }

@@ -6,7 +6,7 @@ local Players = game:GetService("Players")
 local ServerScriptService = game:GetService("ServerScriptService")
 local ChatService = game:GetService("Chat")
 
-local AnimationManager = require(ReplicatedStorage.Shared.AnimationManager)
+local AnimationService = require(ReplicatedStorage.Shared.NPCSystem.services.AnimationService)
 local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
 local NPCChatHandler = require(ReplicatedStorage.NPCSystem.NPCChatHandler)
 local InteractionService = require(ReplicatedStorage.Shared.NPCSystem.services.InteractionService)
@@ -259,7 +259,7 @@ function NPCManagerV3:createNPC(npcData)
     npcModel.PrimaryPart = humanoidRootPart
 
     -- Apply animations
-    AnimationManager:applyAnimations(humanoid)
+    AnimationService:applyAnimations(humanoid)
 
     local npc = {
         model = npcModel,
@@ -747,7 +747,7 @@ function NPCManagerV3:stopFollowing(npc)
     local humanoid = npc.model:FindFirstChild("Humanoid")
     if humanoid then
         humanoid:MoveTo(npc.model.PrimaryPart.Position)
-        AnimationManager:stopAnimations(humanoid)
+        AnimationService:stopAnimations(humanoid)
     end
 
     Logger:log("MOVEMENT", string.format("%s stopped following and movement halted", npc.displayName))
