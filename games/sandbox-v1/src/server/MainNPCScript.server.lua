@@ -2,7 +2,7 @@
 -- At the top of MainNPCScript.server.lua
 local ServerScriptService = game:GetService("ServerScriptService")
 local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
-local Logger = require(ServerScriptService:WaitForChild("Logger"))
+local LoggerService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LoggerService)
 
 local success, result = pcall(function()
 	return require(ServerScriptService:WaitForChild("InteractionController", 5))
@@ -10,9 +10,9 @@ end)
 
 if success then
 	InteractionController = result
-	Logger:log("SYSTEM", "InteractionController loaded successfully")
+	LoggerService:info("SYSTEM", "InteractionController loaded successfully")
 else
-	Logger:log("ERROR", "Failed to load InteractionController: " .. tostring(result))
+	LoggerService:error("ERROR", "Failed to load InteractionController: " .. tostring(result))
 	-- Provide a basic implementation to prevent further errors
 	InteractionController = {
 		new = function()
@@ -37,7 +37,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local ServerScriptService = game:GetService("ServerScriptService")
 
-local Logger = require(ServerScriptService:WaitForChild("Logger"))
+local Logger = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
 
 -- Move ensureStorage to the top, before NPC initialization
 local function ensureStorage()
@@ -59,26 +59,26 @@ end
 ensureStorage()
 
 -- Then initialize NPC system
-local NPCManagerV3 = require(ReplicatedStorage:WaitForChild("NPCManagerV3"))
-Logger:log("SYSTEM", "Starting NPC initialization")
+local NPCManagerV3 = require(ReplicatedStorage.Shared.NPCSystem.NPCManagerV3)
+LoggerService:info("SYSTEM", "Starting NPC initialization")
 local npcManagerV3 = NPCManagerV3.new()
-Logger:log("SYSTEM", "NPC Manager created")
+LoggerService:info("SYSTEM", "NPC Manager created")
 
 -- Debug NPC abilities
 for npcId, npcData in pairs(npcManagerV3.npcs) do
-	Logger:log("DEBUG", string.format("NPC %s abilities: %s", 
+	LoggerService:debug("NPC", string.format("NPC %s abilities: %s", 
 		npcData.displayName,
 		table.concat(npcData.abilities or {}, ", ")
 	))
 end
 
 for npcId, npcData in pairs(npcManagerV3.npcs) do
-	Logger:log("STATE", string.format("NPC spawned: %s", npcData.displayName))
+	LoggerService:info("STATE", string.format("NPC spawned: %s", npcData.displayName))
 end
 
 local interactionController = npcManagerV3.interactionController
 
-Logger:log("SYSTEM", "NPC system V3 initialized")
+LoggerService:info("SYSTEM", "NPC system V3 initialized")
 
 -- Add cooldown tracking
 local greetingCooldowns = {}
@@ -101,7 +101,7 @@ local function checkPlayerProximity()
                     local isInRange = distance <= npc.responseRadius
 
                     -- Log range check for debugging
-                    Logger:log("RANGE", string.format(
+                    LoggerService:debug("RANGE", string.format(
                         "[PLAYER] Distance between %s and %s: %.2f studs (Radius: %d, InRange: %s)",
                         player.Name,
                         npc.displayName,
@@ -130,7 +130,7 @@ local function checkPlayerProximity()
                                 if timeSinceLastGreeting < GREETING_COOLDOWN then continue end
                             end
 
-                            Logger:log("DEBUG", string.format("NPC initiating chat: %s -> %s", 
+                            LoggerService:debug("DEBUG", string.format("NPC initiating chat: %s -> %s", 
                                 npc.displayName, player.Name))
 
                             -- Lock conversation
@@ -165,7 +165,7 @@ local function onPlayerChatted(player, message)
             local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
             
             -- Log range check for debugging
-            Logger:log("RANGE", string.format(
+            LoggerService:debug("RANGE", string.format(
                 "Distance between player %s and NPC %s: %.2f studs (Radius: %d, InRange: %s)",
                 player.Name,
                 npc.displayName,
@@ -189,7 +189,7 @@ local function onPlayerChatted(player, message)
         if isGreeting and lastGreeting then
             local timeSinceLastGreeting = os.time() - lastGreeting
             if timeSinceLastGreeting < GREETING_COOLDOWN then
-                Logger:log("DEBUG", string.format(
+                LoggerService:debug("DEBUG", string.format(
                     "Skipping player greeting - on cooldown for %d more seconds",
                     GREETING_COOLDOWN - timeSinceLastGreeting
                 ))
@@ -197,7 +197,7 @@ local function onPlayerChatted(player, message)
             end
         end
 
-        Logger:log("INTERACTION", string.format("Routing chat from %s to NPC %s (Distance: %.2f)", 
+        LoggerService:info("INTERACTION", string.format("Routing chat from %s to NPC %s (Distance: %.2f)", 
             player.Name, closestNPC.displayName, closestDistance))
         npcManagerV3:handleNPCInteraction(closestNPC, player, message)
         
@@ -205,7 +205,7 @@ local function onPlayerChatted(player, message)
             greetingCooldowns[cooldownKey] = os.time()
         end
     else
-        Logger:log("INTERACTION", string.format(
+        LoggerService:info("INTERACTION", string.format(
             "No NPCs in range for player %s chat", 
             player.Name
         ))
@@ -213,9 +213,9 @@ local function onPlayerChatted(player, message)
 end
 
 local function setupChatConnections()
-	Logger:log("SYSTEM", "Setting up chat connections")
+	LoggerService:info("SYSTEM", "Setting up chat connections")
 	Players.PlayerAdded:Connect(function(player)
-		Logger:log("STATE", string.format("Setting up chat connection for player: %s", player.Name))
+		LoggerService:info("STATE", string.format("Setting up chat connection for player: %s", player.Name))
 		player.Chatted:Connect(function(message)
 			onPlayerChatted(player, message)
 		end)
@@ -244,7 +244,7 @@ local function checkNPCProximity()
             local distance = (npc1.model.PrimaryPart.Position - npc2.model.PrimaryPart.Position).Magnitude
             local isInRange = distance <= npc1.responseRadius
             
-            Logger:log("RANGE", string.format(
+            LoggerService:debug("RANGE", string.format(
                 "Distance between %s and %s: %.2f studs (Radius: %d, InRange: %s)",
                 npc1.displayName,
                 npc2.displayName,
@@ -266,7 +266,7 @@ local function checkNPCProximity()
                 if timeSinceLastGreeting < GREETING_COOLDOWN then continue end
             end
 
-            Logger:log("INTERACTION", string.format("%s sees %s and can initiate chat", 
+            LoggerService:info("INTERACTION", string.format("%s sees %s and can initiate chat", 
                 npc1.displayName, npc2.displayName))
             
             -- Lock conversation
@@ -294,7 +294,7 @@ local function checkOngoingConversations()
             local distance = (npc1.model.PrimaryPart.Position - npc2.model.PrimaryPart.Position).Magnitude
             local isInRange = distance <= npc1.responseRadius
             
-            Logger:log("RANGE", string.format(
+            LoggerService:debug("RANGE", string.format(
                 "[ONGOING] Distance between %s and %s: %.2f studs (Radius: %d, InRange: %s)",
                 npc1.displayName,
                 npc2.displayName,
@@ -304,7 +304,7 @@ local function checkOngoingConversations()
             ))
 
             if not isInRange then
-                Logger:log("INTERACTION", string.format(
+                LoggerService:info("INTERACTION", string.format(
                     "Ending conversation - NPCs out of range (%s <-> %s)",
                     npc1.displayName,
                     npc2.displayName
@@ -354,7 +354,7 @@ local function updateNPCMovement()
                     local spawnPos = npc.spawnPosition or npc.model.PrimaryPart.Position
                     local targetPos = getRandomPosition(spawnPos, 10) -- 10 stud radius
                     
-                    Logger:log("MOVEMENT", string.format(
+                    LoggerService:debug("MOVEMENT", string.format(
                         "Moving %s to random position (%.1f, %.1f, %.1f)",
                         npc.displayName,
                         targetPos.X,
@@ -372,7 +372,7 @@ end
 
 -- Add to the main update loop
 local function updateNPCs()
-    Logger:log("SYSTEM", "Starting NPC update loop")
+    LoggerService:info("SYSTEM", "Starting NPC update loop")
     spawn(updateNPCMovement) -- Start movement system in parallel
     while true do
         checkPlayerProximity()
@@ -392,10 +392,10 @@ EndInteractionEvent.Parent = ReplicatedStorage
 EndInteractionEvent.OnServerEvent:Connect(function(player)
 	local interactingNPC = interactionController:getInteractingNPC(player)
 	if interactingNPC then
-		Logger:log("INTERACTION", string.format("Player %s manually ended interaction with %s", 
+		LoggerService:info("INTERACTION", string.format("Player %s manually ended interaction with %s", 
 			player.Name, interactingNPC.displayName))
 		npcManagerV3:endInteraction(interactingNPC, player)
 	end
 end)
 
-Logger:log("SYSTEM", "NPC system V3 main script running")
+LoggerService:info("SYSTEM", "NPC system V3 main script running")

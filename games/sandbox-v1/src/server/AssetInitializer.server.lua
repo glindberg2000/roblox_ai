@@ -1,5 +1,6 @@
 -- AssetInitializer.server.lua
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
 
 -- Load the AssetDatabase file directly
 local AssetDatabase = require(game:GetService("ServerScriptService").AssetDatabase)
@@ -41,7 +42,7 @@ local function storeAssetDescriptions(assetId, name, description, imageUrl)
     imageValue.Value = imageUrl or ""
     imageValue.Parent = assetEntry
 
-    print(string.format(
+    LoggerService:info("ASSET", string.format(
         "Stored asset: ID: %s, Name: %s, Description: %s",
         assetId,
         nameValue.Value,
@@ -57,74 +58,70 @@ local function initializeAssets()
 end
 
 initializeAssets()
-print("All assets initialized from local database.")
+LoggerService:info("ASSET", "All assets initialized from local database")
 
 -- Print out all stored assets for verification
-print("Verifying stored assets in LocalDB:")
+LoggerService:info("ASSET", "Verifying stored assets in LocalDB:")
 for _, assetEntry in ipairs(LocalDB:GetChildren()) do
 	local nameValue = assetEntry:FindFirstChild("Name")
 	local descValue = assetEntry:FindFirstChild("Description")
 	local imageValue = assetEntry:FindFirstChild("ImageUrl")
 
 	if nameValue and descValue and imageValue then
-		print(
-			string.format(
-				"Verified asset: ID: %s, Name: %s, Description: %s",
-				assetEntry.Name,
-				nameValue.Value,
-				string.sub(descValue.Value, 1, 50) .. "..."
-			)
-		)
+		LoggerService:info("ASSET", string.format(
+			"Verified asset: ID: %s, Name: %s, Description: %s",
+			assetEntry.Name,
+			nameValue.Value,
+			string.sub(descValue.Value, 1, 50) .. "..."
+		))
 	else
-		print(
-			string.format(
-				"Error verifying asset: ID: %s, Name exists: %s, Description exists: %s, ImageUrl exists: %s",
-				assetEntry.Name,
-				tostring(nameValue ~= nil),
-				tostring(descValue ~= nil),
-				tostring(imageValue ~= nil)
-			)
-		)
+		LoggerService:warn("ASSET", string.format(
+			"Error verifying asset: ID: %s, Name exists: %s, Description exists: %s, ImageUrl exists: %s",
+			assetEntry.Name,
+			tostring(nameValue ~= nil),
+			tostring(descValue ~= nil),
+			tostring(imageValue ~= nil)
+		))
 	end
 end
 
 -- Function to check a specific asset by name
 local function checkAssetByName(assetName)
 	local assetId = AssetLookup[assetName]
-	if assetId then
-		local assetEntry = LocalDB:FindFirstChild(assetId)
-		if assetEntry then
-			local nameValue = assetEntry:FindFirstChild("Name")
-			local descValue = assetEntry:FindFirstChild("Description")
-			local imageValue = assetEntry:FindFirstChild("ImageUrl")
+	if not assetId then
+		LoggerService:warn("ASSET", string.format("Asset not found in lookup table: %s", assetName))
+		return
+	end
+	
+	local assetEntry = LocalDB:FindFirstChild(assetId)
+	if not assetEntry then
+		LoggerService:warn("ASSET", string.format("Asset entry not found for name: %s", assetName))
+		return
+	end
+	
+	local nameValue = assetEntry:FindFirstChild("Name")
+	local descValue = assetEntry:FindFirstChild("Description")
+	local imageValue = assetEntry:FindFirstChild("ImageUrl")
 
-			print(string.format("Asset check by name: %s", assetName))
-			print("  ID: " .. assetId)
-			print("  Name exists: " .. tostring(nameValue ~= nil))
-			print("  Description exists: " .. tostring(descValue ~= nil))
-			print("  ImageUrl exists: " .. tostring(imageValue ~= nil))
+	LoggerService:debug("ASSET", string.format("Asset check by name: %s", assetName))
+	LoggerService:debug("ASSET", string.format("  ID: %s", assetId))
+	LoggerService:debug("ASSET", string.format("  Name exists: %s", tostring(nameValue ~= nil)))
+	LoggerService:debug("ASSET", string.format("  Description exists: %s", tostring(descValue ~= nil)))
+	LoggerService:debug("ASSET", string.format("  ImageUrl exists: %s", tostring(imageValue ~= nil)))
 
-			if nameValue then
-				print("  Name value: " .. nameValue.Value)
-			end
-			if descValue then
-				print("  Description value: " .. string.sub(descValue.Value, 1, 50) .. "...")
-			end
-			if imageValue then
-				print("  ImageUrl value: " .. imageValue.Value)
-			end
-		else
-			print("Asset entry not found for name: " .. assetName)
-		end
-	else
-		print("Asset not found in lookup table: " .. assetName)
+	if nameValue then
+		LoggerService:debug("ASSET", string.format("  Name value: %s", nameValue.Value))
+	end
+	if descValue then
+		LoggerService:debug("ASSET", string.format("  Description value: %s", string.sub(descValue.Value, 1, 50) .. "..."))
+	end
+	if imageValue then
+		LoggerService:debug("ASSET", string.format("  ImageUrl value: %s", imageValue.Value))
 	end
 end
 
 -- Check specific assets by name
-checkAssetByName("Tesla Cybertruck")
-checkAssetByName("Jeep")
-checkAssetByName("Road Sign Stop")
-checkAssetByName("HawaiiClothing Store")
+checkAssetByName("sportymerch")
+checkAssetByName("kid")
 
-print("Asset initialization complete. AssetModule is now available in ReplicatedStorage.")
+LoggerService:info("ASSET", "Asset initialization complete. AssetModule is now available in ReplicatedStorage")

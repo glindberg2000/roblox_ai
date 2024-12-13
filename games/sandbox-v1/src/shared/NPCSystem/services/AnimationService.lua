@@ -1,5 +1,6 @@
 local AnimationManager = {}
-local Logger = require(game:GetService("ServerScriptService"):WaitForChild("Logger"))
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
 
 -- Different animation IDs for R6 and R15
 local animations = {
@@ -45,18 +46,18 @@ end
 
 function AnimationManager:applyAnimations(humanoid)
     if not humanoid then
-        Logger:log("ERROR", "Cannot apply animations: Humanoid is nil")
+        LoggerService:error("ANIMATION", "Cannot apply animations: Humanoid is nil")
         return
     end
     
     local rigType = self:getRigType(humanoid)
     if not rigType then
-        Logger:log("ERROR", string.format("Cannot determine rig type for humanoid: %s", 
+        LoggerService:error("ANIMATION", string.format("Cannot determine rig type for humanoid: %s", 
             humanoid.Parent and humanoid.Parent.Name or "unknown"))
         return
     end
     
-    Logger:log("ANIMATION", string.format("Detected %s rig for %s", 
+    LoggerService:debug("ANIMATION", string.format("Detected %s rig for %s", 
         rigType, humanoid.Parent.Name))
     
     -- Get or create animator
@@ -80,7 +81,7 @@ function AnimationManager:applyAnimations(humanoid)
         animation.AnimationId = id
         local track = animator:LoadAnimation(animation)
         currentAnimations[humanoid].tracks[name] = track
-        Logger:log("ANIMATION", string.format("Loaded %s animation for %s (%s)", 
+        LoggerService:debug("ANIMATION", string.format("Loaded %s animation for %s (%s)", 
             name, humanoid.Parent.Name, rigType))
     end
     
@@ -124,7 +125,7 @@ function AnimationManager:playAnimation(humanoid, animationName)
     local track = animData.tracks and animData.tracks[animationName]
     
     if not track then
-        Logger:log("ERROR", string.format("No %s animation track found for %s", 
+        LoggerService:error("ANIMATION", string.format("No %s animation track found for %s", 
             animationName, humanoid.Parent.Name))
         return
     end
@@ -146,7 +147,7 @@ function AnimationManager:playAnimation(humanoid, animationName)
         end
         
         track:Play()
-        Logger:log("ANIMATION", string.format("Playing %s animation for %s", 
+        LoggerService:debug("ANIMATION", string.format("Playing %s animation for %s", 
             animationName, humanoid.Parent.Name))
     end
 end
@@ -156,7 +157,7 @@ function AnimationManager:stopAnimations(humanoid)
         for _, track in pairs(currentAnimations[humanoid].tracks) do
             track:Stop()
         end
-        Logger:log("ANIMATION", string.format("Stopped all animations for %s", 
+        LoggerService:debug("ANIMATION", string.format("Stopped all animations for %s", 
             humanoid.Parent.Name))
     end
 end

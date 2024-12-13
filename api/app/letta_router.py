@@ -6,23 +6,28 @@ from typing import Dict, Any, Optional
 from pydantic import BaseModel
 from .database import get_npc_context, create_agent_mapping, get_agent_mapping, get_db, get_player_info
 from .mock_player import MockPlayer
-from .config import DEFAULT_LLM, LLM_CONFIGS, EMBEDDING_CONFIGS, DEFAULT_EMBEDDING
+from .config import (
+    DEFAULT_LLM, 
+    LLM_CONFIGS, 
+    EMBEDDING_CONFIGS, 
+    DEFAULT_EMBEDDING
+)
 import logging
 import json
 import uuid
 import time
 
 # Convert config to LLMConfig objects
-LLM_CONFIGS = {
-    name: LLMConfig(**config) 
-    for name, config in LLM_CONFIGS.items()
-}
-
-# Convert config to EmbeddingConfig objects
-EMBEDDING_CONFIGS = {
-    name: EmbeddingConfig(**config)
-    for name, config in EMBEDDING_CONFIGS.items()
-}
+# LLM_CONFIGS = {
+#     name: LLMConfig(**config) 
+#     for name, config in LLM_CONFIGS.items()
+# }
+# 
+# # Convert config to EmbeddingConfig objects
+# EMBEDDING_CONFIGS = {
+#     name: EmbeddingConfig(**config)
+#     for name, config in EMBEDDING_CONFIGS.items()
+# }
 
 def create_roblox_agent(
     client, 
@@ -33,12 +38,24 @@ def create_roblox_agent(
     llm_type: str = None
 ):
     """Create a Letta agent configured for Roblox NPCs"""
+    # Debug logging
+    logger.info(f"Creating agent with llm_type: {llm_type}")
+    logger.info(f"Default LLM from config: {DEFAULT_LLM}")
+    
     # Use config default if no llm_type specified
     llm_type = llm_type or DEFAULT_LLM
-    llm_config = LLM_CONFIGS.get(llm_type, LLM_CONFIGS[DEFAULT_LLM])
+    logger.info(f"Final llm_type selected: {llm_type}")
+    
+    # Get the config dictionary
+    llm_config_dict = LLM_CONFIGS[llm_type]
+    logger.info(f"Using LLM config: {llm_config_dict}")
+    
+    # Create LLMConfig object once
+    llm_config = LLMConfig(**llm_config_dict)
     
     # Use provided embedding config or default from config
-    embedding_config = embedding_config or EMBEDDING_CONFIGS[DEFAULT_EMBEDDING]
+    if not embedding_config:
+        embedding_config = EmbeddingConfig(**EMBEDDING_CONFIGS[DEFAULT_EMBEDDING])
     
     return client.create_agent(
         name=name,
@@ -160,12 +177,7 @@ Description: {player_info['description']}"""
             agent = letta_client.create_agent(
                 name=f"npc_{npc_details['display_name']}_{request.npc_id[:8]}_{request.participant_id[:8]}_{str(uuid.uuid4())[:8]}",
                 memory=memory,
-                llm_config=LLMConfig(
-                    model="gpt-4o-mini",
-                    model_endpoint_type="openai",
-                    model_endpoint="https://api.openai.com/v1",
-                    context_window=128000
-                ),
+                llm_config=LLM_CONFIGS[DEFAULT_LLM],
                 system=gpt_system.get_system_text("memgpt_chat"),
                 include_base_tools=True
             )
@@ -367,12 +379,13 @@ Description: {player_info['description']}"""
             )
             
             # Create agent using new structure from quickstart
+            logger.info(f"Request context llm_type: {request.context.get('llm_type')}")
             agent = create_roblox_agent(
                 client=direct_client,
                 name=f"npc_{npc_details['display_name']}_{request.npc_id[:8]}_{request.participant_id[:8]}_{str(uuid.uuid4())[:8]}",
                 memory=memory,
                 system=gpt_system.get_system_text("memgpt_chat"),
-                llm_type=request.context.get("llm_type", "claude")
+                llm_type=request.context.get("llm_type", DEFAULT_LLM)  # Explicitly use DEFAULT_LLM as fallback
             )
             
             # Store mapping

@@ -4,9 +4,10 @@ local V4ChatClient = {}
 -- Import existing utilities/services
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local NPCConfig = require(ReplicatedStorage.NPCSystem.NPCConfig)
-local ChatUtils = require(ReplicatedStorage.NPCSystem.ChatUtils)
-local LettaConfig = require(ReplicatedStorage.NPCSystem.LettaConfig)
+local NPCConfig = require(ReplicatedStorage.Shared.NPCSystem.config.NPCConfig)
+local ChatUtils = require(ReplicatedStorage.Shared.NPCSystem.chat.ChatUtils)
+local LettaConfig = require(ReplicatedStorage.Shared.NPCSystem.config.LettaConfig)
+local LoggerService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LoggerService)
 
 -- Configuration
 local API_VERSION = "v4"
@@ -77,18 +78,15 @@ local function adaptV4ToV3Response(v4Response)
 end
 
 local function handleLettaChat(data)
-    print("Attempting Letta chat first...")
-    print("Raw incoming data:", HttpService:JSONEncode(data))
+    LoggerService:debug("CHAT", "V4ChatClient: Attempting Letta chat first...")
+    LoggerService:debug("CHAT", string.format("V4ChatClient: Raw incoming data: %s", HttpService:JSONEncode(data)))
     
-    -- Get participant type from context or data
     local participantType = (data.context and data.context.participant_type) or data.participant_type or "player"
-    print("Determined participant type:", participantType)
+    LoggerService:debug("CHAT", string.format("V4ChatClient: Determined participant type: %s", participantType))
     
-    -- Get conversation key and history
     local convKey = getConversationKey(data.npc_id, data.participant_id)
     local history = conversationHistory[convKey] or {}
     
-    -- Check if conversation has gone on too long
     if #history >= 5 then  -- After 5 messages
         return {
             message = "I've got to run now! Thanks for the chat! See you later! 👋",
@@ -101,7 +99,6 @@ local function handleLettaChat(data)
         }
     end
     
-    -- Add current message to history
     addToHistory(data.npc_id, data.participant_id, data.message, data.context.participant_name)
     
     local lettaData = {
@@ -119,26 +116,21 @@ local function handleLettaChat(data)
         }
     }
 
-    print("Final Letta request:", HttpService:JSONEncode(lettaData))
+    LoggerService:debug("CHAT", string.format("V4ChatClient: Final Letta request: %s", HttpService:JSONEncode(lettaData)))
     
     local success, response = pcall(function()
         local jsonData = HttpService:JSONEncode(lettaData)
         local url = LETTA_BASE_URL .. LETTA_ENDPOINT
-        print("Sending to URL:", url)
-        return HttpService:PostAsync(
-            url,
-            jsonData,
-            Enum.HttpContentType.ApplicationJson,
-            false
-        )
+        LoggerService:debug("CHAT", string.format("V4ChatClient: Sending to URL: %s", url))
+        return HttpService:PostAsync(url, jsonData, Enum.HttpContentType.ApplicationJson, false)
     end)
     
     if not success then
-        warn("HTTP request failed:", response)
+        LoggerService:warn("CHAT", string.format("HTTP request failed: %s", response))
         return nil
     end
     
-    print("Raw Letta response:", response)
+    LoggerService:debug("CHAT", string.format("V4ChatClient: Raw Letta response: %s", response))
     local success2, decoded = pcall(HttpService.JSONDecode, HttpService, response)
     if not success2 then
         warn("JSON decode failed:", decoded)
@@ -150,7 +142,7 @@ end
 
 function V4ChatClient:SendMessageV4(originalRequest)
     local success, result = pcall(function()
-        print("V4: Attempting to send message") -- Debug
+        LoggerService:debug("CHAT", "V4: Attempting to send message")
         -- Convert V3 request format to V4
         local v4Request = adaptV3ToV4Request(originalRequest)
         
@@ -160,10 +152,10 @@ function V4ChatClient:SendMessageV4(originalRequest)
         ]]
 
         v4Request.system_prompt = (v4Request.system_prompt or "") .. actionInstructions
-        print("V4: Converted request:", HttpService:JSONEncode(v4Request))
+        LoggerService:debug("CHAT", string.format("V4: Converted request: %s", HttpService:JSONEncode(v4Request)))
         
         local response = ChatUtils:MakeRequest(ENDPOINTS.CHAT, v4Request)
-        print("V4: Got response:", HttpService:JSONEncode(response))
+        LoggerService:debug("CHAT", string.format("V4: Got response: %s", HttpService:JSONEncode(response)))
         
         return adaptV4ToV3Response(response)
     end)
@@ -181,15 +173,14 @@ function V4ChatClient:SendMessageV4(originalRequest)
 end
 
 function V4ChatClient:SendMessage(data)
-    print("V4ChatClient:SendMessage called")
+    LoggerService:debug("CHAT", "V4ChatClient: SendMessage called")
     -- Try Letta first
     local lettaResponse = handleLettaChat(data)
     if lettaResponse then
         return lettaResponse
     end
 
-    -- Return nil on failure to prevent error message loops
-    print("Letta failed - returning nil")
+    LoggerService:debug("CHAT", "Letta failed - returning nil")
     return nil
 end
 

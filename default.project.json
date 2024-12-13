@@ -1,27 +1,39 @@
 {
-  "name": "NPCSystem",
+  "name": "Sandbox V1",
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
-      "NPCSystem": {
-        "$path": "game/ReplicatedStorage/NPCSystem",
-        "V4ChatClient": {
-          "$path": "game/ReplicatedStorage/NPCSystem/V4ChatClient.lua"
-        },
-        "V3ChatClient": {
-          "$path": "game/ReplicatedStorage/NPCSystem/V3ChatClient.lua"
-        },
-        "NPCChatHandler": {
-          "$path": "game/ReplicatedStorage/NPCSystem/NPCChatHandler.lua"
-        },
-        "ChatUtils": {
-          "$path": "game/ReplicatedStorage/NPCSystem/ChatUtils.lua"
-        },
-        "NPCConfig": {
-          "$path": "game/ReplicatedStorage/NPCSystem/NPCConfig.lua"
+      "Shared": {
+        "$className": "Folder",
+        "NPCSystem": {
+          "$className": "Folder",
+          "chat": {
+            "$className": "Folder",
+            "ChatUtils": {
+              "$path": "src/shared/NPCSystem/chat/ChatUtils.lua"
+            },
+            "NPCChatHandler": {
+              "$path": "src/shared/NPCSystem/chat/NPCChatHandler.lua"
+            },
+            "V3ChatClient": {
+              "$path": "src/shared/NPCSystem/chat/V3ChatClient.lua"
+            },
+            "V4ChatClient": {
+              "$path": "src/shared/NPCSystem/chat/V4ChatClient.lua"
+            }
+          },
+          "config": {
+            "$className": "Folder",
+            "NPCConfig": {
+              "$path": "src/shared/NPCSystem/config/NPCConfig.lua"
+            },
+            "LettaConfig": {
+              "$path": "src/shared/NPCSystem/config/LettaConfig.lua"
+            }
+          }
         }
       }
     }
   }
-}
+} 

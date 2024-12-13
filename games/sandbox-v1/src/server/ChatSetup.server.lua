@@ -1,10 +1,10 @@
 local ChatService = game:GetService("Chat")
 local ServerScriptService = game:GetService("ServerScriptService")
-local Logger = require(ServerScriptService:WaitForChild("Logger"))
+local LoggerService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LoggerService)
 
-Logger:log("SYSTEM", "Setting up chat service")
+LoggerService:info("SYSTEM", "Setting up chat service")
 
--- Enable bubble chat without checking ChatVersion
+-- Enable bubble chat without using deprecated method
 ChatService.BubbleChatEnabled = true
 
-Logger:log("SYSTEM", "Chat setup completed")
+LoggerService:info("SYSTEM", "Chat setup completed")

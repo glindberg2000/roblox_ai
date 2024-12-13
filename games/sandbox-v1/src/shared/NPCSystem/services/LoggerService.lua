@@ -1,3 +1,5 @@
+print("LoggerService loaded")
+
 local LoggerService = {}
 
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"

@@ -1,7 +1,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
-local Logger = require(ServerScriptService:WaitForChild("Logger"))
+local Logger = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
 local NPCManagerV3 = require(ReplicatedStorage:WaitForChild("NPCManagerV3"))
 
 -- Initialize storage structure first

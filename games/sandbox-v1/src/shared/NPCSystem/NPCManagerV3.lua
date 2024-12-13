@@ -6,16 +6,25 @@ local Players = game:GetService("Players")
 local ServerScriptService = game:GetService("ServerScriptService")
 local ChatService = game:GetService("Chat")
 
-local AnimationManager = require(ReplicatedStorage.Shared.AnimationManager)
-local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
-local NPCChatHandler = require(ReplicatedStorage.NPCSystem.NPCChatHandler)
-local InteractionService = require(ReplicatedStorage.Shared.NPCSystem.services.InteractionService)
+-- Wait for critical paths and store references
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local NPCSystem = Shared:WaitForChild("NPCSystem")
+local services = NPCSystem:WaitForChild("services")
+local chat = NPCSystem:WaitForChild("chat")
+local config = NPCSystem:WaitForChild("config")
 
-print("Attempting to load services...")
+-- Update requires to use correct paths
+local AnimationManager = require(Shared.AnimationManager)
+local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
+local NPCChatHandler = require(chat:WaitForChild("NPCChatHandler"))
+local InteractionService = require(services:WaitForChild("InteractionService"))
+local LoggerService = require(services:WaitForChild("LoggerService"))
+
+LoggerService:info("SYSTEM", "Attempting to load services...")
 local success, result = pcall(function()
-    local vision = require(ReplicatedStorage.Shared.NPCSystem.services.VisionService)
-    local movement = require(ReplicatedStorage.Shared.NPCSystem.services.MovementService)
-    print("Services loaded successfully")
+    local vision = require(services:WaitForChild("VisionService"))
+    local movement = require(services:WaitForChild("MovementService"))
+    LoggerService:info("SYSTEM", "Services loaded successfully")
     return {vision = vision, movement = movement}
 end)
 
@@ -31,9 +40,9 @@ local Logger
 local function initializeLogger()
     local success, result = pcall(function()
         if game:GetService("RunService"):IsServer() then
-            return require(ServerScriptService:WaitForChild("Logger"))
+            return require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
         else
-            return require(ReplicatedStorage:WaitForChild("Logger"))
+            return require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
         end
     end)
 

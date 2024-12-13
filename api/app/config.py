@@ -61,7 +61,7 @@ Your response must always include an action, even if it's "none".
 # API Configuration
 
 # Default LLM to use ("gpt4-mini", "claude", or "mixtral")
-DEFAULT_LLM = "claude"
+DEFAULT_LLM = "gpt4-mini"
 
 # LLM Configuration
 LLM_CONFIGS = {
@@ -103,4 +103,4 @@ EMBEDDING_CONFIGS = {
 }
 
 # Default embedding config to use ("openai" or "anthropic")
-DEFAULT_EMBEDDING = "anthropic"
+DEFAULT_EMBEDDING = "openai"

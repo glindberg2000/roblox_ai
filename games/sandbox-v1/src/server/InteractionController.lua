@@ -1,6 +1,14 @@
 -- ServerScriptService/InteractionController.lua
 local ServerScriptService = game:GetService("ServerScriptService")
-local Logger = require(ServerScriptService:WaitForChild("Logger"))
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Wait for critical paths
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local NPCSystem = Shared:WaitForChild("NPCSystem")
+local services = NPCSystem:WaitForChild("services")
+
+local LoggerService = require(services.LoggerService)
+local InteractionService = require(services.InteractionService)
 
 local InteractionController = {}
 InteractionController.__index = InteractionController
@@ -8,22 +16,22 @@ InteractionController.__index = InteractionController
 function InteractionController.new()
     local self = setmetatable({}, InteractionController)
     self.activeInteractions = {}
-    Logger:log("SYSTEM", "InteractionController initialized")
+    LoggerService:log("SYSTEM", "InteractionController initialized")
     return self
 end
 
 function InteractionController:startInteraction(player, npc)
     if self.activeInteractions[player] then
-        Logger:log("PLAYER", string.format("Player %s already in interaction", player.Name))
+        LoggerService:log("PLAYER", string.format("Player %s already in interaction", player.Name))
         return false
     end
     self.activeInteractions[player] = {npc = npc, startTime = tick()}
-    Logger:log("PLAYER", string.format("Started interaction: %s with %s", player.Name, npc.displayName))
+    LoggerService:log("PLAYER", string.format("Started interaction: %s with %s", player.Name, npc.displayName))
     return true
 end
 
 function InteractionController:endInteraction(player)
-    Logger:log("PLAYER", string.format("Ending interaction for player %s", player.Name))
+    LoggerService:log("PLAYER", string.format("Ending interaction for player %s", player.Name))
     self.activeInteractions[player] = nil
 end
 
@@ -53,7 +61,7 @@ function InteractionController:startGroupInteraction(players, npc)
     for _, player in ipairs(players) do
         self.activeInteractions[player] = {npc = npc, group = players, startTime = tick()}
     end
-    Logger:log("PLAYER", string.format("Started group interaction with %d players", #players))
+    LoggerService:log("PLAYER", string.format("Started group interaction with %d players", #players))
 end
 
 function InteractionController:isInGroupInteraction(player)

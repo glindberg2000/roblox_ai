@@ -2,6 +2,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local TextService = game:GetService("TextService")
+local LoggerService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LoggerService)
 
 -- Get the chat specific RemoteEvent
 local NPCChatEvent = ReplicatedStorage:WaitForChild("NPCChatEvent")
@@ -82,4 +83,4 @@ if player then
     player.Chatted:Connect(onPlayerChatted)
 end
 
-print("NPC Client Chat Handler initialized")
+LoggerService:info("SYSTEM", "NPC Client Chat Handler initialized")
