@@ -787,12 +787,24 @@ function NPCManagerV3:stopFollowing(npc)
     npc.followTarget = nil
     npc.followStartTime = nil
 
+    -- Tell MovementService to stop following
+    if self.movementService then
+        self.movementService:stopFollowing(npc)
+    end
+
     -- Stop movement and animations
     local humanoid = npc.model:FindFirstChild("Humanoid")
     if humanoid then
         humanoid:MoveTo(npc.model.PrimaryPart.Position)
         AnimationManager:stopAnimations(humanoid)
     end
+
+    -- Update movement state without recursion
+    self.movementStates[npc.id] = {
+        state = "idle",
+        data = {},
+        timestamp = os.time()
+    }
 
     LoggerService:debug("MOVEMENT", string.format("%s stopped following and movement halted", npc.displayName))
 end
@@ -990,20 +1002,18 @@ function NPCManagerV3:setNPCMovementState(npc, state, data)
         timestamp = os.time()
     }
     
-    -- Handle state-specific logic
-    if state == "idle" then
-        self:stopFollowing(npc)
-    elseif state == "following" then
+    -- Handle state-specific logic without recursion
+    if state == "following" then
         npc.isFollowing = true
         npc.followTarget = data.target
         npc.followStartTime = os.time()
     end
     
-    LoggerService:debug(
+    LoggerService:debug("MOVEMENT", string.format(
         "Set %s movement state to %s",
         npc.displayName,
         state
-    )
+    ))
 end
 
 function NPCManagerV3:getNPCMovementState(npc)

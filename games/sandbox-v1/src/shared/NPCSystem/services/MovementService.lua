@@ -62,8 +62,16 @@ end
 
 function MovementService:stopFollowing(npc)
     if self.followThreads[npc] then
+        -- Cancel the follow thread
         task.cancel(self.followThreads[npc])
         self.followThreads[npc] = nil
+        
+        -- Stop the humanoid
+        if npc.model and npc.model:FindFirstChild("Humanoid") then
+            local humanoid = npc.model:FindFirstChild("Humanoid")
+            humanoid:MoveTo(npc.model.PrimaryPart.Position)
+        end
+        
         LoggerService:debug("MOVEMENT", string.format("Stopped following for %s", npc.displayName))
     end
 end
