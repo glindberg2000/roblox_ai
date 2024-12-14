@@ -1,6 +1,11 @@
 return {
     assets = {
         {
+            assetId = "109742670646912",
+            name = "Medkit",
+            description = "This Med Kit is compact and reliable, designed to treat injuries from accidents and damage. It contains bandages, antiseptic, and basic supplies to restore health quickly. Lightweight and easy to carry, it’s perfect for adventurers needing quick healing on the go.",
+        },
+        {
             assetId = "4446576906",
             name = "Noob2",
             description = "The humanoid asset features a simple, blocky character design. It has a round, yellow head with a cheerful smile, and a blue short-sleeved shirt. The arms are wide and yellow, while the legs are green, creating a bright, colorful appearance. The character embodies a playful, cartoonish style typical of Roblox avatars.",
@@ -9,6 +14,11 @@ return {
             assetId = "128282678684676",
             name = "Pete",
             description = "The Roblox character features a bright yellow face with a large, smiling expression. It has spiky blonde hair and wears stylish purple sunglasses. The shirt is black with a prominent smiley face graphic, while the pants are black with a white stripe, giving it a trendy look. The character stands confidently, showcasing its playful design.",
+        },
+        {
+            assetId = "106403462264097",
+            name = "Regenerative Syringe",
+            description = "The image features a Roblox asset depicting a syringe with a vibrant green liquid inside. Its barrel is sleek and cylindrical, topped with a metallic plunger. The syringe has black grip handles on either side, enhancing usability. The needle is long and slender, adding a realistic touch. Overall, it conveys a medical theme.",
         },
         {
             assetId = "7315192066",

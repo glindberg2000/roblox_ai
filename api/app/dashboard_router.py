@@ -42,6 +42,7 @@ from .database import (
 import uuid
 from fastapi.templating import Jinja2Templates
 import sqlite3
+from enum import Enum
 
 logger = logging.getLogger("roblox_app")
 
@@ -663,13 +664,36 @@ async def get_current_game():
         logger.error(f"Error getting current game: {str(e)}")
         return JSONResponse({"error": "Failed to get current game"}, status_code=500)
 
+class AssetType(str, Enum):
+    MODEL = "Model"
+    MESH = "Mesh"
+    DECAL = "Decal"
+    ANIMATION = "Animation"
+    PLUGIN = "Plugin"
+    SOUND = "Sound"
+    TEXTURE = "Texture"
+    CLOTHING = "Clothing"
+    PACKAGE = "Package"
+    BADGE = "Badge"
+    GAMEPASS = "GamePass"
+    FONT = "Font"
+    SCRIPT = "Script"
+    MATERIAL_VARIANT = "MaterialVariant"
+    MESH_PART = "MeshPart"
+    SURFACE_APPEARANCE = "SurfaceAppearance"
+    # Keep existing types
+    NPC = "NPC"
+    VEHICLE = "Vehicle"
+    BUILDING = "Building"
+    PROP = "Prop"
+
 @router.post("/api/assets/create")
 async def create_asset(
     request: Request,
     game_id: int = Form(...),
     asset_id: str = Form(...),
     name: str = Form(...),
-    type: str = Form(...),
+    type: AssetType = Form(...),
     file: UploadFile = File(...)
 ):
     try:
