@@ -247,11 +247,8 @@ function switchTab(tabName) {
         window.loadNPCs()
             .then(() => {
                 console.log('NPCs loaded, populating asset selector...');
-                // Then populate the asset selector
-                return populateAssetSelector();
-            })
-            .then(() => {
-                console.log('Asset selector populated successfully');
+                // Then populate the asset selector with NPC assets only
+                return window.populateCreateFormAssets();
             })
             .catch(error => {
                 console.error('Error in NPC tab initialization:', error);

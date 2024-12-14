@@ -224,15 +224,36 @@ function populateCreateAbilities() {
     }
 }
 
+// Add this function to populate the create form's asset selector
+async function populateCreateFormAssets() {
+    try {
+        const assets = await fetchAvailableModels();
+        const assetSelect = document.getElementById('assetSelect');
+        if (assetSelect) {
+            assetSelect.innerHTML = '<option value="">Select a model...</option>';
+            assets.forEach(asset => {
+                const option = document.createElement('option');
+                option.value = asset.assetId;
+                option.textContent = asset.name;
+                assetSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error populating create form assets:', error);
+    }
+}
+
 // Call this when the page loads
 document.addEventListener('DOMContentLoaded', () => {
     populateCreateAbilities();
+    populateCreateFormAssets();
 });
 
 // Make function globally available
 window.editNPC = editNPC;
 window.saveNPCEdit = saveNPCEdit;
 window.populateCreateAbilities = populateCreateAbilities;
+window.populateCreateFormAssets = populateCreateFormAssets;
 
 export async function createNPC(event) {
     event.preventDefault();

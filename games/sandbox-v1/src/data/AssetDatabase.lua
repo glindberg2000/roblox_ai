@@ -18,7 +18,7 @@ return {
         {
             assetId = "106403462264097",
             name = "Regenerative Syringe",
-            description = "The image features a Roblox asset depicting a syringe with a vibrant green liquid inside. Its barrel is sleek and cylindrical, topped with a metallic plunger. The syringe has black grip handles on either side, enhancing usability. The needle is long and slender, adding a realistic touch. Overall, it conveys a medical theme.",
+            description = "This large syringe has a vibrant green liquid inside. Its barrel is sleek and cylindrical, topped with a metallic plunger. The syringe has black grip handles on either side, enhancing usability. The needle is long and slender, adding a realistic touch. Overall, it conveys a medical theme.",
         },
         {
             assetId = "7315192066",
