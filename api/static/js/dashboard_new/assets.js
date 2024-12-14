@@ -21,6 +21,8 @@ export async function loadAssets() {
             data.assets.forEach(asset => {
                 const assetCard = document.createElement('div');
                 assetCard.className = 'bg-dark-800 p-6 rounded-xl shadow-xl border border-dark-700 hover:border-blue-500 transition-colors duration-200';
+                
+                // Create the card content without onclick string attributes
                 assetCard.innerHTML = `
                     <div class="aspect-w-16 aspect-h-9 mb-4">
                         <img src="${asset.imageUrl || ''}" 
@@ -31,16 +33,22 @@ export async function loadAssets() {
                     <p class="text-sm text-gray-400 mb-2">ID: ${asset.assetId}</p>
                     <p class="text-sm text-gray-400 mb-4">${asset.description || 'No description'}</p>
                     <div class="flex space-x-2">
-                        <button onclick="editAsset('${asset.assetId}')" 
-                                class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        <button class="edit-asset-btn flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                             Edit
                         </button>
-                        <button onclick="deleteAsset('${asset.assetId}')"
-                                class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                        <button class="delete-asset-btn flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
                             Delete
                         </button>
                     </div>
                 `;
+
+                // Add event listeners properly
+                const editBtn = assetCard.querySelector('.edit-asset-btn');
+                const deleteBtn = assetCard.querySelector('.delete-asset-btn');
+                
+                editBtn.addEventListener('click', () => editAsset(asset.assetId));
+                deleteBtn.addEventListener('click', () => deleteAsset(asset.assetId));
+                
                 assetList.appendChild(assetCard);
             });
         } else {
@@ -66,158 +74,72 @@ export async function editAsset(assetId) {
     }
 
     try {
-        // Fetch the asset directly from the API instead of state
-        const response = await fetch(`/api/assets?game_id=${state.currentGame.id}&asset_id=${assetId}`);
+        const response = await fetch(`/api/assets?game_id=${state.currentGame.id}`);
         const data = await response.json();
-        const asset = data.assets?.[0];  // Get first asset from response
+        const asset = data.assets.find(a => a.assetId === assetId);
 
         if (!asset) {
             showNotification('Asset not found', 'error');
             return;
         }
 
-        console.log('Editing asset:', asset); // Debug log
+        // Get the modal and form elements
+        const modal = document.getElementById('assetEditModal');
+        const form = document.getElementById('assetEditForm');
+        const nameInput = form.querySelector('#editAssetName');
+        const descriptionInput = form.querySelector('#editAssetDescription');
+        const assetIdInput = form.querySelector('#editAssetId');
+        const imageElement = form.querySelector('#editAssetImage');
+        const assetIdDisplay = form.querySelector('#editAssetId_display');
 
-        const modalContent = document.createElement('div');
-        modalContent.className = 'p-6';
-        modalContent.innerHTML = `
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xl font-bold text-blue-400">Edit Asset</h2>
-            </div>
-            <form class="space-y-4">
-                <input type="hidden" name="assetId" value="${asset.assetId}">
-                
-                <div>
-                    <label class="block text-sm font-medium mb-1 text-gray-300">Name:</label>
-                    <input type="text" name="name" value="${escapeHTML(asset.name)}" required
-                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
-                </div>
+        // Populate the form
+        nameInput.value = asset.name;
+        descriptionInput.value = asset.description || '';
+        assetIdInput.value = asset.assetId;
+        imageElement.src = asset.imageUrl || '';
+        assetIdDisplay.textContent = asset.assetId;
 
-                <div>
-                    <div class="flex items-center space-x-2 mb-1">
-                        <label class="block text-sm font-medium text-gray-300">Current Image:</label>
-                        <span class="text-sm text-gray-400">${asset.assetId}</span>
-                    </div>
-                    <img src="${asset.imageUrl}" alt="${escapeHTML(asset.name)}"
-                        class="w-full h-48 object-contain rounded-lg border border-dark-600 bg-dark-700 mb-4">
-                </div>
+        // Show the modal
+        modal.style.display = 'block';
 
-                <div>
-                    <label class="block text-sm font-medium mb-1 text-gray-300">Description:</label>
-                    <textarea name="description" required rows="4"
-                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">${escapeHTML(asset.description || '')}</textarea>
-                </div>
-
-                <div class="flex justify-end space-x-3 mt-6">
-                    <button type="button" onclick="window.hideModal()" 
-                        class="px-6 py-2 bg-dark-700 text-gray-300 rounded-lg hover:bg-dark-600">
-                        Cancel
-                    </button>
-                    <button type="submit" 
-                        class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                        Save Changes
-                    </button>
-                </div>
-            </form>
-        `;
-
-        showModal(modalContent);
-
-        // Add form submit handler
-        const form = modalContent.querySelector('form');
-        form.onsubmit = async (e) => {
-            e.preventDefault();
-            
-            // Get form values using form.elements
-            const name = form.elements['name'].value.trim();
-            const description = form.elements['description'].value.trim();
-
-            console.log('Form values:', { name, description }); // Debug log
-
-            // Validate
-            if (!name) {
-                showNotification('Name is required', 'error');
-                return;
-            }
-
-            try {
-                const response = await fetch(`/api/games/${state.currentGame.id}/assets/${asset.assetId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ name, description })
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to update asset');
-                }
-
-                hideModal();
-                showNotification('Asset updated successfully', 'success');
-                loadAssets();  // Refresh the list
-            } catch (error) {
-                console.error('Error saving asset:', error);
-                showNotification('Failed to save changes', 'error');
-            }
-        };
     } catch (error) {
         console.error('Error editing asset:', error);
         showNotification('Failed to load asset data', 'error');
     }
 }
 
-export async function saveAssetEdit(assetId) {
+export function closeAssetEditModal() {
+    const modal = document.getElementById('assetEditModal');
+    modal.style.display = 'none';
+}
+
+export async function saveAssetEdit(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const assetId = form.querySelector('#editAssetId').value;
+    const name = form.querySelector('#editAssetName').value.trim();
+    const description = form.querySelector('#editAssetDescription').value.trim();
+
     try {
-        // Get form values using the form element
-        const form = document.getElementById('editAssetForm');
-        const name = form.querySelector('#editAssetName').value.trim();
-        const description = form.querySelector('#editAssetDescription').value.trim();
-
-        // Debug log
-        console.log('Saving asset with data:', { name, description });
-
-        // Validate
-        if (!name) {
-            throw new Error('Name is required');
-        }
-
-        // Get the original asset to preserve existing data
-        const asset = state.currentAssets.find(a => a.assetId === assetId);
-        if (!asset) {
-            throw new Error('Asset not found');
-        }
-
-        // Merge new data with existing data
-        const data = {
-            name: name || asset.name,
-            description: description || asset.description,
-            type: asset.type,  // Preserve existing type
-            imageUrl: asset.imageUrl  // Preserve existing image URL
-        };
-
         const response = await fetch(`/api/games/${state.currentGame.id}/assets/${assetId}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify({ name, description })
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to update asset');
+            throw new Error('Failed to update asset');
         }
 
-        const result = await response.json();
-        console.log('Asset updated:', result);
-
-        hideModal();
+        closeAssetEditModal();
         showNotification('Asset updated successfully', 'success');
-        loadAssets();  // Refresh the list
+        loadAssets();
     } catch (error) {
         console.error('Error saving asset:', error);
-        showNotification(error.message, 'error');
+        showNotification('Failed to save changes', 'error');
     }
 }
 
@@ -297,6 +219,8 @@ window.loadAssets = loadAssets;
 window.editAsset = editAsset;
 window.deleteAsset = deleteAsset;
 window.createAsset = createAsset; 
+window.closeAssetEditModal = closeAssetEditModal;
+window.saveAssetEdit = saveAssetEdit;
 
 // Helper function to escape HTML
 function escapeHTML(str) {
