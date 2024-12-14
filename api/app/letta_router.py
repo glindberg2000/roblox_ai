@@ -16,6 +16,7 @@ import logging
 import json
 import uuid
 import time
+from .letta_utils import extract_tool_results
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -64,6 +65,7 @@ def create_roblox_agent(
         memory=memory,
         system=system,
         include_base_tools=True,
+        tools=["perform_action"],
         description="A Roblox NPC"
     )
 
@@ -380,12 +382,25 @@ Description: {player_info['description']}"""
             
             # Create agent using new structure from quickstart
             logger.info(f"Request context llm_type: {request.context.get('llm_type')}")
+            system_prompt = gpt_system.get_system_text("memgpt_chat").strip()
+            tools_section = """
+Performing actions:
+You have access to the `perform_action` tool. This tool allows you to direct NPC behavior by specifying an action and its parameters. Use it to control NPC actions such as following, unfollowing, examining objects, or navigating to destinations. Ensure actions align with the context of the conversation and the NPC's role.
+
+Base instructions finished.
+From now on, you are going to act as your persona."""
+
+            system_prompt = system_prompt.replace(
+                "Base instructions finished.\nFrom now on, you are going to act as your persona.",
+                tools_section
+            )
+
             agent = create_roblox_agent(
                 client=direct_client,
                 name=f"npc_{npc_details['display_name']}_{request.npc_id[:8]}_{request.participant_id[:8]}_{str(uuid.uuid4())[:8]}",
                 memory=memory,
-                system=gpt_system.get_system_text("memgpt_chat"),
-                llm_type=request.context.get("llm_type", DEFAULT_LLM)  # Explicitly use DEFAULT_LLM as fallback
+                system=system_prompt,
+                llm_type=request.context.get("llm_type", DEFAULT_LLM)
             )
             
             # Store mapping
@@ -411,19 +426,36 @@ Description: {player_info['description']}"""
             logger.error(f"Error sending message to Letta: {str(e)}")
             raise
         
-        # Extract message from function call
-        message = None
-        for msg in response.messages:
-            if msg.message_type == "function_call":
-                try:
-                    args = json.loads(msg.function_call.arguments)
-                    if "message" in args:
-                        message = args["message"]
-                        break
-                except:
-                    continue
+        # Use our new tool results extractor
+        results = extract_tool_results(response)
+        logger.info(f"Extracted tool results: {json.dumps(results, indent=2)}")
 
-        # Format response
+        # Get message and action
+        message = None
+        action = {"type": "none"}
+
+        # Process tool calls
+        for tool_call in results['tool_calls']:
+            logger.info(f"Processing tool call: {tool_call['name']}")
+            
+            if tool_call['name'] == 'perform_action' and tool_call['status'] == 'success':
+                # Extract action for Lua
+                if tool_call['arguments'] and 'action' in tool_call['arguments']:
+                    action = {"type": tool_call['arguments']['action']}
+                    logger.info(f"Found action: {action}")
+            elif tool_call['name'] == 'send_message':
+                # Get chat message
+                if tool_call['arguments'] and 'message' in tool_call['arguments']:
+                    message = tool_call['arguments']['message']
+                    logger.info(f"Found message: {message}")
+
+        # Use LLM response as fallback
+        if not message and results['llm_response']:
+            message = results['llm_response']
+            logger.info(f"Using LLM response as fallback: {message}")
+
+        logger.info(f"Final response: message='{message}', action={action}")
+
         return ChatResponse(
             message=message or "I'm having trouble responding right now.",
             conversation_id=None,
@@ -432,7 +464,7 @@ Description: {player_info['description']}"""
                 "interaction_id": request_context.get("interaction_id"),
                 "is_npc_chat": request_context.get("participant_type") == "npc"
             },
-            action={"type": "none"}
+            action=action
         )
 
     except Exception as e:
