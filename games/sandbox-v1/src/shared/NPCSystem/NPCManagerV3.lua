@@ -5,6 +5,7 @@ local ServerStorage = game:GetService("ServerStorage")
 local Players = game:GetService("Players")
 local ServerScriptService = game:GetService("ServerScriptService")
 local ChatService = game:GetService("Chat")
+local RunService = game:GetService("RunService")
 
 -- Wait for critical paths and store references
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -76,7 +77,7 @@ local function initializeLogger()
 end
 
 initializeLogger()
-Logger:log("SYSTEM", "NPCManagerV3 module loaded")
+LoggerService:info("SYSTEM", "NPCManagerV3 module loaded")
 
 local NPCManagerV3 = {}
 NPCManagerV3.__index = NPCManagerV3
@@ -106,7 +107,7 @@ function NPCManagerV3:initializeThreadManager()
         vision = 2
     }
     
-    Logger:log("SYSTEM", "Thread manager initialized")
+    LoggerService:debug("SYSTEM", "Thread manager initialized")
 end
 
 function NPCManagerV3.getInstance()
@@ -125,7 +126,7 @@ function NPCManagerV3.getInstance()
         instance:initializeThreadManager()
         
         -- Initialize immediately
-        Logger:log("SYSTEM", "Initializing NPCManagerV3")
+        LoggerService:info("SYSTEM", "Initializing NPCManagerV3")
         instance:loadNPCDatabase()
     end
     return instance
@@ -184,7 +185,7 @@ function NPCManagerV3:handlePlayerMessage(player, data)
     local npcName = data.npcName
     local message = data.message
     
-    Logger:log("CHAT", string.format("Received message from player %s to NPC %s: %s",
+    LoggerService:debug("CHAT", string.format("Received message from player %s to NPC %s: %s",
         player.Name,
         npcName,
         message
@@ -198,7 +199,7 @@ function NPCManagerV3:handlePlayerMessage(player, data)
                 -- Handle the interaction
                 self:handleNPCInteraction(npc, player, message)
             else
-                Logger:log("INTERACTION", string.format("NPC %s is not interacting with player %s", 
+                LoggerService:debug("INTERACTION", string.format("NPC %s is not interacting with player %s", 
                     npc.displayName, 
                     player.Name
                 ))
@@ -207,45 +208,47 @@ function NPCManagerV3:handlePlayerMessage(player, data)
         end
     end
     
-    Logger:log("ERROR", string.format("NPC %s not found when handling player message", npcName))
+    LoggerService:error("ERROR", string.format("NPC %s not found when handling player message", npcName))
 end
 
 function NPCManagerV3:loadNPCDatabase()
     if self.databaseLoaded then
-        Logger:log("DATABASE", "Database already loaded, skipping...")
+        LoggerService:debug("DATABASE", "Database already loaded, skipping...")
         return
     end
     
     local npcDatabase = require(ReplicatedStorage:WaitForChild("NPCDatabaseV3"))
-    Logger:log("DATABASE", string.format("Loading NPCs from database: %d NPCs found", #npcDatabase.npcs))
+    LoggerService:debug("DATABASE", string.format("Loading NPCs from database: %d NPCs found", #npcDatabase.npcs))
     
     for _, npcData in ipairs(npcDatabase.npcs) do
         self:createNPC(npcData)
     end
     
     self.databaseLoaded = true
-    Logger:log("DATABASE", "NPC Database loaded successfully")
+    LoggerService:debug("DATABASE", "NPC Database loaded successfully")
 end
 
 function NPCManagerV3:createNPC(npcData)
-    Logger:log("NPC", string.format("Creating NPC: %s", npcData.displayName))
+    LoggerService:debug("NPC", string.format("Creating NPC: %s", npcData.displayName))
     
     -- Debug log NPC data
-    Logger:log("DEBUG", string.format("Creating NPC with data: %s", 
+    LoggerService:debug("DEBUG", string.format("Creating NPC with data: %s", 
         HttpService:JSONEncode({
             displayName = npcData.displayName,
             abilities = npcData.abilities
         })
     ))
 
+    -- Ensure NPCs folder exists
     if not workspace:FindFirstChild("NPCs") then
         Instance.new("Folder", workspace).Name = "NPCs"
-        Logger:log("SYSTEM", "Created NPCs folder in workspace")
+        LoggerService:debug("SYSTEM", "Created NPCs folder in workspace")
     end
 
+    -- Create and set up NPC model
     local model = ServerStorage.Assets.npcs:FindFirstChild(npcData.model)
     if not model then
-        Logger:log("ERROR", string.format("Model not found for NPC: %s", npcData.displayName))
+        LoggerService:error("NPC", string.format("Model not found for NPC: %s", npcData.displayName))
         return
     end
 
@@ -253,23 +256,18 @@ function NPCManagerV3:createNPC(npcData)
     npcModel.Name = npcData.displayName
     npcModel.Parent = workspace.NPCs
 
-    -- Check for necessary parts
+    -- Validate required parts
     local humanoidRootPart = npcModel:FindFirstChild("HumanoidRootPart")
     local humanoid = npcModel:FindFirstChildOfClass("Humanoid")
     local head = npcModel:FindFirstChild("Head")
 
     if not humanoidRootPart or not humanoid or not head then
-        Logger:log("ERROR", string.format("NPC model %s is missing essential parts. Skipping creation.", npcData.displayName))
+        LoggerService:error("NPC", string.format("NPC model %s is missing essential parts", npcData.displayName))
         npcModel:Destroy()
         return
     end
 
-    -- Ensure the model has a PrimaryPart
-    npcModel.PrimaryPart = humanoidRootPart
-
-    -- Apply animations
-    AnimationManager:applyAnimations(humanoid)
-
+    -- Set up NPC instance
     local npc = {
         model = npcModel,
         id = npcData.id,
@@ -291,21 +289,24 @@ function NPCManagerV3:createNPC(npcData)
         chatHistory = {},
     }
 
-    -- Position the NPC
+    -- Initialize components
+    npcModel.PrimaryPart = humanoidRootPart
     humanoidRootPart.CFrame = CFrame.new(npcData.spawnPosition)
-
+    AnimationManager:applyAnimations(humanoid)
+    self:initializeNPCChatSpeaker(npc)
     self:setupClickDetector(npc)
+
+    -- Store NPC reference
     self.npcs[npc.id] = npc
     
-    Logger:log("NPC", string.format("NPC added: %s (Total NPCs: %d)", npc.displayName, self:getNPCCount()))
+    LoggerService:debug("NPC", string.format("NPC added: %s (Total NPCs: %d)", npc.displayName, self:getNPCCount()))
     
-    -- Return the created NPC
     return npc
 end
 
 -- Add a separate function to test chat for all NPCs
 function NPCManagerV3:testAllNPCChat()
-    Logger:log("TEST", "Testing chat for all NPCs...")
+    LoggerService:debug("TEST", "Testing chat for all NPCs...")
     for _, npc in pairs(self.npcs) do
         if npc.model and npc.model:FindFirstChild("Head") then
             -- Try simple chat method only
@@ -313,20 +314,7 @@ function NPCManagerV3:testAllNPCChat()
             wait(0.5) -- Small delay between tests
         end
     end
-    Logger:log("TEST", "Chat testing complete")
-end
-
--- Modify the createNPC function to initialize chat speaker
--- Store the original createNPC function
-local originalCreateNPC = NPCManagerV3.createNPC
-
--- Override createNPC to add chat speaker initialization
-function NPCManagerV3:createNPC(npcData)
-    local npc = originalCreateNPC(self, npcData)
-    if npc then
-        self:initializeNPCChatSpeaker(npc)
-    end
-    return npc
+    LoggerService:debug("TEST", "Chat testing complete")
 end
 
 function NPCManagerV3:getNPCCount()
@@ -334,7 +322,7 @@ function NPCManagerV3:getNPCCount()
 	for _ in pairs(self.npcs) do
 		count = count + 1
 	end
-	Logger:log("DEBUG", string.format("Current NPC count: %d", count))
+	LoggerService:debug("DEBUG", string.format("Current NPC count: %d", count))
 	return count
 end
 
@@ -347,12 +335,12 @@ function NPCManagerV3:setupClickDetector(npc)
 
 	if parent then
 		clickDetector.Parent = parent
-		Logger:log("INTERACTION", string.format("Set up ClickDetector for %s with radius %d", 
+		LoggerService:debug("INTERACTION", string.format("Set up ClickDetector for %s with radius %d", 
 			npc.displayName, 
 			npc.responseRadius
 		))
 	else
-		Logger:log("ERROR", string.format("Could not find suitable part for ClickDetector on %s", npc.displayName))
+		LoggerService:error("ERROR", string.format("Could not find suitable part for ClickDetector on %s", npc.displayName))
 		return
 	end
 
@@ -392,7 +380,7 @@ function NPCManagerV3:getCacheKey(npc, player, message)
 	}
 	
 	local key = HttpService:JSONEncode(context)
-	Logger:log("DEBUG", string.format("Generated cache key for %s and %s", npc.displayName, player.Name))
+	LoggerService:debug("DEBUG", string.format("Generated cache key for %s and %s", npc.displayName, player.Name))
 	return key
 end
 
@@ -484,28 +472,28 @@ end
 function NPCManagerV3:displayMessage(npc, message, recipient)
     -- Don't propagate error messages between NPCs
     if self:isNPCParticipant(recipient) and message == "I'm having trouble understanding right now." then
-        Logger:log("CHAT", "Blocking error message propagation between NPCs")
+        LoggerService:log("CHAT", "Blocking error message propagation between NPCs")
         return
     end
 
     -- Ensure we have a valid model and head
     if not npc.model or not npc.model:FindFirstChild("Head") then
-        Logger:log("ERROR", string.format("Cannot display message for %s - missing model or head", npc.displayName))
+        LoggerService:error("ERROR", string.format("Cannot display message for %s - missing model or head", npc.displayName))
         return
     end
 
     -- Create chat bubble
     local success, err = pcall(function()
         game:GetService("Chat"):Chat(npc.model.Head, message)
-        Logger:log("CHAT", string.format("Created chat bubble for NPC: %s", npc.displayName))
+        LoggerService:debug("CHAT", string.format("Created chat bubble for NPC: %s", npc.displayName))
     end)
     if not success then
-        Logger:log("ERROR", string.format("Failed to create chat bubble: %s", err))
+        LoggerService:error("ERROR", string.format("Failed to create chat bubble: %s", err))
     end
 
     -- Handle NPC-to-NPC messages
     if self:isNPCParticipant(recipient) then
-        Logger:log("CHAT", string.format("NPC %s to NPC %s: %s",
+        LoggerService:debug("CHAT", string.format("NPC %s to NPC %s: %s",
             npc.displayName,
             recipient.displayName or recipient.Name,
             message
@@ -532,7 +520,7 @@ function NPCManagerV3:displayMessage(npc, message, recipient)
 
     -- Handle player messages
     if typeof(recipient) == "Instance" and recipient:IsA("Player") then
-        Logger:log("CHAT", string.format("NPC %s sending message to player %s: %s",
+        LoggerService:debug("CHAT", string.format("NPC %s sending message to player %s: %s",
             npc.displayName,
             recipient.Name,
             message
@@ -567,7 +555,7 @@ function NPCManagerV3:processAIResponse(npc, participant, response)
     end
 
     if response.action then
-        Logger:log("ACTION", string.format("Executing action for %s: %s",
+        LoggerService:debug("ACTION", string.format("Executing action for %s: %s",
             npc.displayName,
             HttpService:JSONEncode(response.action)
         ))
@@ -575,7 +563,7 @@ function NPCManagerV3:processAIResponse(npc, participant, response)
     end
 
     if response.internal_state then
-        Logger:log("STATE", string.format("Updating internal state for %s: %s",
+        LoggerService:debug("STATE", string.format("Updating internal state for %s: %s",
             npc.displayName,
             HttpService:JSONEncode(response.internal_state)
         ))
@@ -590,7 +578,7 @@ function NPCManagerV3:initializeNPCChatSpeaker(npc)
         local createSpeaker = _G.CreateNPCSpeaker
         if createSpeaker then
             createSpeaker(npc.model)
-            Logger:log("SYSTEM", string.format("Initialized chat speaker for NPC: %s", npc.displayName))
+            LoggerService:debug("SYSTEM", string.format("Initialized chat speaker for NPC: %s", npc.displayName))
         end
     end
 end
@@ -598,18 +586,18 @@ end
 -- Update the displayNPCToNPCMessage function in NPCManagerV3.lua
 function NPCManagerV3:testChatBubbles(fromNPC)
     if not fromNPC or not fromNPC.model then
-        Logger:log("ERROR", "Invalid NPC for chat test")
+        LoggerService:error("ERROR", "Invalid NPC for chat test")
         return
     end
 
     local head = fromNPC.model:FindFirstChild("Head")
     if not head then
-        Logger:log("ERROR", string.format("NPC %s has no Head part!", fromNPC.displayName))
+        LoggerService:error("ERROR", string.format("NPC %s has no Head part!", fromNPC.displayName))
         return
     end
 
     -- Try each chat method
-    Logger:log("TEST", "Testing chat methods...")
+    LoggerService:debug("TEST", "Testing chat methods...")
 
     -- Method 1: Direct Chat
     game:GetService("Chat"):Chat(head, "Test 1: Direct Chat")
@@ -631,20 +619,20 @@ function NPCManagerV3:testChatBubbles(fromNPC)
     end)
     
     if not success then
-        Logger:log("ERROR", "ChatService method failed: " .. tostring(err))
+        LoggerService:error("ERROR", "ChatService method failed: " .. tostring(err))
     end
 
-    Logger:log("TEST", "Chat test complete")
+    LoggerService:debug("TEST", "Chat test complete")
 end
 
 -- Also update displayNPCToNPCMessage to try all methods
 function NPCManagerV3:displayNPCToNPCMessage(fromNPC, toNPC, message)
     if not (fromNPC and toNPC and message) then
-        Logger:log("ERROR", "Missing required parameters for NPC-to-NPC message")
+        LoggerService:error("ERROR", "Missing required parameters for NPC-to-NPC message")
         return
     end
 
-    Logger:log("CHAT", string.format("NPC %s to NPC %s: %s", 
+    LoggerService:debug("CHAT", string.format("NPC %s to NPC %s: %s", 
         fromNPC.displayName or "Unknown",
         toNPC.displayName or "Unknown",
         message
@@ -653,7 +641,7 @@ function NPCManagerV3:displayNPCToNPCMessage(fromNPC, toNPC, message)
     -- Use the same direct Chat call that worked in our test
     if fromNPC.model and fromNPC.model:FindFirstChild("Head") then
         game:GetService("Chat"):Chat(fromNPC.model.Head, message)
-        Logger:log("CHAT", string.format("Created chat bubble for NPC: %s", fromNPC.displayName))
+        LoggerService:debug("CHAT", string.format("Created chat bubble for NPC: %s", fromNPC.displayName))
     end
     
     -- Fire event to all clients for redundancy
@@ -665,33 +653,33 @@ function NPCManagerV3:displayNPCToNPCMessage(fromNPC, toNPC, message)
 end
 
 function NPCManagerV3:executeAction(npc, player, action)
-    Logger:log("ACTION", string.format("Executing action: %s for %s", action.type, npc.displayName))
+    LoggerService:debug("ACTION", string.format("Executing action: %s for %s", action.type, npc.displayName))
     
     if action.type == "stop_talking" then
         -- Stop following if we were following this player
         if npc.isFollowing and npc.followTarget == player then
-            Logger:log("MOVEMENT", string.format("Stopping follow as part of ending interaction: %s", player.Name))
+            LoggerService:debug("MOVEMENT", string.format("Stopping follow as part of ending interaction: %s", player.Name))
             self:stopFollowing(npc)
         end
         -- Let the normal conversation flow handle the ending
     elseif action.type == "follow" then
-        Logger:log("MOVEMENT", string.format("Starting to follow player: %s", player.Name))
+        LoggerService:debug("MOVEMENT", string.format("Starting to follow player: %s", player.Name))
         self:startFollowing(npc, player)
     elseif action.type == "unfollow" then
-        Logger:log("MOVEMENT", string.format("Stopping following player: %s", player.Name))
+        LoggerService:debug("MOVEMENT", string.format("Stopping following player: %s", player.Name))
         self:stopFollowing(npc)
     elseif action.type == "emote" and action.data and action.data.emote then
-        Logger:log("ANIMATION", string.format("Playing emote: %s", action.data.emote))
+        LoggerService:debug("ANIMATION", string.format("Playing emote: %s", action.data.emote))
         self:playEmote(npc, action.data.emote)
     elseif action.type == "move" and action.data and action.data.position then
-        Logger:log("MOVEMENT", string.format("Moving to position: %s", 
+        LoggerService:debug("MOVEMENT", string.format("Moving to position: %s", 
             tostring(action.data.position)
         ))
         self:moveNPC(npc, Vector3.new(action.data.position.x, action.data.position.y, action.data.position.z))
     elseif action.type == "none" then
-        Logger:log("ACTION", "No action required")
+        LoggerService:debug("ACTION", "No action required")
     else
-        Logger:log("ERROR", string.format("Unknown action type: %s", action.type))
+        LoggerService:error("ERROR", string.format("Unknown action type: %s", action.type))
     end
 end
 
@@ -702,7 +690,7 @@ function NPCManagerV3:startFollowing(npc, player)
     npc.isWalking = false  -- Will be set to true when movement starts
     -- Ensure NPC can move while following
     self:setNPCMovementState(npc, "following")
-    Logger:log("STATE", string.format("Follow state set for %s: isFollowing=%s, followTarget=%s",
+    LoggerService:debug("STATE", string.format("Follow state set for %s: isFollowing=%s, followTarget=%s",
         npc.displayName,
         tostring(npc.isFollowing),
         tostring(player.Name)
@@ -710,7 +698,7 @@ function NPCManagerV3:startFollowing(npc, player)
 end
 
 function NPCManagerV3:updateInternalState(npc, internalState)
-	Logger:log("STATE", string.format("Updating internal state for %s: %s",
+	LoggerService:debug("STATE", string.format("Updating internal state for %s: %s",
 		npc.displayName,
 		HttpService:JSONEncode(internalState)
 	))
@@ -726,15 +714,15 @@ function NPCManagerV3:playEmote(npc, emoteName)
         local animation = ServerStorage.Animations:FindFirstChild(emoteName)
         if animation then
             Animator:LoadAnimation(animation):Play()
-            Logger:log("ANIMATION", string.format("Playing emote %s for %s", emoteName, npc.displayName))
+            LoggerService:debug("ANIMATION", string.format("Playing emote %s for %s", emoteName, npc.displayName))
         else
-            Logger:log("ERROR", string.format("Animation not found: %s", emoteName))
+            LoggerService:error("ERROR", string.format("Animation not found: %s", emoteName))
         end
     end
 end
 
 function NPCManagerV3:moveNPC(npc, targetPosition)
-    Logger:log("MOVEMENT", string.format("Moving %s to position %s", 
+    LoggerService:debug("MOVEMENT", string.format("Moving %s to position %s", 
         npc.displayName, 
         tostring(targetPosition)
     ))
@@ -743,7 +731,7 @@ function NPCManagerV3:moveNPC(npc, targetPosition)
     if Humanoid then
         Humanoid:MoveTo(targetPosition)
     else
-        Logger:log("ERROR", string.format("Cannot move %s (no Humanoid)", npc.displayName))
+        LoggerService:error("ERROR", string.format("Cannot move %s (no Humanoid)", npc.displayName))
     end
 end
 
@@ -759,7 +747,7 @@ function NPCManagerV3:stopFollowing(npc)
         AnimationManager:stopAnimations(humanoid)
     end
 
-    Logger:log("MOVEMENT", string.format("%s stopped following and movement halted", npc.displayName))
+    LoggerService:debug("MOVEMENT", string.format("%s stopped following and movement halted", npc.displayName))
 end
 
 function NPCManagerV3:handleNPCInteraction(npc, participant, message)
@@ -776,20 +764,20 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
         self:endInteraction(participant)
     end
 
-    Logger:log("DEBUG", string.format(
+    LoggerService:debug(
         "Starting interaction - NPC: %s, Participant: %s (%s), Message: %s",
         npc.displayName,
         participantName,
         participantType,
         message
-    ))
+    )
 
     -- Generate unique interaction ID
     local interactionId = HttpService:GenerateGUID()
     
     -- Check if we can create new interaction thread
     if #self.threadPool.interactionThreads >= self.threadLimits.interaction then
-        Logger:log("THREAD", "Maximum interaction threads reached, queuing interaction")
+        LoggerService:debug("THREAD", "Maximum interaction threads reached, queuing interaction")
         return
     end
     
@@ -803,11 +791,11 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
         local lastInteraction = self.conversationCooldowns[cooldownKey]
         
         if lastInteraction and (os.time() - lastInteraction) < 30 then
-            Logger:log("CHAT", string.format(
+            LoggerService:debug(
                 "Interaction between %s and %s is on cooldown",
                 npc.displayName,
                 participant.Name
-            ))
+            )
             return
         end
 
@@ -815,7 +803,7 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
         if npc.model and npc.model:FindFirstChild("Humanoid") then
             npc.model.Humanoid.WalkSpeed = 0
             npc.isMovementLocked = true
-            Logger:log("MOVEMENT", string.format("Locked movement for %s during interaction", npc.displayName))
+            LoggerService:debug("MOVEMENT", string.format("Locked movement for %s during interaction", npc.displayName))
         end
 
         -- Check for conversation ending phrases
@@ -864,7 +852,7 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
             if npc.model and npc.model:FindFirstChild("Humanoid") then
                 npc.model.Humanoid.WalkSpeed = npc.defaultWalkSpeed or 16
                 npc.isMovementLocked = false
-                Logger:log("MOVEMENT", string.format("Unlocked movement for %s after failed interaction", npc.displayName))
+                LoggerService:debug("MOVEMENT", string.format("Unlocked movement for %s after failed interaction", npc.displayName))
             end
             return nil
         end
@@ -887,12 +875,12 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
             task.wait(30) -- Timeout after 30 seconds
             if thread then
                 task.cancel(thread)
-                Logger:log("THREAD", string.format("Terminated hung interaction thread %s", interactionId))
+                LoggerService:debug(string.format("Terminated hung interaction thread %s", interactionId))
             end
         end)
         
         if not success then
-            Logger:log("ERROR", string.format("Thread monitoring failed: %s", result))
+            LoggerService:error(string.format("Thread monitoring failed: %s", result))
         end
     end)
 end
@@ -901,7 +889,7 @@ function NPCManagerV3:canNPCsInteract(npc1, npc2)
     -- Check if either NPC is in conversation
     for userId, activeNPC in pairs(self.activeConversations) do
         if activeNPC == npc1 or activeNPC == npc2 then
-            Logger:log("CHAT", string.format(
+            LoggerService:debug(string.format(
                 "Blocking NPC interaction: %s or %s is busy",
                 npc1.displayName,
                 npc2.displayName
@@ -964,11 +952,11 @@ function NPCManagerV3:setNPCMovementState(npc, state, data)
         npc.followStartTime = os.time()
     end
     
-    Logger:log("MOVEMENT", string.format(
+    LoggerService:debug(
         "Set %s movement state to %s",
         npc.displayName,
         state
-    ))
+    )
 end
 
 function NPCManagerV3:getNPCMovementState(npc)
@@ -982,7 +970,7 @@ function NPCManagerV3:cleanupThreads()
             local threadId = threads[i]
             if not ThreadManager.activeThreads[threadId] then
                 table.remove(threads, i)
-                Logger:log("THREAD", string.format("Cleaned up inactive %s thread %s", threadType, threadId))
+                LoggerService:debug("THREAD", string.format("Cleaned up inactive %s thread %s", threadType, threadId))
             end
         end
     end
