@@ -3,31 +3,49 @@ const ABILITY_CONFIG = [
         id: 'move',
         name: 'Movement',
         icon: 'fas fa-walking',
-        description: 'Allows NPC to move around'
+        description: 'Enables basic movement between locations'
     },
     {
         id: 'chat',
         name: 'Chat',
         icon: 'fas fa-comments',
-        description: 'Enables conversation with players'
+        description: 'Enables responding to player conversations'
     },
     {
-        id: 'trade',
-        name: 'Trading',
-        icon: 'fas fa-exchange-alt',
-        description: 'Allows trading items with players'
+        id: 'initiate_chat',
+        name: 'Initiate Chat',
+        icon: 'fas fa-comment-dots',
+        description: 'Allows NPC to start conversations with nearby players'
     },
     {
-        id: 'quest',
-        name: 'Quest Giver',
-        icon: 'fas fa-scroll',
-        description: 'Can give and manage quests'
+        id: 'follow',
+        name: 'Follow',
+        icon: 'fas fa-user-friends',
+        description: 'Enables following players or other NPCs'
     },
     {
-        id: 'combat',
-        name: 'Combat',
-        icon: 'fas fa-sword',
-        description: 'Enables combat abilities'
+        id: 'unfollow',
+        name: 'Unfollow',
+        icon: 'fas fa-user-times',
+        description: 'Allows NPC to stop following targets'
+    },
+    {
+        id: 'run',
+        name: 'Run',
+        icon: 'fas fa-running',
+        description: 'Enables faster movement speed'
+    },
+    {
+        id: 'jump',
+        name: 'Jump',
+        icon: 'fas fa-arrow-up',
+        description: 'Allows NPC to jump over obstacles'
+    },
+    {
+        id: 'emote',
+        name: 'Emote',
+        icon: 'fas fa-smile',
+        description: 'Enables playing animations and emotes'
     }
 ];
 
