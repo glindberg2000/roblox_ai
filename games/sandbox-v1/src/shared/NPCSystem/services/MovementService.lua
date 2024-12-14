@@ -1,5 +1,12 @@
 -- MovementService.lua
-local LoggerService = require(game.ReplicatedStorage.Shared.LoggerService)
+local LoggerService = {
+    debug = function(_, category, message) 
+        print(string.format("[DEBUG] [%s] %s", category, message))
+    end,
+    warn = function(_, category, message)
+        warn(string.format("[WARN] [%s] %s", category, message))
+    end
+}
 
 local MovementService = {}
 MovementService.__index = MovementService

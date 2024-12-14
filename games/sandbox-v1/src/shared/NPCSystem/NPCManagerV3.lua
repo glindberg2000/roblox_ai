@@ -113,21 +113,31 @@ end
 function NPCManagerV3.getInstance()
     if not instance then
         instance = setmetatable({}, NPCManagerV3)
+        
+        LoggerService:info("SYSTEM", "Initializing NPCManagerV3...")
+        
+        -- Initialize core components first
         instance.npcs = {}
         instance.responseCache = {}
-        instance.interactionController = require(game.ServerScriptService.InteractionController).new()
-        instance.activeInteractions = {} -- Track ongoing interactions
-        instance.movementStates = {} -- Track movement states per NPC
-        instance.activeConversations = {}  -- Track active conversations
-        instance.lastInteractionTime = {}  -- Track timing
-        instance.conversationCooldowns = {} -- Track cooldowns between NPCs
+        instance.activeInteractions = {}
+        instance.movementStates = {}
+        instance.activeConversations = {}
+        instance.lastInteractionTime = {}
+        instance.conversationCooldowns = {}
         
-        -- Add thread manager initialization
+        -- Initialize thread manager
         instance:initializeThreadManager()
         
-        -- Initialize immediately
-        LoggerService:info("SYSTEM", "Initializing NPCManagerV3")
+        -- Initialize services
+        instance.movementService = MovementService.new()
+        instance.interactionController = require(game.ServerScriptService.InteractionController).new()
+        
+        LoggerService:info("SYSTEM", "Services initialized")
+        
+        -- Load NPC database
         instance:loadNPCDatabase()
+        
+        LoggerService:info("SYSTEM", "NPCManagerV3 initialization complete")
     end
     return instance
 end
@@ -684,17 +694,54 @@ function NPCManagerV3:executeAction(npc, player, action)
 end
 
 function NPCManagerV3:startFollowing(npc, player)
+    LoggerService:debug("MOVEMENT", string.format(
+        "Starting follow - NPC: %s, Player: %s",
+        npc.displayName,
+        player and player.Name or "nil"
+    ))
+
+    if not player then
+        LoggerService:warn("MOVEMENT", "Cannot start following - no player provided")
+        return false
+    end
+
+    if not player.Character then
+        LoggerService:warn("MOVEMENT", string.format(
+            "Cannot start following - no character for player %s",
+            player.Name
+        ))
+        return false
+    end
+
     npc.isFollowing = true
     npc.followTarget = player
     npc.followStartTime = tick()
-    npc.isWalking = false  -- Will be set to true when movement starts
-    -- Ensure NPC can move while following
-    self:setNPCMovementState(npc, "following")
-    LoggerService:debug("STATE", string.format("Follow state set for %s: isFollowing=%s, followTarget=%s",
+    npc.isWalking = false
+    
+    -- Pass the player's character as the target
+    self:setNPCMovementState(npc, "following", {
+        target = player.Character,
+        targetId = player.UserId
+    })
+
+    -- Explicitly start following behavior
+    if self.movementService then
+        self.movementService:startFollowing(npc, player.Character, {
+            distance = 5,
+            updateRate = 0.1
+        })
+    else
+        LoggerService:warn("MOVEMENT", "MovementService not initialized")
+        return false
+    end
+
+    LoggerService:debug("MOVEMENT", string.format(
+        "Follow state set for %s -> %s",
         npc.displayName,
-        tostring(npc.isFollowing),
-        tostring(player.Name)
+        player.Name
     ))
+
+    return true
 end
 
 function NPCManagerV3:updateInternalState(npc, internalState)
