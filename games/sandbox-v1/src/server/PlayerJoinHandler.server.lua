@@ -3,9 +3,11 @@ local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local NPCSystem = Shared:WaitForChild("NPCSystem")
 
 -- Initialize Logger
-local Logger = require(ServerScriptService.Logger)
+local Logger = require(NPCSystem.services.LoggerService)
 
 -- Folder to store player descriptions in ReplicatedStorage
 local PlayerDescriptionsFolder = ReplicatedStorage:FindFirstChild("PlayerDescriptions")

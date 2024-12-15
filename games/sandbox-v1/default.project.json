@@ -7,68 +7,16 @@
       "Shared": {
         "$className": "Folder",
         "NPCSystem": {
-          "$className": "Folder",
-          "PerformanceConfig": {
-            "$path": "src/shared/NPCSystem/config/PerformanceConfig.lua"
-          },
-          "NPCManagerV3": {
-            "$path": "src/shared/NPCSystem/NPCManagerV3.lua"
-          },
-          "services": {
-            "$className": "Folder",
-            "MovementService": {
-              "$path": "src/shared/NPCSystem/services/MovementService.lua"
-            },
-            "VisionService": {
-              "$path": "src/shared/NPCSystem/services/VisionService.lua"
-            },
-            "InteractionService": {
-              "$path": "src/shared/NPCSystem/services/InteractionService.lua"
-            },
-            "AnimationService": {
-              "$path": "src/shared/NPCSystem/services/AnimationService.lua"
-            },
-            "LoggerService": {
-              "$path": "src/shared/NPCSystem/services/LoggerService.lua"
-            },
-            "ModelLoader": {
-              "$path": "src/shared/NPCSystem/services/ModelLoader.lua"
-            }
-          },
-          "chat": {
-            "$className": "Folder",
-            "V4ChatClient": {
-              "$path": "src/shared/NPCSystem/chat/V4ChatClient.lua"
-            },
-            "V3ChatClient": {
-              "$path": "src/shared/NPCSystem/chat/V3ChatClient.lua"
-            },
-            "NPCChatHandler": {
-              "$path": "src/shared/NPCSystem/chat/NPCChatHandler.lua"
-            },
-            "ChatUtils": {
-              "$path": "src/shared/NPCSystem/chat/ChatUtils.lua"
-            }
-          },
-          "config": {
-            "$className": "Folder",
-            "NPCConfig": {
-              "$path": "src/shared/NPCSystem/config/NPCConfig.lua"
-            },
-            "LettaConfig": {
-              "$path": "src/shared/NPCSystem/config/LettaConfig.lua"
-            }
-          }
+          "$path": "src/shared/NPCSystem"
         }
       },
-      "NPCDatabaseV3": {
-        "$path": "src/data/NPCDatabase.lua"
+      "Data": {
+        "$path": "src/data"
       }
     },
     "ServerStorage": {
       "$className": "ServerStorage",
       "Assets": {
-        "$className": "Folder",
         "$path": "src/assets"
       }
     },
@@ -88,9 +36,6 @@
       },
       "AssetInitializer": {
         "$path": "src/server/AssetInitializer.server.lua"
-      },
-      "AssetDatabase": {
-        "$path": "src/data/AssetDatabase.lua"
       }
     },
     "StarterPlayer": {

@@ -15,7 +15,6 @@ local chat = NPCSystem:WaitForChild("chat")
 local config = NPCSystem:WaitForChild("config")
 
 -- Update requires to use correct paths
-local AnimationManager = require(Shared.AnimationManager)
 local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
 local NPCChatHandler = require(chat:WaitForChild("NPCChatHandler"))
 local InteractionService = require(services:WaitForChild("InteractionService"))
@@ -384,7 +383,8 @@ function NPCManagerV3:createNPC(npcData)
     -- Initialize components
     npcModel.PrimaryPart = humanoidRootPart
     humanoidRootPart.CFrame = CFrame.new(npcData.spawnPosition)
-    AnimationManager:applyAnimations(humanoid)
+    -- Temporarily disable animations
+    -- AnimationManager:applyAnimations(humanoid)
     self:initializeNPCChatSpeaker(npc)
     self:setupClickDetector(npc)
 
@@ -891,7 +891,37 @@ function NPCManagerV3:stopFollowing(npc)
     LoggerService:debug("MOVEMENT", string.format("%s stopped following and movement halted", npc.displayName))
 end
 
+-- Add at the top with other state variables
+local recentMessages = {} -- Store recent message IDs to prevent duplicates
+local MESSAGE_CACHE_TIME = 1 -- Time in seconds to cache messages
+
+-- Add this helper function
+local function generateMessageId(npcId, participantId, message)
+    return string.format("%s_%s_%s", npcId, participantId, message)
+end
+
+-- Modify handleNPCInteraction to check for duplicates
 function NPCManagerV3:handleNPCInteraction(npc, participant, message)
+    -- Generate a unique ID for this message
+    local messageId = generateMessageId(npc.id, participant.UserId, message)
+    
+    -- Check if this is a duplicate message
+    if recentMessages[messageId] then
+        if tick() - recentMessages[messageId] < MESSAGE_CACHE_TIME then
+            return -- Skip duplicate message
+        end
+    end
+    
+    -- Store message timestamp
+    recentMessages[messageId] = tick()
+    
+    -- Clean up old messages
+    for id, timestamp in pairs(recentMessages) do
+        if tick() - timestamp > MESSAGE_CACHE_TIME then
+            recentMessages[id] = nil
+        end
+    end
+    
     -- Determine participant type
     local participantType = typeof(participant) == "Instance" and participant:IsA("Player") and "player" or "npc"
     local participantId = participantType == "player" and participant.UserId or participant.npcId

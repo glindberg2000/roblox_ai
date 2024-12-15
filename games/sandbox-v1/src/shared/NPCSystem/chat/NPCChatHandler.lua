@@ -7,7 +7,34 @@ local V3ChatClient = require(ReplicatedStorage.Shared.NPCSystem.chat.V3ChatClien
 local HttpService = game:GetService("HttpService")
 local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
 
+local recentResponses = {}
+local RESPONSE_CACHE_TIME = 1
+
 function NPCChatHandler:HandleChat(request)
+    -- Generate response ID
+    local responseId = string.format("%s_%s_%s", 
+        request.npc_id,
+        request.participant_id,
+        request.message
+    )
+    
+    -- Check for duplicate response
+    if recentResponses[responseId] then
+        if tick() - recentResponses[responseId] < RESPONSE_CACHE_TIME then
+            return nil -- Skip duplicate response
+        end
+    end
+    
+    -- Store response timestamp
+    recentResponses[responseId] = tick()
+    
+    -- Clean up old responses
+    for id, timestamp in pairs(recentResponses) do
+        if tick() - timestamp > RESPONSE_CACHE_TIME then
+            recentResponses[id] = nil
+        end
+    end
+    
     LoggerService:debug("CHAT", string.format("NPCChatHandler: Received request %s", 
         HttpService:JSONEncode(request)))
     

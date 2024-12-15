@@ -1,5 +1,8 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local NPCManagerV3 = require(ReplicatedStorage.NPCManagerV3)
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local NPCSystem = Shared:WaitForChild("NPCSystem")
+local NPCManagerV3 = require(NPCSystem.NPCManagerV3)
+local Logger = require(NPCSystem.services.LoggerService)
 
 local function runNPCInteractionTests()
     print("Starting NPC-to-NPC interaction tests...")

@@ -2,7 +2,9 @@
 local InteractionService = {}
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Logger = require(game:GetService("ServerScriptService"):WaitForChild("Logger"))
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local NPCSystem = Shared:WaitForChild("NPCSystem")
+local LoggerService = require(NPCSystem.services.LoggerService)
 
 function InteractionService:checkRangeAndEndConversation(npc1, npc2)
     if not npc1.model or not npc2.model then return end
@@ -10,7 +12,7 @@ function InteractionService:checkRangeAndEndConversation(npc1, npc2)
 
     local distance = (npc1.model.PrimaryPart.Position - npc2.model.PrimaryPart.Position).Magnitude
     if distance > npc1.responseRadius then
-        Logger:log("INTERACTION", string.format("%s and %s are out of range, ending conversation",
+        LoggerService:log("INTERACTION", string.format("%s and %s are out of range, ending conversation",
             npc1.displayName, npc2.displayName))
         return true
     end
