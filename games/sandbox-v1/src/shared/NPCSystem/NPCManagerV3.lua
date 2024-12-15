@@ -227,26 +227,29 @@ end
 function NPCManagerV3:loadNPCDatabase()
     LoggerService:debug("DATABASE", "Loading NPCs from database...")
     
-    -- Wait for database module
-    local NPCDatabase = script.Parent:WaitForChild("NPCDatabase", 10)
-    if not NPCDatabase then
-        LoggerService:error("DATABASE", "Failed to find NPCDatabase")
-        return false
-    end
-
+    -- Get database from Data folder
     local success, database = pcall(function()
-        return require(NPCDatabase)
+        return require(ReplicatedStorage:WaitForChild("Data"):WaitForChild("NPCDatabase"))
     end)
-
+    
     if not success then
-        LoggerService:error("DATABASE", "Failed to load NPCDatabase")
+        LoggerService:error("DATABASE", "Failed to load NPCDatabase: " .. tostring(database))
         return false
     end
-
+    
+    if not database or not database.npcs then
+        LoggerService:error("DATABASE", "Invalid database format - missing npcs table")
+        return false
+    end
+    
     LoggerService:debug("DATABASE", string.format("Loading NPCs from database: %d NPCs found", #database.npcs))
     
     for _, npcData in ipairs(database.npcs) do
-        self:createNPC(npcData)
+        if npcData and npcData.displayName then
+            self:createNPC(npcData)
+        else
+            LoggerService:warn("DATABASE", "Skipping invalid NPC data entry")
+        end
     end
     
     self.databaseLoaded = true
@@ -271,7 +274,20 @@ function NPCManagerV3:createNPC(npcData)
     end
 
     -- Create and set up NPC model
-    LoggerService:debug("NPC", string.format("Loading model for %s with ID: %s", npcData.displayName, npcData.model))
+    if not npcData or not npcData.displayName then
+        LoggerService:error("NPC", "Invalid NPC data - missing displayName")
+        return
+    end
+    
+    if not npcData.model then
+        LoggerService:error("NPC", string.format("Invalid NPC data for %s - missing model ID", npcData.displayName))
+        return
+    end
+    
+    LoggerService:debug("NPC", string.format("Loading model for %s with ID: %s", 
+        tostring(npcData.displayName), 
+        tostring(npcData.model)
+    ))
     
     -- Check if Pete's model exists
     if npcData.displayName == "Pete" then

@@ -7,7 +7,7 @@ return {
             assetId = "4446576906", 
             model = "4446576906", 
             modelName = "Diamond", 
-            system_prompt = "I'm sharp as a tack both verbally and emotionally.", 
+            system_prompt = "I'm sharp as a tack both verbally and emotionally and love wit and humour.", 
             responseRadius = 20, 
             spawnPosition = Vector3.new(8.0, 18.0, -12.0), 
             abilities = {
@@ -15,8 +15,7 @@ return {
             "chat", 
         }, 
             shortTermMemory = {}, 
-        },
-        {
+        },        {
             id = "e43613f0-cc70-4e98-9b61-2a39fecfa443", 
             displayName = "Goldie", 
             name = "Goldie", 
@@ -30,8 +29,7 @@ return {
             "chat", 
         }, 
             shortTermMemory = {}, 
-        },
-        {
+        },        {
             id = "0544b51c-1009-4231-ac6e-053626135ed4", 
             displayName = "Noobster", 
             name = "Noobster", 
@@ -49,8 +47,7 @@ return {
             "combat", 
         }, 
             shortTermMemory = {}, 
-        },
-        {
+        },        {
             id = "3cff63ac-9960-46bb-af7f-88e824d68dbe", 
             displayName = "Oscar", 
             name = "Oscar", 
@@ -67,8 +64,7 @@ return {
             "combat", 
         }, 
             shortTermMemory = {}, 
-        },
-        {
+        },        {
             id = "69f81a5d-52bc-4a91-9d67-ad920357600a", 
             displayName = "Pete", 
             name = "Pete", 

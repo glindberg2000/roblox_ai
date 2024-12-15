@@ -3,57 +3,17 @@
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
+      "Data": {
+        "NPCDatabase": {
+          "$path": "src/data/NPCDatabase.lua"
+        },
+        "AssetDatabase": {
+          "$path": "src/data/AssetDatabase.lua"
+        }
+      },
       "Shared": {
         "NPCSystem": {
-          "$path": "src/shared/NPCSystem",
-          "chat": {
-            "ChatUtils": {
-              "$path": "src/shared/NPCSystem/chat/ChatUtils.lua"
-            },
-            "NPCChatHandler": {
-              "$path": "src/shared/NPCSystem/chat/NPCChatHandler.lua"
-            },
-            "V3ChatClient": {
-              "$path": "src/shared/NPCSystem/chat/V3ChatClient.lua"
-            },
-            "V4ChatClient": {
-              "$path": "src/shared/NPCSystem/chat/V4ChatClient.lua"
-            }
-          },
-          "config": {
-            "InteractionConfig": {
-              "$path": "src/shared/NPCSystem/config/InteractionConfig.lua"
-            },
-            "LettaConfig": {
-              "$path": "src/shared/NPCSystem/config/LettaConfig.lua"
-            },
-            "NPCConfig": {
-              "$path": "src/shared/NPCSystem/config/NPCConfig.lua"
-            },
-            "PerformanceConfig": {
-              "$path": "src/shared/NPCSystem/config/PerformanceConfig.lua"
-            }
-          },
-          "services": {
-            "AnimationService": {
-              "$path": "src/shared/NPCSystem/services/AnimationService.lua"
-            },
-            "InteractionService": {
-              "$path": "src/shared/NPCSystem/services/InteractionService.lua"
-            },
-            "LoggerService": {
-              "$path": "src/shared/NPCSystem/services/LoggerService.lua"
-            },
-            "ModelLoader": {
-              "$path": "src/shared/NPCSystem/services/ModelLoader.lua"
-            },
-            "MovementService": {
-              "$path": "src/shared/NPCSystem/services/MovementService.lua"
-            },
-            "VisionService": {
-              "$path": "src/shared/NPCSystem/services/VisionService.lua"
-            }
-          }
+          "$path": "src/shared/NPCSystem"
         }
       }
     }
