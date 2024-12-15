@@ -30,6 +30,9 @@
             },
             "LoggerService": {
               "$path": "src/shared/NPCSystem/services/LoggerService.lua"
+            },
+            "ModelLoader": {
+              "$path": "src/shared/NPCSystem/services/ModelLoader.lua"
             }
           },
           "chat": {
@@ -60,6 +63,13 @@
       },
       "NPCDatabaseV3": {
         "$path": "src/data/NPCDatabase.lua"
+      }
+    },
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "Assets": {
+        "$className": "Folder",
+        "$path": "src/assets"
       }
     },
     "ServerScriptService": {

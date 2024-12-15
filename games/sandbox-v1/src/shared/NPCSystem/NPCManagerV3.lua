@@ -20,6 +20,10 @@ local InteractionController = require(ServerScriptService:WaitForChild("Interact
 local NPCChatHandler = require(chat:WaitForChild("NPCChatHandler"))
 local InteractionService = require(services:WaitForChild("InteractionService"))
 local LoggerService = require(services:WaitForChild("LoggerService"))
+local ModelLoader = require(script.Parent.services.ModelLoader)
+
+ModelLoader.init()
+LoggerService:info("SYSTEM", string.format("Using ModelLoader v%s", ModelLoader.Version))
 
 LoggerService:info("SYSTEM", "Attempting to load services...")
 local success, result = pcall(function()
@@ -256,13 +260,91 @@ function NPCManagerV3:createNPC(npcData)
     end
 
     -- Create and set up NPC model
-    local model = ServerStorage.Assets.npcs:FindFirstChild(npcData.model)
+    LoggerService:debug("NPC", string.format("Loading model for %s with ID: %s", npcData.displayName, npcData.model))
+    
+    -- Check if Pete's model exists
+    if npcData.displayName == "Pete" then
+        LoggerService:info("NPC", "Attempting to load Pete's model...")
+        LoggerService:info("NPC", "Checking ServerStorage structure:")
+        for _, child in ipairs(ServerStorage:GetChildren()) do
+            LoggerService:info("NPC", "  - " .. child.Name)
+            if child.Name == "Assets" then
+                LoggerService:info("NPC", "    Found Assets folder")
+                for _, assetChild in ipairs(child:GetChildren()) do
+                    LoggerService:info("NPC", "    - " .. assetChild.Name)
+                    if assetChild.Name == "npcs" then
+                        LoggerService:info("NPC", "      Found npcs folder")
+                        for _, npcModel in ipairs(assetChild:GetChildren()) do
+                            LoggerService:info("NPC", "      - " .. npcModel.Name)
+                        end
+                    end
+                end
+            end
+        end
+
+        local peteModel = ServerStorage.Assets.npcs:FindFirstChild(npcData.model)
+        if peteModel then
+            LoggerService:info("NPC", "Found Pete's model in local assets")
+            LoggerService:info("NPC", string.format("Model details: Type=%s, Name=%s", peteModel.ClassName, peteModel.Name))
+        else
+            LoggerService:error("NPC", "Pete's model not found in local assets")
+        end
+    end
+    
+    local model = ModelLoader.loadModel(npcData.model)
     if not model then
         LoggerService:error("NPC", string.format("Model not found for NPC: %s", npcData.displayName))
         return
     end
 
+    -- Log model details
+    LoggerService:info("NPC", string.format("Loaded model for %s:", npcData.displayName))
+    LoggerService:info("NPC", string.format("  - Type: %s", model.ClassName))
+    LoggerService:info("NPC", string.format("  - Name: %s", model.Name))
+    LoggerService:info("NPC", string.format("  - Children: %d", #model:GetChildren()))
+    for _, child in ipairs(model:GetChildren()) do
+        LoggerService:info("NPC", string.format("  - Child: %s (%s)", child.Name, child.ClassName))
+    end
+
     local npcModel = model:Clone()
+    
+    -- Handle R15 model setup
+    local function setupR15Model(model)
+        local humanoid = model:FindFirstChild("Humanoid")
+        if humanoid then
+            humanoid.RigType = Enum.HumanoidRigType.R15
+        end
+        
+        -- Ensure all MeshParts are visible
+        for _, part in ipairs(model:GetDescendants()) do
+            if part:IsA("MeshPart") then
+                part.Transparency = 0
+            end
+        end
+    end
+    
+    -- Ensure model is properly set up
+    for _, child in ipairs(npcModel:GetChildren()) do
+        if child:IsA("Accessory") then
+            LoggerService:debug("NPC", string.format("Setting up accessory: %s", child.Name))
+            -- Ensure accessory handle is visible
+            local handle = child:FindFirstChild("Handle")
+            if handle then
+                handle.Transparency = 0
+            end
+            child.Parent = npcModel
+        elseif child:IsA("Shirt") or child:IsA("Pants") or child:IsA("BodyColors") then
+            LoggerService:debug("NPC", string.format("Setting up clothing: %s", child.Name))
+            child.Parent = npcModel
+        end
+    end
+    
+    -- Set up R15 model if needed
+    if npcModel:FindFirstChild("UpperTorso") then
+        LoggerService:info("NPC", "Setting up R15 model")
+        setupR15Model(npcModel)
+    end
+    
     npcModel.Name = npcData.displayName
     npcModel.Parent = workspace.NPCs
 

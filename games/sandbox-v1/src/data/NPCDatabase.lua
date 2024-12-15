@@ -15,7 +15,8 @@ return {
             "chat", 
         }, 
             shortTermMemory = {}, 
-        },        {
+        },
+        {
             id = "e43613f0-cc70-4e98-9b61-2a39fecfa443", 
             displayName = "Goldie", 
             name = "Goldie", 
@@ -29,7 +30,8 @@ return {
             "chat", 
         }, 
             shortTermMemory = {}, 
-        },        {
+        },
+        {
             id = "0544b51c-1009-4231-ac6e-053626135ed4", 
             displayName = "Noobster", 
             name = "Noobster", 
@@ -47,7 +49,8 @@ return {
             "combat", 
         }, 
             shortTermMemory = {}, 
-        },        {
+        },
+        {
             id = "3cff63ac-9960-46bb-af7f-88e824d68dbe", 
             displayName = "Oscar", 
             name = "Oscar", 
@@ -64,34 +67,26 @@ return {
             "combat", 
         }, 
             shortTermMemory = {}, 
-        },        {
-            id = "b11fbfb5-5f46-40cb-9c4c-84ca72b55ac7", 
+        },
+        {
+            id = "69f81a5d-52bc-4a91-9d67-ad920357600a", 
             displayName = "Pete", 
             name = "Pete", 
-            assetId = "7315192066", 
-            model = "7315192066", 
+            assetId = "111993324387868", 
+            model = "111993324387868", 
             modelName = "Pete", 
-            system_prompt = "I sell awesome merch and love to chat about it. My boss, Valterpoop—better known as KrushKen—expects me to keep an eye out for him and his dad, GreggytheEgg, just in case they drop by. Let me know if you’re interested in our products or have any questions; I’m always happy to help!", 
+            system_prompt = "I’m Pete, the proud owner of Pete’s Merch Stand. I’ve got a knack for finding the coolest stuff—visors, caps, even those iconic Adidas sweats that everyone seems to want. My stand’s got it all, and I like to keep things interesting. If you look closely, you might spot that curious mask hanging behind the tree. It’s been with me for a while, and, well, let’s just say it’s got its secrets. I love talking about my merch—it’s not just stuff, it’s part of what makes my stand the best place to visit!", 
             responseRadius = 20, 
-            spawnPosition = Vector3.new(12.0, 18.0, -12.0), 
+            spawnPosition = Vector3.new(-12.4, 20.0, -127.0), 
             abilities = {
             "move", 
             "chat", 
-        }, 
-            shortTermMemory = {}, 
-        },        {
-            id = "9db3e3e8-78ff-405b-a11b-240c4afc251e", 
-            displayName = "Pete", 
-            name = "Pete", 
-            assetId = "128282678684676", 
-            model = "128282678684676", 
-            modelName = "Pete", 
-            system_prompt = "A young boy who is curious and always discovering new things.", 
-            responseRadius = 20, 
-            spawnPosition = Vector3.new(10.0, 18.0, -12.0), 
-            abilities = {
-            "move", 
-            "chat", 
+            "initiate_chat", 
+            "follow", 
+            "unfollow", 
+            "run", 
+            "jump", 
+            "emote", 
         }, 
             shortTermMemory = {}, 
         },
