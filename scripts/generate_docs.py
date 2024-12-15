@@ -31,6 +31,7 @@ from pathlib import Path
 import argparse
 import sys
 from typing import Set, List, Union
+from datetime import datetime
 
 def read_file_content(file_path: str) -> str:
     """
@@ -212,9 +213,13 @@ def generate_minimal_documentation(game_slug: str):
     
     core_files = get_core_npc_files()
     
-    # Initialize documentation content
+    # Get current timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Initialize documentation content with timestamp
     doc_content = [
         f"# {game_slug} NPC System Documentation (Minimal)\n",
+        f"Generated: {timestamp}\n",
         "## Game Directory Structure\n",
         "```",
         generate_tree_structure(game_dir / "src", start_with_root=False),
@@ -293,9 +298,13 @@ def generate_documentation(path_or_id: str, api_only: bool = False):
         # Create docs directory if it doesn't exist
         docs_dir.mkdir(parents=True, exist_ok=True)
         
-        # Initialize the documentation content
+        # Get current timestamp
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Initialize the documentation content with timestamp
         doc_content = [
-            f"# API Documentation\n",
+            "# API Documentation\n",
+            f"Generated: {timestamp}\n",
             "## Directory Structure\n",
             "```",
             "api/",
@@ -354,9 +363,13 @@ def generate_documentation(path_or_id: str, api_only: bool = False):
         
     docs_dir.mkdir(parents=True, exist_ok=True)
     
-    # Initialize documentation content for games
+    # Get current timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Initialize documentation content for games with timestamp
     doc_content = [
         f"# {game_name} Documentation\n",
+        f"Generated: {timestamp}\n",
         "## Directory Structure\n",
         "```",
         generate_tree_structure(src_dir),
