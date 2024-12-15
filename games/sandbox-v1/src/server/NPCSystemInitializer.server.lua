@@ -4,6 +4,15 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 print("NPCSystemInitializer: Starting initialization...")
 
+-- Check if already initialized
+if _G.NPCSystemInitialized then
+	print("NPCSystemInitializer: System already initialized, skipping...")
+	return
+end
+
+-- Set initialization flag at the very start
+_G.NPCSystemInitialized = true
+
 -- Wait for critical paths
 local Shared = ReplicatedStorage:WaitForChild("Shared", 10)
 if not Shared then

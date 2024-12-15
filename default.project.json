@@ -1,15 +1,12 @@
 {
-  "name": "Sandbox V1",
+  "name": "sandbox-v1",
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
-      "$className": "ReplicatedStorage",
       "Shared": {
-        "$className": "Folder",
         "NPCSystem": {
-          "$className": "Folder",
+          "$path": "src/shared/NPCSystem",
           "chat": {
-            "$className": "Folder",
             "ChatUtils": {
               "$path": "src/shared/NPCSystem/chat/ChatUtils.lua"
             },
@@ -24,12 +21,37 @@
             }
           },
           "config": {
-            "$className": "Folder",
-            "NPCConfig": {
-              "$path": "src/shared/NPCSystem/config/NPCConfig.lua"
+            "InteractionConfig": {
+              "$path": "src/shared/NPCSystem/config/InteractionConfig.lua"
             },
             "LettaConfig": {
               "$path": "src/shared/NPCSystem/config/LettaConfig.lua"
+            },
+            "NPCConfig": {
+              "$path": "src/shared/NPCSystem/config/NPCConfig.lua"
+            },
+            "PerformanceConfig": {
+              "$path": "src/shared/NPCSystem/config/PerformanceConfig.lua"
+            }
+          },
+          "services": {
+            "AnimationService": {
+              "$path": "src/shared/NPCSystem/services/AnimationService.lua"
+            },
+            "InteractionService": {
+              "$path": "src/shared/NPCSystem/services/InteractionService.lua"
+            },
+            "LoggerService": {
+              "$path": "src/shared/NPCSystem/services/LoggerService.lua"
+            },
+            "ModelLoader": {
+              "$path": "src/shared/NPCSystem/services/ModelLoader.lua"
+            },
+            "MovementService": {
+              "$path": "src/shared/NPCSystem/services/MovementService.lua"
+            },
+            "VisionService": {
+              "$path": "src/shared/NPCSystem/services/VisionService.lua"
             }
           }
         }

@@ -225,15 +225,27 @@ function NPCManagerV3:handlePlayerMessage(player, data)
 end
 
 function NPCManagerV3:loadNPCDatabase()
-    if self.databaseLoaded then
-        LoggerService:debug("DATABASE", "Database already loaded, skipping...")
-        return
+    LoggerService:debug("DATABASE", "Loading NPCs from database...")
+    
+    -- Wait for database module
+    local NPCDatabase = script.Parent:WaitForChild("NPCDatabase", 10)
+    if not NPCDatabase then
+        LoggerService:error("DATABASE", "Failed to find NPCDatabase")
+        return false
     end
+
+    local success, database = pcall(function()
+        return require(NPCDatabase)
+    end)
+
+    if not success then
+        LoggerService:error("DATABASE", "Failed to load NPCDatabase")
+        return false
+    end
+
+    LoggerService:debug("DATABASE", string.format("Loading NPCs from database: %d NPCs found", #database.npcs))
     
-    local npcDatabase = require(ReplicatedStorage:WaitForChild("NPCDatabaseV3"))
-    LoggerService:debug("DATABASE", string.format("Loading NPCs from database: %d NPCs found", #npcDatabase.npcs))
-    
-    for _, npcData in ipairs(npcDatabase.npcs) do
+    for _, npcData in ipairs(database.npcs) do
         self:createNPC(npcData)
     end
     
@@ -474,79 +486,6 @@ function NPCManagerV3:getCacheKey(npc, player, message)
 	local key = HttpService:JSONEncode(context)
 	LoggerService:debug("DEBUG", string.format("Generated cache key for %s and %s", npc.displayName, player.Name))
 	return key
-end
-
--- Require the Asset Database
-local AssetDatabase = require(game.ServerScriptService.AssetDatabase)
-
--- Function to lookup asset data by name
-local function getAssetData(assetName)
-	for _, asset in ipairs(AssetDatabase.assets) do
-		if asset.name == assetName then
-			return asset
-		end
-	end
-	return nil -- Return nil if the asset is not found
-end
-
-function NPCManagerV3:updateNPCVision()
-    -- Early return if vision is disabled in config
-    if not PerformanceConfig.NPC.VisionEnabled then return end
-
-    for _, npc in pairs(self.activeNPCs) do
-        -- Process in batches to spread load
-        if self.visionUpdateCount and self.visionUpdateCount % PerformanceConfig.NPC.RaycastBatchSize == 0 then
-            RunService.Heartbeat:Wait()
-        end
-        self.visionUpdateCount = (self.visionUpdateCount or 0) + 1
-
-        local model = npc.model
-        if not model then continue end
-
-        local head = model:FindFirstChild("Head")
-        if not head then continue end
-
-        -- Get nearby players
-        for _, player in pairs(game.Players:GetPlayers()) do
-            local character = player.Character
-            if not character then continue end
-
-            local targetHead = character:FindFirstChild("Head")
-            if not targetHead then continue end
-
-            local toTarget = (targetHead.Position - head.Position)
-            -- Check max vision distance from config
-            if toTarget.Magnitude > PerformanceConfig.NPC.MaxVisionDistance then
-                continue
-            end
-
-            -- Check vision cone angle from config
-            local forward = model.PrimaryPart.CFrame.LookVector
-            local angle = math.deg(math.acos(forward:Dot(toTarget.Unit)))
-            if angle > PerformanceConfig.NPC.VisionConeAngle/2 then
-                continue
-            end
-
-            -- Skip raycast if occlusion checks disabled
-            if PerformanceConfig.NPC.SkipOccludedTargets then
-                local params = RaycastParams.new()
-                params.FilterType = Enum.RaycastFilterType.Blacklist
-                params.FilterDescendantsInstances = {model}
-
-                local result = workspace:Raycast(head.Position, toTarget, params)
-                if result and result.Instance:IsDescendantOf(character) then
-                    -- Handle NPC seeing player...
-                    self:handleNPCVision(npc, player)
-                end
-            else
-                -- No occlusion check, just handle vision
-                self:handleNPCVision(npc, player)
-            end
-        end
-    end
-
-    -- Wait configured update interval before next vision update
-    wait(PerformanceConfig.NPC.VisionUpdateRate)
 end
 
 -- Update helper function to check if participant is NPC
