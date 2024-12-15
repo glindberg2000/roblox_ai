@@ -100,6 +100,7 @@ def should_skip_file(file_path: Path) -> bool:
         - Binary and image files
         - Backup files
         - Hidden files
+        - Markdown files in scripts folders
     """
     skip_patterns = get_gitignore_patterns()
     path_str = str(file_path)
@@ -119,6 +120,10 @@ def should_skip_file(file_path: Path) -> bool:
     }
     
     if file_path.suffix.lower() in skip_extensions:
+        return True
+    
+    # Skip markdown files in scripts folders
+    if 'scripts' in path_str and file_path.suffix.lower() == '.md':
         return True
     
     # Check gitignore patterns
