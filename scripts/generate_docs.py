@@ -16,7 +16,7 @@ Usage:
     API documentation:
         python generate_docs.py api --api-only
     
-    Minimal NPC documentation:
+    Minimal documentation:
         python generate_docs.py <game_id> --minimal
 
 Examples:
@@ -146,7 +146,7 @@ def generate_tree_structure(start_path: Union[str, Path], start_with_root: bool 
         root/
         ├── folder1/
         │   ├── file1.lua
-        │   └── file2.lua
+        │   └─ file2.lua
         └── folder2/
             └── file3.lua
     """
@@ -400,6 +400,147 @@ def generate_documentation(path_or_id: str, api_only: bool = False):
         
     print(f"Documentation generated successfully for {game_name} at {output_path}")
 
+def get_animation_files() -> Set[str]:
+    """
+    Return set of animation-related files for documentation.
+
+    Returns:
+        Set[str]: Set of file names related to animations
+    """
+    return {
+        'AnimationManager.lua',
+        'AnimationService.lua',
+        'MovementService.lua',
+        'Animate.lua',
+        'ModelLoader.lua',  # Include model loading as it might affect animations
+        'NPCManagerV3.lua',  # NPC management might include animation logic
+        'NPCDatabase.lua',  # NPC data might include animation references
+        'PlayerService.lua',  # Player interactions might trigger animations
+        'InteractionController.lua',  # Interaction logic might involve animations
+        # Add any other files that are part of the animation flow
+    }
+
+def generate_animation_documentation(game_slug: str):
+    """
+    Generate documentation for animation-related files.
+
+    Args:
+        game_slug (str): Game identifier to generate documentation for
+
+    Creates documentation focusing only on animation-related files.
+    """
+    project_root = Path(__file__).parent.parent
+    docs_dir = project_root / "docs"
+    game_dir = project_root / "games" / game_slug
+    
+    # Create docs directory
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    
+    animation_files = get_animation_files()
+    
+    # Get current timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Initialize documentation content with timestamp
+    doc_content = [
+        f"# {game_slug} Animation System Documentation\n",
+        f"Generated: {timestamp}\n",
+        "## Game Directory Structure\n",
+        "```",
+        generate_tree_structure(game_dir / "src", start_with_root=False),
+        "```\n",
+        "## Animation Files\n"
+    ]
+    
+    # Add animation files
+    for file_path in (game_dir / "src").rglob("*.*"):
+        if file_path.name in animation_files:
+            relative_path = file_path.relative_to(game_dir / "src")
+            print(f"Adding animation file: {relative_path}")
+            doc_content.extend([
+                f"### {relative_path}\n",
+                "```" + (file_path.suffix[1:] or 'text'),
+                read_file_content(file_path),
+                "```\n"
+            ])
+    
+    # Write animation documentation
+    output_path = docs_dir / f"{game_slug}_ANIMATION_DOCUMENTATION.md"
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write("\n".join(doc_content))
+        
+    print(f"Animation documentation generated successfully at {output_path}")
+
+def get_communication_files() -> Set[str]:
+    """
+    Return set of communication-related files for documentation.
+
+    Returns:
+        Set[str]: Set of file names related to communications
+    """
+    return {
+        'letta_router.py',
+        'NPCManagerV3.lua',
+        'NPCDatabase.lua',
+        'MockPlayer.py',
+        'ChatService.lua',
+        'InteractionController.lua',
+        'PlayerService.lua',
+        'CommunicationManager.lua',  # Example file names
+        # Add any other communication-related files here
+    }
+
+def generate_communication_documentation(game_slug: str):
+    """
+    Generate documentation for communication-related files.
+
+    Args:
+        game_slug (str): Game identifier to generate documentation for
+
+    Creates documentation focusing only on communication-related files.
+    """
+    project_root = Path(__file__).parent.parent
+    docs_dir = project_root / "docs"
+    game_dir = project_root / "games" / game_slug
+    
+    # Create docs directory
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    
+    communication_files = get_communication_files()
+    
+    # Get current timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Initialize documentation content with timestamp
+    doc_content = [
+        f"# {game_slug} Communication System Documentation\n",
+        f"Generated: {timestamp}\n",
+        "## Game Directory Structure\n",
+        "```",
+        generate_tree_structure(game_dir / "src", start_with_root=False),
+        "```\n",
+        "## Communication Files\n"
+    ]
+    
+    # Add communication files
+    for file_path in (game_dir / "src").rglob("*.*"):
+        if file_path.name in communication_files:
+            relative_path = file_path.relative_to(game_dir / "src")
+            print(f"Adding communication file: {relative_path}")
+            doc_content.extend([
+                f"### {relative_path}\n",
+                "```" + (file_path.suffix[1:] or 'text'),
+                read_file_content(file_path),
+                "```\n"
+            ])
+    
+    # Write communication documentation
+    output_path = docs_dir / f"{game_slug}_COMMUNICATION_DOCUMENTATION.md"
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write("\n".join(doc_content))
+        
+    print(f"Communication documentation generated successfully at {output_path}")
+
 def main():
     """
     Main entry point for the documentation generator.
@@ -408,16 +549,24 @@ def main():
     - Full game documentation
     - API-only documentation
     - Minimal NPC system documentation
+    - Animation-only documentation
+    - Communication-only documentation
     """
     parser = argparse.ArgumentParser(description='Generate documentation for the project.')
     parser.add_argument('path_or_id', help='Path to the game directory or "api" for API documentation')
     parser.add_argument('--api-only', action='store_true', help='Generate only API documentation')
     parser.add_argument('--minimal', action='store_true', help='Generate minimal documentation focusing on core NPC system')
+    parser.add_argument('--animations-only', action='store_true', help='Generate documentation focusing on animation-related files')
+    parser.add_argument('--communications-only', action='store_true', help='Generate documentation focusing on communication-related files')
     
     args = parser.parse_args()
     try:
         if args.minimal:
             generate_minimal_documentation(args.path_or_id)
+        elif args.animations_only:
+            generate_animation_documentation(args.path_or_id)
+        elif args.communications_only:
+            generate_communication_documentation(args.path_or_id)
         else:
             generate_documentation(args.path_or_id, args.api_only)
     except Exception as e:

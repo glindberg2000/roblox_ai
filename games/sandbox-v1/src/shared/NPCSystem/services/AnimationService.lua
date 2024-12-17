@@ -162,4 +162,17 @@ function AnimationManager:stopAnimations(humanoid)
     end
 end
 
+function AnimationManager:playEmote(npc, emoteName)
+    local Animator = npc.model:FindFirstChildOfClass("Animator")
+    if Animator then
+        local animation = ServerStorage.Animations:FindFirstChild(emoteName)
+        if animation then
+            Animator:LoadAnimation(animation):Play()
+            LoggerService:debug("ANIMATION", string.format("Playing emote %s for %s", emoteName, npc.displayName))
+        else
+            LoggerService:error("ERROR", string.format("Animation not found: %s", emoteName))
+        end
+    end
+end
+
 return AnimationManager

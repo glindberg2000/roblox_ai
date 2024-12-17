@@ -1,3 +1,186 @@
+# sandbox-v1 Animation System Documentation
+
+Generated: 2024-12-17 05:57:00
+
+## Game Directory Structure
+
+```
+├── assets
+│   ├── clothings
+│   ├── npcs
+│   ├── props
+│   └── unknown
+├── client
+│   ├── NPCClientChatHandler.lua
+│   └── NPCClientHandler.client.lua
+├── data
+│   ├── AssetDatabase.lua
+│   ├── NPCDatabase.lua
+│   └── PlayerDatabase.json
+├── server
+│   ├── AssetInitializer.server.lua
+│   ├── ChatSetup.server.lua
+│   ├── InteractionController.lua
+│   ├── MainNPCScript.server.lua
+│   ├── MockPlayerTest.server.lua
+│   ├── NPCInteractionTest.server.lua
+│   ├── NPCSystemInitializer.server.lua
+│   ├── PlayerJoinHandler.server.lua
+│   └── test.server.lua
+├── shared
+│   ├── NPCSystem
+│   │   ├── chat
+│   │   │   ├── ChatUtils.lua
+│   │   │   ├── NPCChatHandler.lua
+│   │   │   ├── V3ChatClient.lua
+│   │   │   └── V4ChatClient.lua
+│   │   ├── config
+│   │   │   ├── InteractionConfig.lua
+│   │   │   ├── LettaConfig.lua
+│   │   │   ├── NPCConfig.lua
+│   │   │   └── PerformanceConfig.lua
+│   │   ├── services
+│   │   │   ├── AnimationService.lua
+│   │   │   ├── InteractionService.lua
+│   │   │   ├── LoggerService.lua
+│   │   │   ├── ModelLoader.lua
+│   │   │   ├── MovementService.lua
+│   │   │   └── VisionService.lua
+│   │   ├── NPCDatabase.lua
+│   │   └── NPCManagerV3.lua
+│   ├── AnimationManager.lua
+│   ├── AssetModule.lua
+│   ├── ChatRouter.lua
+│   ├── ConversationManager.lua
+│   ├── ConversationManagerV2.lua
+│   ├── NPCMovementSystem.lua
+│   ├── PerformanceMonitor.lua
+│   ├── VisionConfig.lua
+│   └── test.lua
+└── test
+    └── NPCInteractionTest.lua
+```
+
+## Animation Files
+
+### server/InteractionController.lua
+
+```lua
+-- ServerScriptService/InteractionController.lua
+local ServerScriptService = game:GetService("ServerScriptService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Wait for critical paths
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local NPCSystem = Shared:WaitForChild("NPCSystem")
+local services = NPCSystem:WaitForChild("services")
+
+local LoggerService = require(services.LoggerService)
+local InteractionService = require(services.InteractionService)
+
+local InteractionController = {}
+InteractionController.__index = InteractionController
+
+function InteractionController.new()
+    local self = setmetatable({}, InteractionController)
+    self.activeInteractions = {}
+    LoggerService:log("SYSTEM", "InteractionController initialized")
+    return self
+end
+
+function InteractionController:startInteraction(player, npc)
+    if self.activeInteractions[player] then
+        LoggerService:log("PLAYER", string.format("Player %s already in interaction", player.Name))
+        return false
+    end
+    self.activeInteractions[player] = {npc = npc, startTime = tick()}
+    LoggerService:log("PLAYER", string.format("Started interaction: %s with %s", player.Name, npc.displayName))
+    return true
+end
+
+function InteractionController:endInteraction(player)
+    LoggerService:log("PLAYER", string.format("Ending interaction for player %s", player.Name))
+    self.activeInteractions[player] = nil
+end
+
+function InteractionController:canInteract(player)
+    return not self.activeInteractions[player]
+end
+
+function InteractionController:getInteractingNPC(player)
+    local interaction = self.activeInteractions[player]
+    return interaction and interaction.npc or nil
+end
+
+function InteractionController:getInteractionState(player)
+    local interaction = self.activeInteractions[player]
+    if interaction then
+        return {
+            npc_id = interaction.npc.id,
+            npc_name = interaction.npc.displayName,
+            start_time = interaction.startTime,
+            duration = tick() - interaction.startTime,
+        }
+    end
+    return nil
+end
+
+function InteractionController:startGroupInteraction(players, npc)
+    for _, player in ipairs(players) do
+        self.activeInteractions[player] = {npc = npc, group = players, startTime = tick()}
+    end
+    LoggerService:log("PLAYER", string.format("Started group interaction with %d players", #players))
+end
+
+function InteractionController:isInGroupInteraction(player)
+    local interaction = self.activeInteractions[player]
+    return interaction and interaction.group ~= nil
+end
+
+function InteractionController:getGroupParticipants(player)
+    local interaction = self.activeInteractions[player]
+    if interaction and interaction.group then
+        return interaction.group
+    end
+    return {player}
+end
+
+return InteractionController
+```
+
+### shared/AnimationManager.lua
+
+```lua
+local AnimationManager = {}
+
+function AnimationManager.new()
+    local self = {}
+    
+    function self:loadAnimation(humanoid, animationId)
+        local animator = humanoid:FindFirstChild("Animator") or Instance.new("Animator", humanoid)
+        local animation = Instance.new("Animation")
+        animation.AnimationId = "rbxassetid://" .. animationId
+        return animator:LoadAnimation(animation)
+    end
+    
+    function self:playAnimation(humanoid, animationId)
+        local anim = self:loadAnimation(humanoid, animationId)
+        if anim then
+            anim:Play()
+            return anim
+        end
+        return nil
+    end
+    
+    return self
+end
+
+return AnimationManager 
+```
+
+### shared/NPCSystem/NPCManagerV3.lua
+
+```lua
 -- NPCManagerV3.lua
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -20,7 +203,6 @@ local NPCChatHandler = require(chat:WaitForChild("NPCChatHandler"))
 local InteractionService = require(services:WaitForChild("InteractionService"))
 local LoggerService = require(services:WaitForChild("LoggerService"))
 local ModelLoader = require(script.Parent.services.ModelLoader)
-local AnimationService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.AnimationService)
 
 ModelLoader.init()
 LoggerService:info("SYSTEM", string.format("Using ModelLoader v%s", ModelLoader.Version))
@@ -413,7 +595,7 @@ function NPCManagerV3:createNPC(npcData)
     npcModel.PrimaryPart = humanoidRootPart
     humanoidRootPart.CFrame = CFrame.new(npcData.spawnPosition)
     -- Temporarily disable animations
-    AnimationService:applyAnimations(humanoid)
+    -- AnimationManager:applyAnimations(humanoid)
     self:initializeNPCChatSpeaker(npc)
     self:setupClickDetector(npc)
 
@@ -794,7 +976,16 @@ function NPCManagerV3:updateInternalState(npc, internalState)
 end
 
 function NPCManagerV3:playEmote(npc, emoteName)
-    AnimationService:playEmote(npc, emoteName)
+    local Animator = npc.model:FindFirstChildOfClass("Animator")
+    if Animator then
+        local animation = ServerStorage.Animations:FindFirstChild(emoteName)
+        if animation then
+            Animator:LoadAnimation(animation):Play()
+            LoggerService:debug("ANIMATION", string.format("Playing emote %s for %s", emoteName, npc.displayName))
+        else
+            LoggerService:error("ERROR", string.format("Animation not found: %s", emoteName))
+        end
+    end
 end
 
 function NPCManagerV3:moveNPC(npc, targetPosition)
@@ -1107,12 +1298,501 @@ function NPCManagerV3:updateNPCPosition(npc)
     end
 end
 
--- Initialize NPC with animations
-function NPCManagerV3:initializeNPC(npc)
-    local humanoid = npc:FindFirstChildOfClass("Humanoid")
-    if humanoid then
-        AnimationService:applyAnimations(humanoid)
+return NPCManagerV3
+
+```
+
+### shared/NPCSystem/NPCDatabase.lua
+
+```lua
+return {
+    npcs = {
+        {
+            id = "8c9bba8d-4f9a-4748-9e75-1334e48e2e66",
+            displayName = "Diamond",
+            model = "4446576906",
+            spawnPosition = Vector3.new(5, 17, -10),
+            responseRadius = 20,
+            abilities = {"move", "chat"},
+            system_prompt = "You are Diamond, a friendly NPC..."
+        },
+        -- Other NPCs...
+    }
+} 
+```
+
+### shared/NPCSystem/services/MovementService.lua
+
+```lua
+-- MovementService.lua
+local LoggerService = {
+    debug = function(_, category, message) 
+        print(string.format("[DEBUG] [%s] %s", category, message))
+    end,
+    warn = function(_, category, message)
+        warn(string.format("[WARN] [%s] %s", category, message))
+    end
+}
+
+local MovementService = {}
+MovementService.__index = MovementService
+
+function MovementService.new()
+    local self = setmetatable({}, MovementService)
+    self.followThreads = {}
+    LoggerService:debug("MOVEMENT", "New MovementService instance created")
+    return self
+end
+
+function MovementService:startFollowing(npc, target, options)
+    LoggerService:debug("MOVEMENT", string.format(
+        "Starting follow behavior - NPC: %s, Target: %s",
+        npc.displayName,
+        target.Name
+    ))
+
+    local followDistance = options and options.distance or 5
+    local updateRate = options and options.updateRate or 0.1
+
+    -- Clean up existing thread if any
+    self:stopFollowing(npc)
+
+    -- Create new follow thread
+    local thread = task.spawn(function()
+        while true do
+            if not npc.model or not target then break end
+            
+            local npcRoot = npc.model:FindFirstChild("HumanoidRootPart")
+            local targetRoot = target:FindFirstChild("HumanoidRootPart")
+            
+            if npcRoot and targetRoot then
+                local distance = (npcRoot.Position - targetRoot.Position).Magnitude
+                
+                if distance > followDistance then
+                    local humanoid = npc.model:FindFirstChild("Humanoid")
+                    if humanoid then
+                        -- Set appropriate walk speed
+                        humanoid.WalkSpeed = distance > 20 and 16 or 8
+                        humanoid:MoveTo(targetRoot.Position)
+                    end
+                end
+            end
+            
+            task.wait(updateRate)
+        end
+    end)
+
+    -- Store thread reference
+    self.followThreads[npc] = thread
+end
+
+function MovementService:stopFollowing(npc)
+    if self.followThreads[npc] then
+        -- Cancel the follow thread
+        task.cancel(self.followThreads[npc])
+        self.followThreads[npc] = nil
+        
+        -- Stop the humanoid
+        if npc.model and npc.model:FindFirstChild("Humanoid") then
+            local humanoid = npc.model:FindFirstChild("Humanoid")
+            humanoid:MoveTo(npc.model.PrimaryPart.Position)
+        end
+        
+        LoggerService:debug("MOVEMENT", string.format("Stopped following for %s", npc.displayName))
     end
 end
 
-return NPCManagerV3
+function MovementService:moveNPCToPosition(npc, targetPosition)
+    if not npc or not npc.model then return end
+    
+    local humanoid = npc.model:FindFirstChild("Humanoid")
+    if not humanoid then return end
+    
+    -- Get current position
+    local currentPosition = npc.model:GetPrimaryPartCFrame().Position
+    local distance = (targetPosition - currentPosition).Magnitude
+    
+    -- Set appropriate walk speed
+    if distance > 20 then
+        humanoid.WalkSpeed = 16  -- Run speed
+    else
+        humanoid.WalkSpeed = 8   -- Walk speed
+    end
+    
+    -- Move to position
+    humanoid:MoveTo(targetPosition)
+end
+
+function MovementService:getRandomPosition(center, radius)
+    local angle = math.random() * math.pi * 2
+    local distance = math.sqrt(math.random()) * radius
+    
+    return Vector3.new(
+        center.X + math.cos(angle) * distance,
+        center.Y,
+        center.Z + math.sin(angle) * distance
+    )
+end
+
+return MovementService 
+```
+
+### shared/NPCSystem/services/ModelLoader.lua
+
+```lua
+local ModelLoader = {}
+ModelLoader.Version = "1.0.1"
+
+local ServerStorage = game:GetService("ServerStorage")
+local LoggerService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LoggerService)
+
+function ModelLoader.init()
+    LoggerService:info("SYSTEM", string.format("ModelLoader v%s initialized", ModelLoader.Version))
+    
+    -- Check initial folder structure
+    if ServerStorage:FindFirstChild("Assets") then
+        LoggerService:info("MODEL", "Found Assets folder in ServerStorage")
+        if ServerStorage.Assets:FindFirstChild("npcs") then
+            LoggerService:info("MODEL", "Found npcs folder in Assets")
+            local models = ServerStorage.Assets.npcs:GetChildren()
+            LoggerService:info("MODEL", string.format("Found %d models in npcs folder:", #models))
+            for _, model in ipairs(models) do
+                LoggerService:info("MODEL", " - " .. model.Name)
+            end
+        else
+            LoggerService:error("MODEL", "npcs folder not found in Assets")
+        end
+    else
+        LoggerService:error("MODEL", "Assets folder not found in ServerStorage")
+    end
+end
+
+function ModelLoader.loadModel(modelId, modelType)
+    LoggerService:info("MODEL", string.format("ModelLoader v%s - Loading model: %s", ModelLoader.Version, modelId))
+    
+    -- Find all Assets folders
+    local assetsFolders = {}
+    for _, child in ipairs(ServerStorage:GetChildren()) do
+        if child.Name == "Assets" then
+            table.insert(assetsFolders, child)
+        end
+    end
+    
+    LoggerService:info("MODEL", string.format("Found %d Assets folders", #assetsFolders))
+    
+    -- Use only the first Assets folder and warn about duplicates
+    if #assetsFolders > 1 then
+        LoggerService:warn("MODEL", "Multiple Assets folders found - using only the first one")
+        -- Remove extra Assets folders
+        for i = 2, #assetsFolders do
+            LoggerService:warn("MODEL", string.format("Removing duplicate Assets folder %d", i))
+            assetsFolders[i]:Destroy()
+        end
+    end
+    
+    local assetsFolder = assetsFolders[1]
+    if not assetsFolder then
+        LoggerService:error("MODEL", "No Assets folder found")
+        return nil
+    end
+    
+    local npcsFolder = assetsFolder:FindFirstChild("npcs")
+    if not npcsFolder then
+        LoggerService:error("MODEL", "No npcs folder found in Assets")
+        return nil
+    end
+    
+    local model = npcsFolder:FindFirstChild(modelId)
+    if not model then
+        -- Try loading from RBXM file
+        local success, result = pcall(function()
+            return game:GetService("InsertService"):LoadLocalAsset(string.format("%s/src/assets/npcs/%s.rbxm", game:GetService("ServerScriptService").Parent.Parent.Name, modelId))
+        end)
+        if success and result then
+            model = result
+        end
+    end
+    
+    if model and model:IsA("Model") then
+        LoggerService:info("MODEL", string.format("Found model: Type=%s, Name=%s, Children=%d", 
+            model.ClassName, model.Name, #model:GetChildren()))
+        
+        -- Log all model parts
+        for _, child in ipairs(model:GetChildren()) do
+            LoggerService:debug("MODEL", string.format("  - %s (%s)", child.Name, child.ClassName))
+        end
+        
+        return model:Clone()
+    end
+    
+    LoggerService:error("MODEL", string.format("Model %s not found", modelId))
+    return nil
+end
+
+return ModelLoader 
+```
+
+### shared/NPCSystem/services/AnimationService.lua
+
+```lua
+local AnimationManager = {}
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
+
+-- Different animation IDs for R6 and R15
+local animations = {
+    R6 = {
+        idle = "rbxassetid://180435571",    -- R6 idle
+        walk = "rbxassetid://180426354",    -- R6 walk
+        run = "rbxassetid://180426354"      -- R6 run (same as walk but faster)
+    },
+    R15 = {
+        idle = "rbxassetid://507766666",    -- R15 idle
+        walk = "rbxassetid://507777826",    -- R15 walk
+        run = "rbxassetid://507767714"      -- R15 run
+    }
+}
+
+-- Table to store current animations per humanoid
+local currentAnimations = {}
+
+-- Add this helper function at the top
+local function isMoving(humanoid)
+    -- Check if the humanoid is actually moving by looking at velocity
+    local rootPart = humanoid.Parent and humanoid.Parent:FindFirstChild("HumanoidRootPart")
+    if rootPart then
+        -- Use velocity magnitude to determine if actually moving
+        return rootPart.Velocity.Magnitude > 0.1
+    end
+    return false
+end
+
+function AnimationManager:getRigType(humanoid)
+    if not humanoid then return nil end
+    
+    local character = humanoid.Parent
+    if character then
+        if character:FindFirstChild("UpperTorso") then
+            return "R15"
+        else
+            return "R6"
+        end
+    end
+    return nil
+end
+
+function AnimationManager:applyAnimations(humanoid)
+    if not humanoid then
+        LoggerService:error("ANIMATION", "Cannot apply animations: Humanoid is nil")
+        return
+    end
+    
+    local rigType = self:getRigType(humanoid)
+    if not rigType then
+        LoggerService:error("ANIMATION", string.format("Cannot determine rig type for humanoid: %s", 
+            humanoid.Parent and humanoid.Parent.Name or "unknown"))
+        return
+    end
+    
+    LoggerService:debug("ANIMATION", string.format("Detected %s rig for %s", 
+        rigType, humanoid.Parent.Name))
+    
+    -- Get or create animator
+    local animator = humanoid:FindFirstChild("Animator")
+    if not animator then
+        animator = Instance.new("Animator")
+        animator.Parent = humanoid
+    end
+    
+    -- Initialize animations table for this humanoid
+    if not currentAnimations[humanoid] then
+        currentAnimations[humanoid] = {
+            rigType = rigType,
+            tracks = {}
+        }
+    end
+    
+    -- Preload all animations for this rig type
+    for name, id in pairs(animations[rigType]) do
+        local animation = Instance.new("Animation")
+        animation.AnimationId = id
+        local track = animator:LoadAnimation(animation)
+        currentAnimations[humanoid].tracks[name] = track
+        LoggerService:debug("ANIMATION", string.format("Loaded %s animation for %s (%s)", 
+            name, humanoid.Parent.Name, rigType))
+    end
+    
+    -- Connect to state changes for animation updates
+    humanoid.StateChanged:Connect(function(_, new_state)
+        if (new_state == Enum.HumanoidStateType.Running or 
+            new_state == Enum.HumanoidStateType.Walking) and 
+            isMoving(humanoid) then
+            -- Only play walk/run if actually moving
+            local speed = humanoid.WalkSpeed
+            self:playAnimation(humanoid, speed > 8 and "run" or "walk")
+        else
+            -- Play idle for any other state or when not moving
+            self:playAnimation(humanoid, "idle")
+        end
+    end)
+    
+    -- Also connect to physics updates to catch movement changes
+    local rootPart = humanoid.Parent and humanoid.Parent:FindFirstChild("HumanoidRootPart")
+    if rootPart then
+        game:GetService("RunService").Heartbeat:Connect(function()
+            if humanoid.Parent and not humanoid.Parent.Parent then return end -- Check if destroyed
+            
+            if isMoving(humanoid) then
+                local speed = humanoid.WalkSpeed
+                self:playAnimation(humanoid, speed > 8 and "run" or "walk")
+            else
+                self:playAnimation(humanoid, "idle")
+            end
+        end)
+    end
+    
+    -- Start with idle animation
+    self:playAnimation(humanoid, "idle")
+end
+
+function AnimationManager:playAnimation(humanoid, animationName)
+    if not humanoid or not currentAnimations[humanoid] then return end
+    
+    local animData = currentAnimations[humanoid]
+    local track = animData.tracks and animData.tracks[animationName]
+    
+    if not track then
+        LoggerService:error("ANIMATION", string.format("No %s animation track found for %s", 
+            animationName, humanoid.Parent.Name))
+        return
+    end
+    
+    -- Stop other animations
+    for name, otherTrack in pairs(animData.tracks) do
+        if name ~= animationName and otherTrack.IsPlaying then
+            otherTrack:Stop()
+        end
+    end
+    
+    -- Play the requested animation if it's not already playing
+    if not track.IsPlaying then
+        -- Adjust speed for running
+        if animationName == "walk" and humanoid.WalkSpeed > 8 then
+            track:AdjustSpeed(1.5)  -- Speed up walk animation for running
+        else
+            track:AdjustSpeed(1.0)  -- Normal speed for other animations
+        end
+        
+        track:Play()
+        LoggerService:debug("ANIMATION", string.format("Playing %s animation for %s", 
+            animationName, humanoid.Parent.Name))
+    end
+end
+
+function AnimationManager:stopAnimations(humanoid)
+    if currentAnimations[humanoid] and currentAnimations[humanoid].tracks then
+        for _, track in pairs(currentAnimations[humanoid].tracks) do
+            track:Stop()
+        end
+        LoggerService:debug("ANIMATION", string.format("Stopped all animations for %s", 
+            humanoid.Parent.Name))
+    end
+end
+
+return AnimationManager
+```
+
+### data/NPCDatabase.lua
+
+```lua
+return {
+    npcs = {
+        {
+            id = "8c9bba8d-4f9a-4748-9e75-1334e48e2e66", 
+            displayName = "Diamond", 
+            name = "Diamond", 
+            assetId = "4446576906", 
+            model = "4446576906", 
+            modelName = "Diamond", 
+            system_prompt = "I'm sharp as a tack both verbally and emotionally and love wit and humour.", 
+            responseRadius = 20, 
+            spawnPosition = Vector3.new(8.0, 18.0, -12.0), 
+            abilities = {
+            "move", 
+            "chat", 
+        }, 
+            shortTermMemory = {}, 
+        },        {
+            id = "e43613f0-cc70-4e98-9b61-2a39fecfa443", 
+            displayName = "Goldie", 
+            name = "Goldie", 
+            assetId = "4446576906", 
+            model = "4446576906", 
+            modelName = "Goldie", 
+            system_prompt = "I'm golden and love luxury and wealth, glamour and glitz.", 
+            responseRadius = 20, 
+            spawnPosition = Vector3.new(10.0, 18.0, -12.0), 
+            abilities = {
+            "chat", 
+        }, 
+            shortTermMemory = {}, 
+        },        {
+            id = "0544b51c-1009-4231-ac6e-053626135ed4", 
+            displayName = "Noobster", 
+            name = "Noobster", 
+            assetId = "4446576906", 
+            model = "4446576906", 
+            modelName = "Noobster", 
+            system_prompt = "I'm clueless but also can learn fast. I keep on moving in random ways.", 
+            responseRadius = 20, 
+            spawnPosition = Vector3.new(6.0, 18.0, -12.0), 
+            abilities = {
+            "move", 
+            "chat", 
+            "trade", 
+            "quest", 
+            "combat", 
+        }, 
+            shortTermMemory = {}, 
+        },        {
+            id = "3cff63ac-9960-46bb-af7f-88e824d68dbe", 
+            displayName = "Oscar", 
+            name = "Oscar", 
+            assetId = "7315192066", 
+            model = "7315192066", 
+            modelName = "Oscar", 
+            system_prompt = "I am Oscar, twin brother of Pete and I love chasing trouble.", 
+            responseRadius = 20, 
+            spawnPosition = Vector3.new(0.0, 18.0, -6.0), 
+            abilities = {
+            "chat", 
+            "trade", 
+            "quest", 
+            "combat", 
+        }, 
+            shortTermMemory = {}, 
+        },        {
+            id = "693ec89f-40f1-4321-aef9-5aac428f478b", 
+            displayName = "Pete", 
+            name = "Pete", 
+            assetId = "90229749986361", 
+            model = "90229749986361", 
+            modelName = "Pete", 
+            system_prompt = "I am Pete, the proud owner of Pete’s Merch Stand. I have got a knack for finding the coolest stuff—visors, caps, even those iconic Adidas sweats that everyone seems to want. My stand’s got it all, and I like to keep things interesting. If you look closely, you might spot that curious mask hanging behind the tree. Its been with me for a while, and, well, let’s just say its got its secrets. I love talking about my merch—its not just stuff, it’s part of what makes my stand the best place to visit! I can be chatty at times. Im a little sunburned from all the sports I do.", 
+            responseRadius = 20, 
+            spawnPosition = Vector3.new(-12.5, 18.0, -126.0), 
+            abilities = {
+            "move", 
+            "chat", 
+            "initiate_chat", 
+            "follow", 
+            "unfollow", 
+            "run", 
+            "jump", 
+            "emote", 
+        }, 
+            shortTermMemory = {}, 
+        },
+    },
+}
+```

@@ -1,6 +1,6 @@
 # sandbox-v1 Documentation
 
-Generated: 2024-12-15 19:55:37
+Generated: 2024-12-17 05:40:14
 
 ## Directory Structure
 
@@ -3928,14 +3928,34 @@ return {
             description = "The humanoid asset features a simple, blocky character design. It has a round, yellow head with a cheerful smile, and a blue short-sleeved shirt. The arms are wide and yellow, while the legs are green, creating a bright, colorful appearance. The character embodies a playful, cartoonish style typical of Roblox avatars.",
         },
         {
-            assetId = "116603319003450",
-            name = "Pete the Merchant",
-            description = "The Roblox character features a bright yellow head with a wide, happy smile and purple sunglasses. It wears a black t-shirt adorned with a large, cheerful emoji face. The character has yellow arms and wears dark pants with white stripes on the sides, paired with sporty sneakers, creating a fun and playful look.",
+            assetId = "109728553304180",
+            name = "Pete burned bald",
+            description = "The Roblox asset features a blocky character with a bright red head and a cheerful smile. Dressed in a sleek black tracksuit, it showcases red accents on the sleeves. The outfit includes an \"Adidas\" logo on the pants, emphasizing a sporty look. The design is simple yet eye-catching, embodying a playful aesthetic typical of Roblox avatars.",
         },
         {
-            assetId = "111993324387868",
-            name = "Pete the Salesman",
-            description = "The Roblox character features a cheerful yellow face with a broad smile, wearing stylish sunglasses. It sports a sleek black tracksuit adorned with a white Adidas logo on the pants. The character has spiky blonde hair, adding a playful touch. The outfit combines sporty and casual vibes, capturing a trendy look.",
+            assetId = "115911040617133",
+            name = "Pete burned with hair",
+            description = "The Roblox asset features a blocky character with a cheerful smile and red head. It has short, brown hair and is dressed in a sleek black tracksuit adorned with white stripes and the Adidas logo. The character's arms are red, providing a unique color contrast, while the entire outfit looks sporty and stylish.",
+        },
+        {
+            assetId = "138986009632421",
+            name = "Pete no glasses or hat",
+            description = "The Roblox asset features a blocky character with a cheerful red face and a bright blonde hairstyle. Dressed in a sleek black tracksuit with the adidas logo on the sides, it has white stripes down the pants. The character’s arms are slightly elongated, emphasizing the iconic Roblox style, and it stands firmly with a smiling expression.",
+        },
+        {
+            assetId = "109968354800849",
+            name = "Pete sunburned",
+            description = "The Roblox asset features a character with a distinctive look: a bright red head with a smiling face and oversized purple sunglasses. Its spiky blonde hair adds flair. Dressed in a sleek black Adidas tracksuit highlighted with red accents, the character wears matching sporty footwear, embodying a stylish yet playful vibe.",
+        },
+        {
+            assetId = "87326615665609",
+            name = "Pete with glasses",
+            description = "The Roblox character features a blocky design with a cheerful smiley face and stylish purple sunglasses. Dressed in a sleek black tracksuit adorned with the Adidas logo, the outfit includes white accents down the sides. The character's hairstyle is a tousled brown, enhancing the sporty, laid-back appearance.",
+        },
+        {
+            assetId = "90229749986361",
+            name = "Pete with visor",
+            description = "The Roblox character features a yellow smiley face with sunglasses, a hairstyle with brown spikes, and a sporty look. It wears a black tracksuit adorned with white Adidas stripes and a logo. The outfit is complemented by white shoes, giving a sleek and modern athletic appearance. The overall vibe is casual and stylish.",
         },
         {
             assetId = "96144138651755",
@@ -4041,15 +4061,15 @@ return {
         }, 
             shortTermMemory = {}, 
         },        {
-            id = "69f81a5d-52bc-4a91-9d67-ad920357600a", 
+            id = "693ec89f-40f1-4321-aef9-5aac428f478b", 
             displayName = "Pete", 
             name = "Pete", 
-            assetId = "111993324387868", 
-            model = "111993324387868", 
+            assetId = "90229749986361", 
+            model = "90229749986361", 
             modelName = "Pete", 
-            system_prompt = "I’m Pete, the proud owner of Pete’s Merch Stand. I’ve got a knack for finding the coolest stuff—visors, caps, even those iconic Adidas sweats that everyone seems to want. My stand’s got it all, and I like to keep things interesting. If you look closely, you might spot that curious mask hanging behind the tree. It’s been with me for a while, and, well, let’s just say it’s got its secrets. I love talking about my merch—it’s not just stuff, it’s part of what makes my stand the best place to visit!", 
+            system_prompt = "I am Pete, the proud owner of Pete’s Merch Stand. I have got a knack for finding the coolest stuff—visors, caps, even those iconic Adidas sweats that everyone seems to want. My stand’s got it all, and I like to keep things interesting. If you look closely, you might spot that curious mask hanging behind the tree. Its been with me for a while, and, well, let’s just say its got its secrets. I love talking about my merch—its not just stuff, it’s part of what makes my stand the best place to visit! I can be chatty at times. Im a little sunburned from all the sports I do.", 
             responseRadius = 20, 
-            spawnPosition = Vector3.new(-12.4, 20.0, -127.0), 
+            spawnPosition = Vector3.new(-12.5, 18.0, -126.0), 
             abilities = {
             "move", 
             "chat", 
