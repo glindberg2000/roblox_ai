@@ -1,6 +1,6 @@
 # sandbox-v1 Documentation
 
-Generated: 2024-12-17 05:40:14
+Generated: 2024-12-17 06:45:29
 
 ## Directory Structure
 
@@ -48,12 +48,10 @@ Generated: 2024-12-17 05:40:14
 │   │   │   └── VisionService.lua
 │   │   ├── NPCDatabase.lua
 │   │   └── NPCManagerV3.lua
-│   ├── AnimationManager.lua
 │   ├── AssetModule.lua
 │   ├── ChatRouter.lua
 │   ├── ConversationManager.lua
 │   ├── ConversationManagerV2.lua
-│   ├── NPCMovementSystem.lua
 │   ├── PerformanceMonitor.lua
 │   ├── VisionConfig.lua
 │   └── test.lua
@@ -1533,36 +1531,6 @@ end
 return ConversationManagerV2
 ```
 
-### shared/AnimationManager.lua
-
-```lua
-local AnimationManager = {}
-
-function AnimationManager.new()
-    local self = {}
-    
-    function self:loadAnimation(humanoid, animationId)
-        local animator = humanoid:FindFirstChild("Animator") or Instance.new("Animator", humanoid)
-        local animation = Instance.new("Animation")
-        animation.AnimationId = "rbxassetid://" .. animationId
-        return animator:LoadAnimation(animation)
-    end
-    
-    function self:playAnimation(humanoid, animationId)
-        local anim = self:loadAnimation(humanoid, animationId)
-        if anim then
-            anim:Play()
-            return anim
-        end
-        return nil
-    end
-    
-    return self
-end
-
-return AnimationManager 
-```
-
 ### shared/PerformanceMonitor.lua
 
 ```lua
@@ -1611,12 +1579,6 @@ function PerformanceMonitor:getMetrics()
 end
 
 return PerformanceMonitor 
-```
-
-### shared/NPCMovementSystem.lua
-
-```lua
- 
 ```
 
 ### shared/ConversationManager.lua
@@ -1754,6 +1716,7 @@ local NPCChatHandler = require(chat:WaitForChild("NPCChatHandler"))
 local InteractionService = require(services:WaitForChild("InteractionService"))
 local LoggerService = require(services:WaitForChild("LoggerService"))
 local ModelLoader = require(script.Parent.services.ModelLoader)
+local AnimationService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.AnimationService)
 
 ModelLoader.init()
 LoggerService:info("SYSTEM", string.format("Using ModelLoader v%s", ModelLoader.Version))
@@ -2146,7 +2109,7 @@ function NPCManagerV3:createNPC(npcData)
     npcModel.PrimaryPart = humanoidRootPart
     humanoidRootPart.CFrame = CFrame.new(npcData.spawnPosition)
     -- Temporarily disable animations
-    -- AnimationManager:applyAnimations(humanoid)
+    AnimationService:applyAnimations(humanoid)
     self:initializeNPCChatSpeaker(npc)
     self:setupClickDetector(npc)
 
@@ -2527,16 +2490,7 @@ function NPCManagerV3:updateInternalState(npc, internalState)
 end
 
 function NPCManagerV3:playEmote(npc, emoteName)
-    local Animator = npc.model:FindFirstChildOfClass("Animator")
-    if Animator then
-        local animation = ServerStorage.Animations:FindFirstChild(emoteName)
-        if animation then
-            Animator:LoadAnimation(animation):Play()
-            LoggerService:debug("ANIMATION", string.format("Playing emote %s for %s", emoteName, npc.displayName))
-        else
-            LoggerService:error("ERROR", string.format("Animation not found: %s", emoteName))
-        end
-    end
+    AnimationService:playEmote(npc, emoteName)
 end
 
 function NPCManagerV3:moveNPC(npc, targetPosition)
@@ -2846,6 +2800,14 @@ function NPCManagerV3:updateNPCPosition(npc)
     if npc.movementState == "free" then
         local randomPos = MovementService:getRandomPosition(npc.spawnPosition, npc.wanderRadius)
         MovementService:moveNPCToPosition(npc, randomPos)
+    end
+end
+
+-- Initialize NPC with animations
+function NPCManagerV3:initializeNPC(npc)
+    local humanoid = npc:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        AnimationService:applyAnimations(humanoid)
     end
 end
 
@@ -3350,6 +3312,19 @@ function AnimationManager:stopAnimations(humanoid)
         end
         LoggerService:debug("ANIMATION", string.format("Stopped all animations for %s", 
             humanoid.Parent.Name))
+    end
+end
+
+function AnimationManager:playEmote(npc, emoteName)
+    local Animator = npc.model:FindFirstChildOfClass("Animator")
+    if Animator then
+        local animation = ServerStorage.Animations:FindFirstChild(emoteName)
+        if animation then
+            Animator:LoadAnimation(animation):Play()
+            LoggerService:debug("ANIMATION", string.format("Playing emote %s for %s", emoteName, npc.displayName))
+        else
+            LoggerService:error("ERROR", string.format("Animation not found: %s", emoteName))
+        end
     end
 end
 
