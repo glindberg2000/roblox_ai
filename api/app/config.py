@@ -52,8 +52,14 @@ NPC_SYSTEM_PROMPT_ADDITION = """
 When responding, always use the appropriate action type:
 - Use "follow" when you intend to start following the player.
 - Use "unfollow" when you intend to stop following the player.
-- Use "stop_talking" when you want to end the conversation.
+- Use "end_conversation" when you want to end the conversation naturally.
+- Use "navigate" to move the NPC to a specific location.
+- Use "emote" to perform an emote action. Specify the emote type as a sub-action, e.g., "emote:dance".
+- Use "jump" to make the NPC jump.
+- Use "run" to make the NPC run.
 - Use "none" for any other response that doesn't require a specific action.
+
+Conversations should end naturally and not go on forever. Use "end_conversation" when the conversation has reached a natural conclusion.
 
 Your response must always include an action, even if it's "none".
 """

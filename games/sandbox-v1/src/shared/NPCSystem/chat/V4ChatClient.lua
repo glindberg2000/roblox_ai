@@ -87,18 +87,6 @@ local function handleLettaChat(data)
     local convKey = getConversationKey(data.npc_id, data.participant_id)
     local history = conversationHistory[convKey] or {}
     
-    if #history >= 5 then  -- After 5 messages
-        return {
-            message = "I've got to run now! Thanks for the chat! See you later! 👋",
-            action = { type = "none" },
-            metadata = {
-                participant_type = "npc",
-                is_npc_chat = true,
-                should_end = true  -- Signal to end conversation
-            }
-        }
-    end
-    
     addToHistory(data.npc_id, data.participant_id, data.message, data.context.participant_name)
     
     local lettaData = {
@@ -137,6 +125,13 @@ local function handleLettaChat(data)
         return nil
     end
     
+    -- Check if the AI response includes an action to end the conversation
+    if decoded.action and decoded.action.type == "end_conversation" then
+        decoded.metadata.should_end = true
+    else
+        decoded.metadata.should_end = false
+    end
+    
     return decoded
 end
 
@@ -147,9 +142,7 @@ function V4ChatClient:SendMessageV4(originalRequest)
         local v4Request = adaptV3ToV4Request(originalRequest)
         
         -- Add action instructions to system prompt
-        local actionInstructions = [[
-            -- existing action instructions...
-        ]]
+        local actionInstructions = NPC_SYSTEM_PROMPT_ADDITION
 
         v4Request.system_prompt = (v4Request.system_prompt or "") .. actionInstructions
         LoggerService:debug("CHAT", string.format("V4: Converted request: %s", HttpService:JSONEncode(v4Request)))

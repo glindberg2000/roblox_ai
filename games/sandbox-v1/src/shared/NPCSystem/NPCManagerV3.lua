@@ -485,10 +485,16 @@ function NPCManagerV3:startInteraction(npc1, npc2)
     -- Old interaction code...
 end
 
-function NPCManagerV3:endInteraction(npc1, npc2)
-    InteractionService:unlockNPCsAfterInteraction(npc1, npc2)
-    
-    -- Rest of cleanup code...
+function NPCManagerV3:endInteraction(npc, participant)
+    -- Unlock movement and perform any necessary cleanup
+    if npc.model and npc.model:FindFirstChild("Humanoid") then
+        npc.model.Humanoid.WalkSpeed = npc.defaultWalkSpeed or 16
+        npc.isMovementLocked = false
+        LoggerService:debug("MOVEMENT", string.format("Unlocked movement for %s after ending interaction", npc.displayName))
+    end
+
+    -- Additional cleanup logic if needed
+    -- ...
 end
 
 function NPCManagerV3:getCacheKey(npc, player, message)
@@ -586,16 +592,9 @@ end
 
 -- And modify processAIResponse to directly use displayMessage
 function NPCManagerV3:processAIResponse(npc, participant, response)
-    if response.metadata and response.metadata.should_end then
-        -- Set cooldown
-        local cooldownKey = npc.id .. "_" .. participant.UserId
-        self.conversationCooldowns[cooldownKey] = os.time()
-        
-        -- Unlock movement
-        if npc.model and npc.model:FindFirstChild("Humanoid") then
-            npc.model.Humanoid.WalkSpeed = npc.defaultWalkSpeed or 16
-            npc.isMovementLocked = false
-        end
+    -- Ignore should_end metadata
+    if response.metadata then
+        response.metadata.should_end = false
     end
 
     if response.message then
@@ -607,7 +606,13 @@ function NPCManagerV3:processAIResponse(npc, participant, response)
             npc.displayName,
             HttpService:JSONEncode(response.action)
         ))
-        self:executeAction(npc, participant, response.action)
+        
+        -- Handle end_conversation action
+        if response.action.type == "end_conversation" then
+            self:endInteraction(npc, participant)
+        else
+            self:executeAction(npc, participant, response.action)
+        end
     end
 
     if response.internal_state then
@@ -922,33 +927,6 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
             npc.model.Humanoid.WalkSpeed = 0
             npc.isMovementLocked = true
             LoggerService:debug("MOVEMENT", string.format("Locked movement for %s during interaction", npc.displayName))
-        end
-
-        -- Check for conversation ending phrases
-        local endPhrases = {
-            "gotta run",
-            "goodbye",
-            "see you later",
-            "bye",
-            "talk to you later"
-        }
-        
-        for _, phrase in ipairs(endPhrases) do
-            if string.lower(message):find(phrase) then
-                -- Set cooldown
-                self.conversationCooldowns[cooldownKey] = os.time()
-                
-                -- Send goodbye response
-                self:displayMessage(npc, "Goodbye! Talk to you later!", participant)
-                
-                -- Unlock movement
-                if npc.model and npc.model:FindFirstChild("Humanoid") then
-                    npc.model.Humanoid.WalkSpeed = npc.defaultWalkSpeed or 16
-                    npc.isMovementLocked = false
-                end
-                
-                return nil
-            end
         end
 
         local response = NPCChatHandler:HandleChat({
