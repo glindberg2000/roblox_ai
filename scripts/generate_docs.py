@@ -541,6 +541,82 @@ def generate_communication_documentation(game_slug: str):
         
     print(f"Communication documentation generated successfully at {output_path}")
 
+def get_action_files() -> Set[str]:
+    """
+    Return set of action-related files for documentation.
+
+    Returns:
+        Set[str]: Set of file names related to actions
+    """
+    return {
+        'NPCManagerV3.lua',
+        'V4ChatClient.lua',
+        'InteractionController.lua',
+        'ActionSystemDocumentation.md',  # Include the documentation file
+        # Add any other files that are part of the action flow
+    }
+
+def generate_action_documentation(game_slug: str):
+    """
+    Generate documentation for action-related files.
+
+    Args:
+        game_slug (str): Game identifier to generate documentation for
+
+    Creates documentation focusing only on action-related files.
+    """
+    project_root = Path(__file__).parent.parent
+    docs_dir = project_root / "docs"
+    game_dir = project_root / "games" / game_slug
+    
+    # Create docs directory
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    
+    action_files = get_action_files()
+    
+    # Get current timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Initialize documentation content with timestamp
+    doc_content = [
+        f"# {game_slug} Action System Documentation\n",
+        f"Generated: {timestamp}\n",
+        "## Game Directory Structure\n",
+        "```",
+        generate_tree_structure(game_dir / "src", start_with_root=False),
+        "```\n",
+        "## Action Files\n"
+    ]
+    
+    # Add action files
+    for file_path in (game_dir / "src").rglob("*.*"):
+        if file_path.name in action_files:
+            relative_path = file_path.relative_to(game_dir / "src")
+            print(f"Adding action file: {relative_path}")
+            doc_content.extend([
+                f"### {relative_path}\n",
+                "```" + (file_path.suffix[1:] or 'text'),
+                read_file_content(file_path),
+                "```\n"
+            ])
+    
+    # Add documentation file
+    doc_file_path = docs_dir / "ActionSystemDocumentation.md"
+    if doc_file_path.exists():
+        doc_content.extend([
+            f"### ActionSystemDocumentation.md\n",
+            "```markdown",
+            read_file_content(doc_file_path),
+            "```\n"
+        ])
+    
+    # Write action documentation
+    output_path = docs_dir / f"{game_slug}_ACTION_DOCUMENTATION.md"
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write("\n".join(doc_content))
+        
+    print(f"Action documentation generated successfully at {output_path}")
+
 def main():
     """
     Main entry point for the documentation generator.
@@ -551,6 +627,7 @@ def main():
     - Minimal NPC system documentation
     - Animation-only documentation
     - Communication-only documentation
+    - Action-only documentation
     """
     parser = argparse.ArgumentParser(description='Generate documentation for the project.')
     parser.add_argument('path_or_id', help='Path to the game directory or "api" for API documentation')
@@ -558,6 +635,7 @@ def main():
     parser.add_argument('--minimal', action='store_true', help='Generate minimal documentation focusing on core NPC system')
     parser.add_argument('--animations-only', action='store_true', help='Generate documentation focusing on animation-related files')
     parser.add_argument('--communications-only', action='store_true', help='Generate documentation focusing on communication-related files')
+    parser.add_argument('--actions-only', action='store_true', help='Generate documentation focusing on action-related files')
     
     args = parser.parse_args()
     try:
@@ -567,6 +645,8 @@ def main():
             generate_animation_documentation(args.path_or_id)
         elif args.communications_only:
             generate_communication_documentation(args.path_or_id)
+        elif args.actions_only:
+            generate_action_documentation(args.path_or_id)
         else:
             generate_documentation(args.path_or_id, args.api_only)
     except Exception as e:
