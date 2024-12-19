@@ -59,31 +59,19 @@ end
 
 print("NPCSystemInitializer: LoggerService loaded")
 
--- Initialize storage structure first
 local function ensureStorage()
-	print("NPCSystemInitializer: Setting up storage...")
-	
-	-- Create Assets/npcs folder structure
-	local Assets = ServerStorage:FindFirstChild("Assets") or 
-				   Instance.new("Folder", ServerStorage)
-	Assets.Name = "Assets"
-	Assets.Parent = ServerStorage
-	
-	local npcs = Assets:FindFirstChild("npcs") or 
-				 Instance.new("Folder", Assets)
-	npcs.Name = "npcs"
-	npcs.Parent = Assets
-	
-	-- Create NPCs folder in workspace if it doesn't exist
-	if not workspace:FindFirstChild("NPCs") then
-		local NPCsFolder = Instance.new("Folder")
+	print("NPCSystemInitializer: Verifying storage folders...")
+
+	-- Only dynamically create Workspace folders
+	local NPCsFolder = workspace:FindFirstChild("NPCs")
+	if not NPCsFolder then
+		NPCsFolder = Instance.new("Folder")
 		NPCsFolder.Name = "NPCs"
 		NPCsFolder.Parent = workspace
-		print("Created NPCs folder in workspace")
+		print("Created 'NPCs' folder in workspace.")
 	end
-	
-	print("NPCSystemInitializer: Storage setup complete")
-	return npcs
+
+	print("NPCSystemInitializer: Storage verification complete.")
 end
 
 local npcsFolder = ensureStorage()

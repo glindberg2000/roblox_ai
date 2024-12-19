@@ -5,9 +5,11 @@ local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.Logger
 -- Load the AssetDatabase file directly
 local AssetDatabase = require(game:GetService("ServerScriptService").AssetDatabase)
 
--- Create or get LocalDB in ReplicatedStorage for storing asset descriptions
-local LocalDB = ReplicatedStorage:FindFirstChild("LocalDB") or Instance.new("Folder", ReplicatedStorage)
-LocalDB.Name = "LocalDB"
+-- Ensure LocalDB folder exists (managed by Rojo)
+local LocalDB = ReplicatedStorage:FindFirstChild("LocalDB")
+if not LocalDB or not LocalDB:IsA("Folder") then
+    error("LocalDB folder not found in ReplicatedStorage! Check Rojo sync.")
+end
 
 -- Create a lookup table for assets by name
 local AssetLookup = {}
@@ -125,3 +127,14 @@ checkAssetByName("sportymerch")
 checkAssetByName("kid")
 
 LoggerService:info("ASSET", "Asset initialization complete. AssetModule is now available in ReplicatedStorage")
+
+-- Example of creating a new asset entry
+local function createAssetEntry(assetId)
+    local assetEntry = LocalDB:FindFirstChild(assetId)
+    if not assetEntry then
+        assetEntry = Instance.new("Folder")
+        assetEntry.Name = assetId
+        assetEntry.Parent = LocalDB
+    end
+    return assetEntry
+end

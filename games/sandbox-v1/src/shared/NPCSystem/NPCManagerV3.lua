@@ -6,6 +6,7 @@ local Players = game:GetService("Players")
 local ServerScriptService = game:GetService("ServerScriptService")
 local ChatService = game:GetService("Chat")
 local RunService = game:GetService("RunService")
+local workspace = game:GetService("Workspace")
 
 -- Wait for critical paths and store references
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -268,10 +269,13 @@ function NPCManagerV3:createNPC(npcData)
         })
     ))
 
-    -- Ensure NPCs folder exists
-    if not workspace:FindFirstChild("NPCs") then
-        Instance.new("Folder", workspace).Name = "NPCs"
-        LoggerService:debug("SYSTEM", "Created NPCs folder in workspace")
+    -- Ensure NPCs folder exists in Workspace (can be created dynamically)
+    local NPCsFolder = workspace:FindFirstChild("NPCs")
+    if not NPCsFolder or not NPCsFolder:IsA("Folder") then
+        NPCsFolder = Instance.new("Folder")
+        NPCsFolder.Name = "NPCs"
+        NPCsFolder.Parent = workspace
+        print("Created 'NPCs' folder in workspace.")
     end
 
     -- Create and set up NPC model

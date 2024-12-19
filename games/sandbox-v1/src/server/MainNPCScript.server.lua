@@ -43,14 +43,17 @@ local Logger = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService
 local function ensureStorage()
     local ServerStorage = game:GetService("ServerStorage")
     
-    -- Create Assets/npcs folder structure
-    local Assets = ServerStorage:FindFirstChild("Assets") or 
-                   Instance.new("Folder", ServerStorage)
-    Assets.Name = "Assets"
+    -- Ensure Assets folder exists (managed by Rojo)
+    local Assets = ServerStorage:FindFirstChild("Assets")
+    if not Assets or not Assets:IsA("Folder") then
+        error("Assets folder not found in ServerStorage! Check Rojo sync.")
+    end
     
-    local npcs = Assets:FindFirstChild("npcs") or 
-                 Instance.new("Folder", Assets)
-    npcs.Name = "npcs"
+    -- Ensure npcs folder exists within Assets (managed by Rojo)
+    local npcs = Assets:FindFirstChild("npcs")
+    if not npcs or not npcs:IsA("Folder") then
+        error("npcs folder not found in Assets! Check Rojo sync.")
+    end
     
     Logger:log("SYSTEM", "Storage structure verified")
 end

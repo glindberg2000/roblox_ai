@@ -17,7 +17,10 @@
     "ServerStorage": {
       "$className": "ServerStorage",
       "Assets": {
-        "$path": "src/assets"
+        "$className": "Folder",
+        "npcs": {
+          "$path": "src/assets/npcs"
+        }
       }
     },
     "ServerScriptService": {
