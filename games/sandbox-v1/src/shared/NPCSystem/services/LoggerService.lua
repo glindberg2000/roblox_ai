@@ -16,7 +16,8 @@ local config = {
         MOVEMENT = true,
         ANIMATION = true,
         DATABASE = true,
-        API = true
+        API = true,
+        ACTION = true
     },
     timeFormat = "%Y-%m-%d %H:%M:%S",
     outputToFile = false,
