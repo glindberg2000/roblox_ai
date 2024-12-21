@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from letta import ChatMemory, LLMConfig, EmbeddingConfig, create_client
 from letta.prompts import gpt_system
 from letta_roblox.client import LettaRobloxClient
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
 from .database import get_npc_context, create_agent_mapping, get_agent_mapping, get_db, get_player_info
 from .mock_player import MockPlayer
@@ -17,6 +17,14 @@ import json
 import uuid
 import time
 from .letta_utils import extract_tool_results
+from pathlib import Path
+from letta.schemas.message import (
+    ToolCallMessage, 
+    ToolReturnMessage, 
+    ReasoningMessage, 
+    Message
+)
+from .npc_tools import TOOL_REGISTRY
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -58,14 +66,47 @@ def create_roblox_agent(
     if not embedding_config:
         embedding_config = EmbeddingConfig(**EMBEDDING_CONFIGS[DEFAULT_EMBEDDING])
     
+    # Start with the provided system prompt
+    system_prompt = system
+
+    # Add our tools section
+    tools_section = """
+Performing actions:
+You have access to the following tools:
+1. `perform_action` - For basic NPC actions like following
+2. `navigate_to` - For moving to specific locations
+3. `examine_object` - For examining objects
+
+When asked to:
+- Follow someone: Use perform_action with action='follow'
+- Move somewhere: Use navigate_to with destination='location'
+- Examine something: Use examine_object with the object name
+
+Always use these tools when asked to move, follow, examine, or navigate.
+Note: Tool names must be exactly as shown - no spaces or special characters.
+
+Base instructions finished.
+From now on, you are going to act as your persona."""
+
+    # Replace the end section with our tools section
+    system_prompt = system_prompt.replace(
+        "Base instructions finished.\nFrom now on, you are going to act as your persona.",
+        tools_section
+    )
+
+    logger.info(f"Created system prompt with tools section")
+
+    # Get tool IDs
+    tool_ids = register_base_tools(client)
+    
     return client.create_agent(
         name=name,
         embedding_config=embedding_config,
         llm_config=llm_config,
         memory=memory,
-        system=system,
+        system=system_prompt,
         include_base_tools=True,
-        tools=["perform_action"],
+        tool_ids=tool_ids,
         description="A Roblox NPC"
     )
 
@@ -385,7 +426,18 @@ Description: {player_info['description']}"""
             system_prompt = gpt_system.get_system_text("memgpt_chat").strip()
             tools_section = """
 Performing actions:
-You have access to the `perform_action` tool. This tool allows you to direct NPC behavior by specifying an action and its parameters. Use it to control NPC actions such as following, unfollowing, examining objects, or navigating to destinations. Ensure actions align with the context of the conversation and the NPC's role.
+You have access to the following tools:
+1. `perform_action` - For basic NPC actions like following
+2. `navigate_to` - For moving to specific locations
+3. `examine_object` - For examining objects
+
+When asked to:
+- Follow someone: Use perform_action with action='follow'
+- Move somewhere: Use navigate_to with destination='location'
+- Examine something: Use examine_object with the object name
+
+Always use these tools when asked to move, follow, examine, or navigate.
+Note: Tool names must be exactly as shown - no spaces or special characters.
 
 Base instructions finished.
 From now on, you are going to act as your persona."""
@@ -430,29 +482,34 @@ From now on, you are going to act as your persona."""
         results = extract_tool_results(response)
         logger.info(f"Extracted tool results: {json.dumps(results, indent=2)}")
 
-        # Get message and action
         message = None
         action = {"type": "none"}
-
-        # Process tool calls
+        
         for tool_call in results['tool_calls']:
-            logger.info(f"Processing tool call: {tool_call['name']}")
-            
             if tool_call['name'] == 'perform_action' and tool_call['status'] == 'success':
-                # Extract action for Lua
-                if tool_call['arguments'] and 'action' in tool_call['arguments']:
-                    action = {"type": tool_call['arguments']['action']}
-                    logger.info(f"Found action: {action}")
+                # Access parsed arguments directly
+                args = tool_call['arguments']
+                action = {
+                    "type": args.get('action'),
+                    "target": args.get('target')
+                }
+                
+            elif tool_call['name'] == 'navigate_to' and tool_call['status'] == 'success':
+                args = tool_call['arguments']
+                action = {
+                    "type": "navigate",
+                    "data": {
+                        "destination": args.get('destination')
+                    }
+                }
+                
             elif tool_call['name'] == 'send_message':
-                # Get chat message
-                if tool_call['arguments'] and 'message' in tool_call['arguments']:
-                    message = tool_call['arguments']['message']
-                    logger.info(f"Found message: {message}")
+                args = tool_call['arguments']
+                message = args.get('message')
 
-        # Use LLM response as fallback
-        if not message and results['llm_response']:
-            message = results['llm_response']
-            logger.info(f"Using LLM response as fallback: {message}")
+        # Use reasoning as fallback message
+        if not message and results['reasoning']:
+            message = results['reasoning']
 
         logger.info(f"Final response: message='{message}', action={action}")
 
@@ -470,4 +527,67 @@ From now on, you are going to act as your persona."""
     except Exception as e:
         logger.error(f"Error in chat endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# Tool registration function
+def register_base_tools(client) -> List[str]:
+    """Register base tools for all agents and return tool IDs"""
+    # Get existing tools
+    existing_tools = {tool.name: tool.id for tool in client.list_tools()}
+    logger.info(f"Found existing tools: {existing_tools}")
+    
+    tool_ids = []
+    for name, func in TOOL_REGISTRY.items():
+        if name in existing_tools:
+            logger.info(f"Tool already exists: {name} (ID: {existing_tools[name]})")
+            tool_ids.append(existing_tools[name])
+        else:
+            logger.info(f"Registering new tool: {name}")
+            tool = client.create_tool(func, name=name)
+            tool_ids.append(tool.id)
+            logger.info(f"Registered tool: {name} (ID: {tool.id})")
+    
+    return tool_ids
+
+def extract_tool_results(response):
+    """Extract tool results using SDK message types"""
+    results = {
+        'tool_calls': [],
+        'reasoning': None,
+        'final_message': None
+    }
+    
+    if hasattr(response, 'messages'):
+        current_tool = None
+        
+        for msg in response.messages:
+            # Handle Tool Calls
+            if isinstance(msg, ToolCallMessage):
+                try:
+                    # Parse the arguments JSON string
+                    arguments = json.loads(msg.tool_call.arguments)
+                except json.JSONDecodeError:
+                    arguments = {}
+                    logger.warn(f"Could not parse tool arguments: {msg.tool_call.arguments}")
+                
+                current_tool = {
+                    'name': msg.tool_call.name,
+                    'arguments': arguments,  # Store parsed JSON
+                    'status': None,
+                    'result': None
+                }
+                results['tool_calls'].append(current_tool)
+            
+            # Handle Tool Returns
+            elif isinstance(msg, ToolReturnMessage):
+                if current_tool:
+                    current_tool.update({
+                        'status': msg.status,
+                        'result': msg.tool_return
+                    })
+            
+            # Handle Reasoning
+            elif isinstance(msg, ReasoningMessage):
+                results['reasoning'] = msg.reasoning
+
+    return results
 

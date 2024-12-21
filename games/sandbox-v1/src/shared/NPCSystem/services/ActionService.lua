@@ -12,6 +12,8 @@ local LoggerService = {
 local NPCManagerV3 = require(ReplicatedStorage.Shared.NPCSystem.NPCManagerV3)
 local movementServiceInstance = NPCManagerV3.getInstance().movementService
 
+local NavigationService = require(ReplicatedStorage.Shared.NPCSystem.services.NavigationService)
+
 local ActionService = {}
 
 function ActionService.follow(npc, target)
@@ -70,6 +72,37 @@ function ActionService.moveTo(npc, position)
     else
         LoggerService:warn("ACTION_SERVICE", "Invalid NPC or Position provided for moveTo action")
     end
+end
+
+function ActionService.navigate(npc, destination)
+    LoggerService:debug("ACTION_SERVICE", string.format("NPC %s navigate request: %s", 
+        npc.displayName, 
+        destination
+    ))
+
+    -- If currently following, stop first
+    if npc.isFollowing then
+        ActionService.unfollow(npc)
+    end
+
+    -- Navigate to destination
+    local success = NavigationService:goToDestination(npc, destination)
+    
+    if success then
+        LoggerService:debug("ACTION_SERVICE", string.format(
+            "NPC %s successfully navigated to %s",
+            npc.displayName,
+            destination
+        ))
+    else
+        LoggerService:warn("ACTION_SERVICE", string.format(
+            "NPC %s failed to navigate to %s",
+            npc.displayName,
+            destination
+        ))
+    end
+
+    return success
 end
 
 return ActionService

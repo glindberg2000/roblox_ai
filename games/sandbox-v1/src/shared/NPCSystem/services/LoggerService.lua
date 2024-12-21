@@ -17,7 +17,10 @@ local config = {
         ANIMATION = true,
         DATABASE = true,
         API = true,
-        ACTION = true
+        ACTION = true,
+        ACTION_SERVICE = true,
+        NAVIGATION = true,
+        PATH_FINDING = true
     },
     timeFormat = "%Y-%m-%d %H:%M:%S",
     outputToFile = false,

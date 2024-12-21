@@ -1,6 +1,6 @@
 # sandbox-v1 Documentation
 
-Generated: 2024-12-18 00:45:53
+Generated: 2024-12-20 01:45:46
 
 ## Directory Structure
 
@@ -9,7 +9,7 @@ Generated: 2024-12-18 00:45:53
 │   ├── clothings
 │   ├── npcs
 │   ├── props
-│   └── unknown
+│   └── test1
 ├── client
 │   ├── NPCClientChatHandler.lua
 │   └── NPCClientHandler.client.lua
@@ -29,6 +29,8 @@ Generated: 2024-12-18 00:45:53
 │   └── test.server.lua
 ├── shared
 │   ├── NPCSystem
+│   │   ├── actions
+│   │   │   └── ActionRouter.lua
 │   │   ├── chat
 │   │   │   ├── ChatUtils.lua
 │   │   │   ├── NPCChatHandler.lua
@@ -40,6 +42,7 @@ Generated: 2024-12-18 00:45:53
 │   │   │   ├── NPCConfig.lua
 │   │   │   └── PerformanceConfig.lua
 │   │   ├── services
+│   │   │   ├── ActionService.lua
 │   │   │   ├── AnimationService.lua
 │   │   │   ├── InteractionService.lua
 │   │   │   ├── LoggerService.lua
@@ -47,7 +50,8 @@ Generated: 2024-12-18 00:45:53
 │   │   │   ├── MovementService.lua
 │   │   │   └── VisionService.lua
 │   │   ├── NPCDatabase.lua
-│   │   └── NPCManagerV3.lua
+│   │   ├── NPCManagerV3.lua
+│   │   └── config.lua
 │   ├── AssetModule.lua
 │   ├── ChatRouter.lua
 │   ├── ConversationManager.lua
@@ -255,14 +259,17 @@ local Logger = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService
 local function ensureStorage()
     local ServerStorage = game:GetService("ServerStorage")
     
-    -- Create Assets/npcs folder structure
-    local Assets = ServerStorage:FindFirstChild("Assets") or 
-                   Instance.new("Folder", ServerStorage)
-    Assets.Name = "Assets"
+    -- Ensure Assets folder exists (managed by Rojo)
+    local Assets = ServerStorage:FindFirstChild("Assets")
+    if not Assets or not Assets:IsA("Folder") then
+        error("Assets folder not found in ServerStorage! Check Rojo sync.")
+    end
     
-    local npcs = Assets:FindFirstChild("npcs") or 
-                 Instance.new("Folder", Assets)
-    npcs.Name = "npcs"
+    -- Ensure npcs folder exists within Assets (managed by Rojo)
+    local npcs = Assets:FindFirstChild("npcs")
+    if not npcs or not npcs:IsA("Folder") then
+        error("npcs folder not found in Assets! Check Rojo sync.")
+    end
     
     Logger:log("SYSTEM", "Storage structure verified")
 end
@@ -678,31 +685,19 @@ end
 
 print("NPCSystemInitializer: LoggerService loaded")
 
--- Initialize storage structure first
 local function ensureStorage()
-	print("NPCSystemInitializer: Setting up storage...")
-	
-	-- Create Assets/npcs folder structure
-	local Assets = ServerStorage:FindFirstChild("Assets") or 
-				   Instance.new("Folder", ServerStorage)
-	Assets.Name = "Assets"
-	Assets.Parent = ServerStorage
-	
-	local npcs = Assets:FindFirstChild("npcs") or 
-				 Instance.new("Folder", Assets)
-	npcs.Name = "npcs"
-	npcs.Parent = Assets
-	
-	-- Create NPCs folder in workspace if it doesn't exist
-	if not workspace:FindFirstChild("NPCs") then
-		local NPCsFolder = Instance.new("Folder")
+	print("NPCSystemInitializer: Verifying storage folders...")
+
+	-- Only dynamically create Workspace folders
+	local NPCsFolder = workspace:FindFirstChild("NPCs")
+	if not NPCsFolder then
+		NPCsFolder = Instance.new("Folder")
 		NPCsFolder.Name = "NPCs"
 		NPCsFolder.Parent = workspace
-		print("Created NPCs folder in workspace")
+		print("Created 'NPCs' folder in workspace.")
 	end
-	
-	print("NPCSystemInitializer: Storage setup complete")
-	return npcs
+
+	print("NPCSystemInitializer: Storage verification complete.")
 end
 
 local npcsFolder = ensureStorage()
@@ -817,9 +812,11 @@ local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.Logger
 -- Load the AssetDatabase file directly
 local AssetDatabase = require(game:GetService("ServerScriptService").AssetDatabase)
 
--- Create or get LocalDB in ReplicatedStorage for storing asset descriptions
-local LocalDB = ReplicatedStorage:FindFirstChild("LocalDB") or Instance.new("Folder", ReplicatedStorage)
-LocalDB.Name = "LocalDB"
+-- Ensure LocalDB folder exists (managed by Rojo)
+local LocalDB = ReplicatedStorage:FindFirstChild("LocalDB")
+if not LocalDB or not LocalDB:IsA("Folder") then
+    error("LocalDB folder not found in ReplicatedStorage! Check Rojo sync.")
+end
 
 -- Create a lookup table for assets by name
 local AssetLookup = {}
@@ -937,6 +934,17 @@ checkAssetByName("sportymerch")
 checkAssetByName("kid")
 
 LoggerService:info("ASSET", "Asset initialization complete. AssetModule is now available in ReplicatedStorage")
+
+-- Example of creating a new asset entry
+local function createAssetEntry(assetId)
+    local assetEntry = LocalDB:FindFirstChild(assetId)
+    if not assetEntry then
+        assetEntry = Instance.new("Folder")
+        assetEntry.Name = assetId
+        assetEntry.Parent = LocalDB
+    end
+    return assetEntry
+end
 
 ```
 
@@ -1702,6 +1710,7 @@ local Players = game:GetService("Players")
 local ServerScriptService = game:GetService("ServerScriptService")
 local ChatService = game:GetService("Chat")
 local RunService = game:GetService("RunService")
+local workspace = game:GetService("Workspace")
 
 -- Wait for critical paths and store references
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -1964,10 +1973,13 @@ function NPCManagerV3:createNPC(npcData)
         })
     ))
 
-    -- Ensure NPCs folder exists
-    if not workspace:FindFirstChild("NPCs") then
-        Instance.new("Folder", workspace).Name = "NPCs"
-        LoggerService:debug("SYSTEM", "Created NPCs folder in workspace")
+    -- Ensure NPCs folder exists in Workspace (can be created dynamically)
+    local NPCsFolder = workspace:FindFirstChild("NPCs")
+    if not NPCsFolder or not NPCsFolder:IsA("Folder") then
+        NPCsFolder = Instance.new("Folder")
+        NPCsFolder.Name = "NPCs"
+        NPCsFolder.Parent = workspace
+        print("Created 'NPCs' folder in workspace.")
     end
 
     -- Create and set up NPC model
@@ -2812,6 +2824,17 @@ return {
 } 
 ```
 
+### shared/NPCSystem/config.lua
+
+```lua
+local Config = {}
+
+-- Toggle this to switch between legacy and new action systems
+Config.UseNewActionSystem = false
+
+return Config 
+```
+
 ### shared/NPCSystem/services/MovementService.lua
 
 ```lua
@@ -2939,6 +2962,73 @@ function VisionService:isInRange(npc1, npc2, radius)
 end
 
 return VisionService 
+```
+
+### shared/NPCSystem/services/ActionService.lua
+
+```lua
+local ActionService = {}
+
+local LoggerService = {
+    debug = function(_, category, message)
+        print(string.format("[DEBUG] [%s] %s", category, message))
+    end,
+    warn = function(_, category, message)
+        warn(string.format("[WARN] [%s] %s", category, message))
+    end
+}
+
+local MovementService = require(ReplicatedStorage.Shared.NPCSystem.services.MovementService)
+
+-- Follow Action
+function ActionService.follow(npc, target, options)
+    LoggerService:debug("ACTION_SERVICE", string.format("NPC %s is following target %s", npc.displayName, target.Name))
+    if npc and target then
+        -- Delegate to MovementService for follow behavior
+        MovementService:startFollowing(npc, target, options)
+    else
+        LoggerService:warn("ACTION_SERVICE", "Invalid NPC or Target provided for follow action")
+    end
+end
+
+-- Unfollow Action
+function ActionService.unfollow(npc)
+    LoggerService:debug("ACTION_SERVICE", string.format("NPC %s stopped following", npc.displayName))
+    if npc then
+        -- Delegate to MovementService to stop following
+        MovementService:stopFollowing(npc)
+    else
+        LoggerService:warn("ACTION_SERVICE", "Invalid NPC provided for unfollow action")
+    end
+end
+
+-- Chat Action
+function ActionService.chat(npc, message)
+    LoggerService:debug("ACTION_SERVICE", string.format("NPC %s is chatting: %s", npc.displayName, message))
+    if npc and message then
+        -- Example chat bubble logic
+        local chatEvent = game.ReplicatedStorage:FindFirstChild("NPCChatEvent")
+        if chatEvent then
+            chatEvent:FireAllClients(npc, message)
+        else
+            LoggerService:warn("ACTION_SERVICE", "NPCChatEvent not found in ReplicatedStorage")
+        end
+    else
+        LoggerService:warn("ACTION_SERVICE", "Invalid NPC or Message provided for chat action")
+    end
+end
+
+-- Placeholder for additional actions
+function ActionService.moveTo(npc, position)
+    LoggerService:debug("ACTION_SERVICE", string.format("NPC %s is moving to position: %s", npc.displayName, tostring(position)))
+    if npc and position then
+        MovementService:moveNPCToPosition(npc, position)
+    else
+        LoggerService:warn("ACTION_SERVICE", "Invalid NPC or Position provided for moveTo action")
+    end
+end
+
+return ActionService
 ```
 
 ### shared/NPCSystem/services/LoggerService.lua
@@ -3367,6 +3457,63 @@ function InteractionService:unlockNPCsAfterInteraction(npc1, npc2)
 end
 
 return InteractionService 
+```
+
+### shared/NPCSystem/actions/ActionRouter.lua
+
+```lua
+local ActionRouter = {}
+
+local ActionHandlers = {}
+local ActionService = require(ReplicatedStorage.Shared.NPCSystem.services.ActionService)
+
+-- Function to register action handlers
+function ActionRouter:registerAction(actionType, handler)
+    ActionHandlers[actionType] = handler
+end
+
+-- Function to route actions to the correct handler
+function ActionRouter:routeAction(npc, participant, action)
+    local actionType = action and action.type
+
+    if not actionType then
+        warn("[ActionRouter] Invalid action format:", action)
+        return
+    end
+
+    local handler = ActionHandlers[actionType]
+    if handler then
+        print("[ActionRouter] Executing action:", actionType)
+        handler(npc, participant, action.data)
+    else
+        warn("[ActionRouter] No handler registered for action:", actionType)
+    end
+end
+
+-- Initialize action handlers
+function ActionRouter:initialize()
+    -- Register a "follow" action
+    self:registerAction("follow", function(npc, participant, data)
+        local target = participant -- Assuming the participant is the follow target
+        ActionService.follow(npc, target, data)
+    end)
+
+    -- Register an "unfollow" action
+    self:registerAction("unfollow", function(npc, _, _)
+        ActionService.unfollow(npc)
+    end)
+
+    -- Register a "chat" action
+    self:registerAction("chat", function(npc, _, data)
+        if data.message then
+            ActionService.chat(npc, data.message)
+        else
+            warn("[ActionRouter] Missing message for chat action")
+        end
+    end)
+end
+
+return ActionRouter
 ```
 
 ### shared/NPCSystem/chat/V3ChatClient.lua
