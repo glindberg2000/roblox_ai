@@ -58,10 +58,14 @@ return {
             responseRadius = 20, 
             spawnPosition = Vector3.new(0.0, 18.0, -6.0), 
             abilities = {
+            "move", 
             "chat", 
-            "trade", 
-            "quest", 
-            "combat", 
+            "initiate_chat", 
+            "follow", 
+            "unfollow", 
+            "run", 
+            "jump", 
+            "emote", 
         }, 
             shortTermMemory = {}, 
         },        {
