@@ -41,4 +41,5 @@ htmlcov/
 *.backup
 # games/*/
 *.patch
-generate_problem_doc.py
+generate_problem_doc.pyapi/app/letta-templates/
+api/letta-templates/

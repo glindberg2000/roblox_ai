@@ -24,7 +24,13 @@ from letta.schemas.message import (
     ReasoningMessage, 
     Message
 )
-from .npc_tools import TOOL_REGISTRY
+from letta_templates import (
+    TOOL_INSTRUCTIONS,
+    TOOL_REGISTRY,
+    perform_action,
+    navigate_to,
+    examine_object
+)
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -70,28 +76,9 @@ def create_roblox_agent(
     system_prompt = system
 
     # Add our tools section
-    tools_section = """
-Performing actions:
-You have access to the following tools:
-1. `perform_action` - For basic NPC actions like following
-2. `navigate_to` - For moving to specific locations
-3. `examine_object` - For examining objects
-
-When asked to:
-- Follow someone: Use perform_action with action='follow'
-- Move somewhere: Use navigate_to with destination='location'
-- Examine something: Use examine_object with the object name
-
-Always use these tools when asked to move, follow, examine, or navigate.
-Note: Tool names must be exactly as shown - no spaces or special characters.
-
-Base instructions finished.
-From now on, you are going to act as your persona."""
-
-    # Replace the end section with our tools section
     system_prompt = system_prompt.replace(
-        "Base instructions finished.\nFrom now on, you are going to act as your persona.",
-        tools_section
+        "Base instructions finished.",
+        TOOL_INSTRUCTIONS + "\nBase instructions finished."
     )
 
     logger.info(f"Created system prompt with tools section")
@@ -536,13 +523,13 @@ def register_base_tools(client) -> List[str]:
     logger.info(f"Found existing tools: {existing_tools}")
     
     tool_ids = []
-    for name, func in TOOL_REGISTRY.items():
+    for name, info in TOOL_REGISTRY.items():
         if name in existing_tools:
             logger.info(f"Tool already exists: {name} (ID: {existing_tools[name]})")
             tool_ids.append(existing_tools[name])
         else:
             logger.info(f"Registering new tool: {name}")
-            tool = client.create_tool(func, name=name)
+            tool = client.create_tool(info["function"], name=name)
             tool_ids.append(tool.id)
             logger.info(f"Registered tool: {name} (ID: {tool.id})")
     
