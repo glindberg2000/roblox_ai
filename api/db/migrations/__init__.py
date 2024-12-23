@@ -5,8 +5,12 @@ import os
 from importlib import util as importlib_util
 from pathlib import Path
 
-def run_migrations(db_path="db/game_data.db"):
+def run_migrations(db_path=None):
     """Run all pending migrations"""
+    if db_path is None:
+        from api.app.config import SQLITE_DB_PATH
+        db_path = SQLITE_DB_PATH
+        
     print(f"Running migrations on {db_path}")
     
     conn = sqlite3.connect(db_path)
@@ -92,6 +96,55 @@ def rollback_migration(migration_name: str, db_path="db/game_data.db"):
         print(f"! Failed to roll back {migration_name}: {str(e)}")
         conn.rollback()
         raise
+    
+    finally:
+        conn.close()
+
+def check_migration_status(db_path=None):
+    """Check status of all migrations"""
+    if db_path is None:
+        from api.app.config import SQLITE_DB_PATH
+        db_path = SQLITE_DB_PATH
+    
+    print(f"Checking migrations in {db_path}")
+    
+    conn = sqlite3.connect(db_path)
+    
+    try:
+        # First check if migrations table exists
+        cursor = conn.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name='migrations';
+        """)
+        
+        if not cursor.fetchone():
+            print("! Migrations table does not exist")
+            print("→ Run migrations first with: python -m api.db.migrations")
+            return
+        
+        # Get applied migrations
+        cursor = conn.execute("SELECT name FROM migrations ORDER BY name")
+        applied = cursor.fetchall()
+        
+        if not applied:
+            print("No migrations applied yet")
+        else:
+            print("\nApplied migrations:")
+            for migration in applied:
+                print(f"✓ {migration[0]}")
+        
+        # Check for specific migrations
+        migrations_to_check = [
+            '007_add_location_data'
+        ]
+        
+        print("\nRequired migrations:")
+        for migration in migrations_to_check:
+            cursor = conn.execute("SELECT 1 FROM migrations WHERE name = ?", (migration,))
+            if cursor.fetchone():
+                print(f"✓ {migration} (applied)")
+            else:
+                print(f"! {migration} (not applied)")
     
     finally:
         conn.close()

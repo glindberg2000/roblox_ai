@@ -435,58 +435,58 @@ async def list_npcs(game_id: Optional[int] = None):
 async def update_asset(game_id: int, asset_id: str, request: Request):
     try:
         data = await request.json()
-        logger.info(f"Updating asset {asset_id} for game {game_id} with data: {data}")
+        
+        # Parse location data
+        is_location = data.get('is_location', False)
+        position_x = data.get('position_x')
+        position_y = data.get('position_y')
+        position_z = data.get('position_z')
+        
+        # Parse aliases from comma-separated string
+        aliases = data.get('aliases', '')
+        if isinstance(aliases, str):
+            aliases = [a.strip() for a in aliases.split(',') if a.strip()]
+        
+        # Parse location data
+        location_data = data.get('location_data', '{}')
+        if isinstance(location_data, str):
+            try:
+                location_data = json.loads(location_data)
+            except json.JSONDecodeError:
+                location_data = {}
         
         with get_db() as db:
-            try:
-                # First get game info
-                cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
-                game = cursor.fetchone()
-                if not game:
-                    raise HTTPException(status_code=404, detail="Game not found")
-                
-                game_slug = game['slug']
-                
-                # Update asset in database
-                cursor.execute("""
-                    UPDATE assets 
-                    SET name = ?,
-                        description = ?
-                    WHERE game_id = ? AND asset_id = ?
-                    RETURNING *
-                """, (
-                    data['name'],
-                    data['description'],
-                    game_id,
-                    asset_id
-                ))
-                
-                updated = cursor.fetchone()
-                if not updated:
-                    raise HTTPException(status_code=404, detail="Asset not found")
-                
-                # Update Lua files - pass game_slug instead of file path
-                save_lua_database(game_slug, db)
-                
-                db.commit()
-                
-                # Format response
-                asset_data = {
-                    "id": updated["id"],
-                    "assetId": updated["asset_id"],
-                    "name": updated["name"],
-                    "description": updated["description"],
-                    "type": updated["type"],
-                    "imageUrl": updated["image_url"],
-                    "tags": json.loads(updated["tags"]) if updated["tags"] else []
-                }
-                
-                return JSONResponse(asset_data)
-                
-            except Exception as e:
-                db.rollback()
-                logger.error(f"Database error updating asset: {str(e)}")
-                raise
+            cursor = db.execute("""
+                UPDATE assets 
+                SET name = ?,
+                    description = ?,
+                    is_location = ?,
+                    position_x = ?,
+                    position_y = ?,
+                    position_z = ?,
+                    aliases = ?,
+                    location_data = ?
+                WHERE game_id = ? AND asset_id = ?
+                RETURNING *
+            """, (
+                data['name'],
+                data['description'],
+                is_location,
+                position_x,
+                position_y,
+                position_z,
+                json.dumps(aliases),
+                json.dumps(location_data),
+                game_id,
+                asset_id
+            ))
+            
+            updated = cursor.fetchone()
+            if not updated:
+                raise HTTPException(status_code=404, detail="Asset not found")
+            
+            db.commit()
+            return JSONResponse(dict(updated))
             
     except Exception as e:
         logger.error(f"Error updating asset: {str(e)}")
@@ -988,6 +988,37 @@ async def get_game_templates():
     except Exception as e:
         logger.error(f"Error fetching templates: {str(e)}")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+@router.post("/assets/add")
+async def add_asset(
+    name: str,
+    description: str,
+    is_location: bool = False,
+    position_x: Optional[float] = None,
+    position_y: Optional[float] = None,
+    position_z: Optional[float] = None,
+    aliases: str = "[]"  # Comma-separated list in form, stored as JSON
+):
+    """Add new asset with location support"""
+    try:
+        # Parse aliases from comma-separated string
+        alias_list = [a.strip() for a in aliases.split(",") if a.strip()]
+        
+        db.execute("""
+            INSERT INTO assets (
+                name, description, is_location, 
+                position_x, position_y, position_z,
+                aliases
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            name, description, is_location,
+            position_x, position_y, position_z,
+            json.dumps(alias_list)
+        ))
+        
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ... rest of your existing routes ...
 
