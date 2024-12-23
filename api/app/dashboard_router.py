@@ -300,62 +300,49 @@ async def delete_game_endpoint(slug: str):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @router.get("/api/assets")
-async def list_assets(game_id: Optional[int] = None, type: Optional[str] = None):
+async def list_assets(game_id: int = None, type: str = None):
+    """Get list of assets, optionally filtered by game and type"""
     try:
         with get_db() as db:
+            # Update SELECT to include location fields
+            query = """
+                SELECT id, asset_id, name, description, image_url, type, tags, 
+                       game_id, created_at, location_data, is_location,
+                       position_x, position_y, position_z, aliases
+                FROM assets
+                WHERE 1=1
+            """
+            params = []
+            
+            if game_id:
+                query += " AND game_id = ?"
+                params.append(game_id)
+                
+            if type:
+                query += " AND type = ?"
+                params.append(type)
+                
             logger.info(f"Fetching assets for game_id: {game_id}, type: {type}")
-
-            # Build query based on game_id and type
-            if game_id and type:
-                cursor = db.execute("""
-                    SELECT a.*, COUNT(n.id) as npc_count
-                    FROM assets a
-                    LEFT JOIN npcs n ON a.asset_id = n.asset_id AND n.game_id = a.game_id
-                    WHERE a.game_id = ? AND a.type = ?
-                    GROUP BY a.id, a.asset_id
-                    ORDER BY a.name
-                """, (game_id, type))
-            elif game_id:
-                cursor = db.execute("""
-                    SELECT a.*, COUNT(n.id) as npc_count
-                    FROM assets a
-                    LEFT JOIN npcs n ON a.asset_id = n.asset_id AND n.game_id = a.game_id
-                    WHERE a.game_id = ?
-                    GROUP BY a.id, a.asset_id
-                    ORDER BY a.name
-                """, (game_id,))
-            else:
-                cursor = db.execute("""
-                    SELECT a.*, COUNT(n.id) as npc_count, g.title as game_title
-                    FROM assets a
-                    LEFT JOIN npcs n ON a.asset_id = n.asset_id AND n.game_id = a.game_id
-                    LEFT JOIN games g ON a.game_id = g.id
-                    GROUP BY a.id, a.asset_id
-                    ORDER BY a.name
-                """)
-
-            assets = [dict(row) for row in cursor.fetchall()]
-            logger.info(f"Found {len(assets)} assets")
-
-            # Format the response
-            formatted_assets = []
+            cursor = db.execute(query, params)
+            assets = cursor.fetchall()
+            
+            # Convert to list of dicts and parse JSON fields
+            asset_list = []
             for asset in assets:
-                formatted_assets.append({
-                    "id": asset["id"],
-                    "assetId": asset["asset_id"],
-                    "name": asset["name"],
-                    "description": asset["description"],
-                    "imageUrl": asset["image_url"],
-                    "type": asset["type"],
-                    "tags": json.loads(asset["tags"]) if asset["tags"] else [],
-                    "npcCount": asset["npc_count"],
-                    "gameTitle": asset.get("game_title")
-                })
-
-            return JSONResponse({"assets": formatted_assets})
+                asset_dict = dict(asset)
+                # Parse JSON fields
+                if asset_dict.get('location_data'):
+                    asset_dict['location_data'] = json.loads(asset_dict['location_data'])
+                if asset_dict.get('aliases'):
+                    asset_dict['aliases'] = json.loads(asset_dict['aliases'])
+                asset_list.append(asset_dict)
+            
+            logger.info(f"Found {len(assets)} assets")
+            return {"assets": asset_list}
+            
     except Exception as e:
         logger.error(f"Error fetching assets: {str(e)}")
-        return JSONResponse({"error": f"Failed to fetch assets: {str(e)}"}, status_code=500)
+        raise HTTPException(status_code=500, detail=str(e))
 
 def get_valid_npcs(db, game_id):
     """Get only valid NPCs (with required fields and valid assets)"""
@@ -435,58 +422,57 @@ async def list_npcs(game_id: Optional[int] = None):
 async def update_asset(game_id: int, asset_id: str, request: Request):
     try:
         data = await request.json()
-        
-        # Parse location data
-        is_location = data.get('is_location', False)
-        position_x = data.get('position_x')
-        position_y = data.get('position_y')
-        position_z = data.get('position_z')
-        
-        # Parse aliases from comma-separated string
-        aliases = data.get('aliases', '')
-        if isinstance(aliases, str):
-            aliases = [a.strip() for a in aliases.split(',') if a.strip()]
-        
-        # Parse location data
-        location_data = data.get('location_data', '{}')
-        if isinstance(location_data, str):
-            try:
-                location_data = json.loads(location_data)
-            except json.JSONDecodeError:
-                location_data = {}
+        logger.info(f"Updating asset {asset_id} with data: {json.dumps(data, indent=2)}")
         
         with get_db() as db:
-            cursor = db.execute("""
-                UPDATE assets 
-                SET name = ?,
-                    description = ?,
-                    is_location = ?,
-                    position_x = ?,
-                    position_y = ?,
-                    position_z = ?,
-                    aliases = ?,
-                    location_data = ?
-                WHERE game_id = ? AND asset_id = ?
-                RETURNING *
-            """, (
-                data['name'],
-                data['description'],
-                is_location,
-                position_x,
-                position_y,
-                position_z,
-                json.dumps(aliases),
-                json.dumps(location_data),
-                game_id,
-                asset_id
-            ))
-            
-            updated = cursor.fetchone()
-            if not updated:
-                raise HTTPException(status_code=404, detail="Asset not found")
-            
-            db.commit()
-            return JSONResponse(dict(updated))
+            try:
+                # Update asset with new location fields
+                update_sql = """
+                    UPDATE assets 
+                    SET name = ?,
+                        description = ?,
+                        type = ?,
+                        is_location = ?,
+                        position_x = ?,
+                        position_y = ?,
+                        position_z = ?,
+                        aliases = ?,
+                        location_data = ?
+                    WHERE game_id = ? AND asset_id = ?
+                    RETURNING *
+                """
+                
+                params = (
+                    data['name'],
+                    data['description'],
+                    data['type'],
+                    data.get('is_location', False),
+                    data.get('position_x'),
+                    data.get('position_y'),
+                    data.get('position_z'),
+                    json.dumps(data.get('aliases', [])),
+                    json.dumps(data.get('location_data', {})),
+                    game_id,
+                    asset_id
+                )
+                
+                logger.info(f"Executing SQL with params: {params}")
+                cursor = db.execute(update_sql, params)
+                
+                updated = cursor.fetchone()
+                if not updated:
+                    logger.error(f"Asset not found: game_id={game_id}, asset_id={asset_id}")
+                    raise HTTPException(status_code=404, detail="Asset not found")
+                
+                logger.info(f"Successfully updated asset: {dict(updated)}")
+                db.commit()
+                
+                return JSONResponse(dict(updated))
+                
+            except sqlite3.Error as e:
+                logger.error(f"Database error: {str(e)}")
+                db.rollback()
+                raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
             
     except Exception as e:
         logger.error(f"Error updating asset: {str(e)}")

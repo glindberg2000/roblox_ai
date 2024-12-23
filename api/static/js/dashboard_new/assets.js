@@ -2,6 +2,14 @@ import { showNotification } from './ui.js';
 import { debugLog } from './utils.js';
 import { state } from './state.js';
 
+// Add at the top of the file with other constants
+const AREA_DISPLAY_NAMES = {
+    'spawn_area': 'Spawn Area',
+    'market_district': 'Market District',
+    'town_center': 'Town Center',
+    'residential': 'Residential Area'
+};
+
 export async function loadAssets() {
     if (!state.currentGame) {
         console.warn('No game selected');
@@ -11,56 +19,85 @@ export async function loadAssets() {
     try {
         const response = await fetch(`/api/assets?game_id=${state.currentGame.id}`);
         const data = await response.json();
-        
+
         const assetList = document.getElementById('assetList');
         if (!assetList) return;
-        
+
         assetList.innerHTML = '';
-        
+
         if (data.assets && data.assets.length > 0) {
             data.assets.forEach(asset => {
-                const assetCard = document.createElement('div');
-                assetCard.className = 'bg-dark-800 p-6 rounded-xl shadow-xl border border-dark-700 hover:border-blue-500 transition-colors duration-200';
-                
-                // Create the card content without onclick string attributes
-                assetCard.innerHTML = `
-                    <div class="aspect-w-16 aspect-h-9 mb-4">
-                        <img src="${asset.imageUrl || ''}" 
-                             alt="${asset.name}" 
-                             class="w-full h-32 object-contain rounded-lg bg-dark-700 p-2">
-                    </div>
-                    <h3 class="font-bold text-lg mb-2 text-gray-100">${asset.name}</h3>
-                    <p class="text-sm text-gray-400 mb-2">ID: ${asset.assetId}</p>
-                    <p class="text-sm text-gray-400 mb-4">${asset.description || 'No description'}</p>
-                    <div class="flex space-x-2">
-                        <button class="edit-asset-btn flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                            Edit
-                        </button>
-                        <button class="delete-asset-btn flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
-                            Delete
-                        </button>
-                    </div>
-                `;
+                try {
+                    const assetCard = document.createElement('div');
+                    assetCard.className = 'bg-dark-800 p-6 rounded-xl shadow-xl border border-dark-700 hover:border-blue-500 transition-colors duration-200';
 
-                // Add event listeners properly
-                const editBtn = assetCard.querySelector('.edit-asset-btn');
-                const deleteBtn = assetCard.querySelector('.delete-asset-btn');
-                
-                editBtn.addEventListener('click', () => editAsset(asset.assetId));
-                deleteBtn.addEventListener('click', () => deleteAsset(asset.assetId));
-                
-                assetList.appendChild(assetCard);
+                    // Safely parse JSON fields
+                    let aliases = [];
+                    if (asset.aliases) {
+                        try {
+                            aliases = typeof asset.aliases === 'string' ?
+                                JSON.parse(asset.aliases) : asset.aliases;
+                        } catch (e) {
+                            console.warn('Failed to parse aliases:', e);
+                        }
+                    }
+
+                    let locationData = {};
+                    if (asset.location_data) {
+                        try {
+                            locationData = typeof asset.location_data === 'string' ?
+                                JSON.parse(asset.location_data) : asset.location_data;
+                        } catch (e) {
+                            console.warn('Failed to parse location_data:', e);
+                        }
+                    }
+
+                    // Create the card content
+                    assetCard.innerHTML = `
+                        <div class="aspect-w-16 aspect-h-9 mb-4">
+                            <img src="${asset.image_url || ''}" 
+                                 alt="${asset.name}" 
+                                 class="w-full h-32 object-contain rounded-lg bg-dark-700 p-2">
+                        </div>
+                        <h3 class="font-bold text-lg mb-2 text-gray-100">${asset.name}</h3>
+                        <p class="text-sm text-gray-400 mb-2">ID: ${asset.asset_id}</p>
+                        <p class="text-sm text-gray-400 mb-2">Type: ${asset.type || 'Unknown'}</p>
+                        ${asset.is_location ? `
+                            <div class="text-sm text-gray-400 mb-2">
+                                <p>Location: (${asset.position_x || '?'}, ${asset.position_y || '?'}, ${asset.position_z || '?'})</p>
+                                <p>Area: ${getAreaDisplayName(locationData.area) || 'Unknown'}</p>
+                                ${aliases.length > 0 ? `
+                                    <p>Aliases: ${aliases.join(', ')}</p>
+                                ` : ''}
+                            </div>
+                        ` : ''}
+                        <p class="text-sm text-gray-400 mb-4">${asset.description || 'No description'}</p>
+                        <div class="flex space-x-2">
+                            <button class="edit-asset-btn flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                                Edit
+                            </button>
+                            <button class="delete-asset-btn flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                                Delete
+                            </button>
+                        </div>
+                    `;
+
+                    // Add event listeners
+                    const editBtn = assetCard.querySelector('.edit-asset-btn');
+                    const deleteBtn = assetCard.querySelector('.delete-asset-btn');
+
+                    editBtn.addEventListener('click', () => editAsset(asset.asset_id));
+                    deleteBtn.addEventListener('click', () => deleteAsset(asset.asset_id));
+
+                    assetList.appendChild(assetCard);
+                } catch (cardError) {
+                    console.error('Error creating asset card:', cardError, asset);
+                }
             });
         } else {
             assetList.innerHTML = '<p class="text-gray-400">No assets found</p>';
         }
-        
-        // Update game ID in asset form
-        const gameIdInput = document.getElementById('assetFormGameId');
-        if (gameIdInput) {
-            gameIdInput.value = state.currentGame.id;
-        }
-        
+
     } catch (error) {
         console.error('Error loading assets:', error);
         showNotification('Failed to load assets', 'error');
@@ -76,30 +113,50 @@ export async function editAsset(assetId) {
     try {
         const response = await fetch(`/api/assets?game_id=${state.currentGame.id}`);
         const data = await response.json();
-        const asset = data.assets.find(a => a.assetId === assetId);
+        const asset = data.assets.find(a => a.asset_id === assetId);
 
         if (!asset) {
             showNotification('Asset not found', 'error');
             return;
         }
 
-        // Get the modal and form elements
-        const modal = document.getElementById('assetEditModal');
+        // Get all form elements
         const form = document.getElementById('assetEditForm');
-        const nameInput = form.querySelector('#editAssetName');
-        const descriptionInput = form.querySelector('#editAssetDescription');
-        const assetIdInput = form.querySelector('#editAssetId');
-        const imageElement = form.querySelector('#editAssetImage');
-        const assetIdDisplay = form.querySelector('#editAssetId_display');
+        const nameInput = document.getElementById('editAssetName');
+        const typeInput = document.getElementById('editAssetType');
+        const descriptionInput = document.getElementById('editAssetDescription');
+        const assetIdInput = document.getElementById('editAssetId');
+        const isLocationInput = document.getElementById('editAssetIsLocation');
+        const locationFields = document.getElementById('editLocationFields');
 
-        // Populate the form
+        // Populate basic fields
         nameInput.value = asset.name;
+        typeInput.value = asset.type || 'Model';
         descriptionInput.value = asset.description || '';
-        assetIdInput.value = asset.assetId;
-        imageElement.src = asset.imageUrl || '';
-        assetIdDisplay.textContent = asset.assetId;
+        assetIdInput.value = asset.asset_id;
+
+        // Handle location fields
+        isLocationInput.checked = asset.is_location;
+        locationFields.style.display = asset.is_location ? 'block' : 'none';
+
+        if (asset.is_location) {
+            // Set position values
+            document.getElementById('editPositionX').value = asset.position_x || '';
+            document.getElementById('editPositionY').value = asset.position_y || '';
+            document.getElementById('editPositionZ').value = asset.position_z || '';
+
+            const locationData = typeof asset.location_data === 'string' ?
+                JSON.parse(asset.location_data) : asset.location_data || {};
+
+            document.getElementById('editLocationArea').value = locationData.area || 'spawn_area';
+            document.getElementById('editLocationType').value = locationData.type || 'shop';
+            document.getElementById('editLocationOwner').value = locationData.owner || '';
+            document.getElementById('editLocationInteractable').checked = locationData.interactable || false;
+            document.getElementById('editLocationTags').value = (locationData.tags || []).join(', ');
+        }
 
         // Show the modal
+        const modal = document.getElementById('assetEditModal');
         modal.style.display = 'block';
 
     } catch (error) {
@@ -115,31 +172,74 @@ export function closeAssetEditModal() {
 
 export async function saveAssetEdit(event) {
     event.preventDefault();
-    
-    const form = event.target;
-    const assetId = form.querySelector('#editAssetId').value;
-    const name = form.querySelector('#editAssetName').value.trim();
-    const description = form.querySelector('#editAssetDescription').value.trim();
 
     try {
+        const assetId = document.getElementById('editAssetId').value;
+        const isLocation = document.getElementById('editAssetIsLocation').checked;
+
+        // Build update data
+        const data = {
+            name: document.getElementById('editAssetName').value,
+            type: document.getElementById('editAssetType').value,
+            description: document.getElementById('editAssetDescription').value,
+            is_location: isLocation
+        };
+
+        // Add location data if is_location is true
+        if (isLocation) {
+            // Add position data
+            data.position_x = parseFloat(document.getElementById('editPositionX').value) || null;
+            data.position_y = parseFloat(document.getElementById('editPositionY').value) || null;
+            data.position_z = parseFloat(document.getElementById('editPositionZ').value) || null;
+
+            // Add aliases
+            data.aliases = document.getElementById('editAliases').value
+                .split(',')
+                .map(a => a.trim())
+                .filter(a => a.length > 0);
+
+            const areaSelect = document.getElementById('editLocationArea');
+            const areaValue = areaSelect.value === 'other'
+                ? document.getElementById('editLocationAreaCustom').value
+                : areaSelect.value;
+
+            data.location_data = {
+                area: areaValue,
+                type: document.getElementById('editLocationType').value,
+                owner: document.getElementById('editLocationOwner').value,
+                interactable: document.getElementById('editLocationInteractable').checked,
+                tags: document.getElementById('editLocationTags').value
+                    .split(',')
+                    .map(t => t.trim())
+                    .filter(t => t.length > 0)
+            };
+        }
+
+        console.log('Sending update with data:', data);
+
+        // Send update request
         const response = await fetch(`/api/games/${state.currentGame.id}/assets/${assetId}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ name, description })
+            body: JSON.stringify(data)
         });
 
         if (!response.ok) {
-            throw new Error('Failed to update asset');
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to update asset');
         }
 
+        // Refresh asset list
+        await loadAssets();
+
+        // Close modal
         closeAssetEditModal();
-        showNotification('Asset updated successfully', 'success');
-        loadAssets();
+
     } catch (error) {
-        console.error('Error saving asset:', error);
-        showNotification('Failed to save changes', 'error');
+        console.error('Error updating asset:', error);
+        alert('Failed to update asset');
     }
 }
 
@@ -218,7 +318,7 @@ export async function createAsset(event) {
 window.loadAssets = loadAssets;
 window.editAsset = editAsset;
 window.deleteAsset = deleteAsset;
-window.createAsset = createAsset; 
+window.createAsset = createAsset;
 window.closeAssetEditModal = closeAssetEditModal;
 window.saveAssetEdit = saveAssetEdit;
 
@@ -232,4 +332,33 @@ function escapeHTML(str) {
         "'": '&#39;',
         '"': '&quot;'
     }[tag]));
+}
+
+function insertLocationTemplate() {
+    const template = {
+        area: "spawn_area",
+        type: "shop",
+        owner: "",
+        interactable: true,
+        tags: []
+    };
+
+    document.getElementById('editLocationData').value =
+        JSON.stringify(template, null, 2);
+}
+
+// Add to window exports
+window.insertLocationTemplate = insertLocationTemplate;
+
+function toggleCustomArea() {
+    const areaSelect = document.getElementById('editLocationArea');
+    const customInput = document.getElementById('editLocationAreaCustom');
+    customInput.style.display = areaSelect.value === 'other' ? 'block' : 'none';
+}
+
+window.toggleCustomArea = toggleCustomArea;
+
+// Helper function to get display name
+function getAreaDisplayName(areaSlug) {
+    return AREA_DISPLAY_NAMES[areaSlug] || areaSlug;
 } 
