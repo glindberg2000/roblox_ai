@@ -15,7 +15,8 @@ from .utils import (
     save_json_database, 
     save_lua_database, 
     get_database_paths,
-    ensure_game_directories
+    ensure_game_directories,
+    save_databases
 )
 from .storage import FileStorageManager
 from .image_utils import get_asset_description
@@ -466,6 +467,13 @@ async def update_asset(game_id: int, asset_id: str, request: Request):
                 
                 logger.info(f"Successfully updated asset: {dict(updated)}")
                 db.commit()
+                
+                # Get game slug for file updates
+                cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
+                game = cursor.fetchone()
+                if game:
+                    # Update Lua and JSON files
+                    save_databases(game['slug'], db)
                 
                 return JSONResponse(dict(updated))
                 
@@ -1004,6 +1012,138 @@ async def add_asset(
         
         return {"status": "success"}
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/locations")
+async def list_locations(game_id: int = None, area: str = None):
+    """Get list of all location assets, optionally filtered by game and area"""
+    try:
+        with get_db() as db:
+            query = """
+                SELECT id, asset_id, name, description, type,
+                       position_x, position_y, position_z,
+                       location_data, aliases
+                FROM assets
+                WHERE is_location = TRUE
+            """
+            params = []
+            
+            if game_id:
+                query += " AND game_id = ?"
+                params.append(game_id)
+                
+            if area:
+                query += " AND json_extract(location_data, '$.area') = ?"
+                params.append(area)
+                
+            cursor = db.execute(query, params)
+            locations = cursor.fetchall()
+            
+            # Parse JSON fields
+            location_list = []
+            for loc in locations:
+                loc_dict = dict(loc)
+                if loc_dict.get('location_data'):
+                    loc_dict['location_data'] = json.loads(loc_dict['location_data'])
+                if loc_dict.get('aliases'):
+                    loc_dict['aliases'] = json.loads(loc_dict['aliases'])
+                location_list.append(loc_dict)
+            
+            return {"locations": location_list}
+            
+    except Exception as e:
+        logger.error(f"Error fetching locations: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/assets/{asset_id}")
+async def get_asset(asset_id: str, game_id: int = None):
+    """Get single asset by ID"""
+    try:
+        with get_db() as db:
+            query = """
+                SELECT *
+                FROM assets
+                WHERE asset_id = ?
+            """
+            params = [asset_id]
+            
+            if game_id:
+                query += " AND game_id = ?"
+                params.append(game_id)
+                
+            cursor = db.execute(query, params)
+            asset = cursor.fetchone()
+            
+            if not asset:
+                raise HTTPException(status_code=404, detail="Asset not found")
+                
+            # Parse JSON fields
+            asset_dict = dict(asset)
+            if asset_dict.get('location_data'):
+                asset_dict['location_data'] = json.loads(asset_dict['location_data'])
+            if asset_dict.get('aliases'):
+                asset_dict['aliases'] = json.loads(asset_dict['aliases'])
+                
+            return asset_dict
+            
+    except Exception as e:
+        logger.error(f"Error fetching asset: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/locations/search")
+async def search_locations(
+    game_id: int,
+    x: float = None,
+    y: float = None,
+    z: float = None,
+    radius: float = 10.0,
+    area: str = None
+):
+    """Search for locations near a point"""
+    try:
+        with get_db() as db:
+            # Base query with distance calculation
+            query = """
+                SELECT *, 
+                    ((position_x - ?) * (position_x - ?) + 
+                     (position_y - ?) * (position_y - ?) + 
+                     (position_z - ?) * (position_z - ?)) as distance
+                FROM assets
+                WHERE is_location = TRUE
+                AND game_id = ?
+            """
+            params = [x or 0, x or 0, y or 0, y or 0, z or 0, z or 0, game_id]
+            
+            if area:
+                query += " AND json_extract(location_data, '$.area') = ?"
+                params.append(area)
+            
+            # Add distance filter to WHERE clause instead of HAVING
+            if all([x, y, z]):
+                query += f" AND ((position_x - ?) * (position_x - ?) + \
+                               (position_y - ?) * (position_y - ?) + \
+                               (position_z - ?) * (position_z - ?)) <= ?"
+                params.extend([x, x, y, y, z, z, radius * radius])
+                
+            query += " ORDER BY distance"
+            
+            cursor = db.execute(query, params)
+            locations = cursor.fetchall()
+            
+            # Parse JSON fields
+            location_list = []
+            for loc in locations:
+                loc_dict = dict(loc)
+                if loc_dict.get('location_data'):
+                    loc_dict['location_data'] = json.loads(loc_dict['location_data'])
+                if loc_dict.get('aliases'):
+                    loc_dict['aliases'] = json.loads(loc_dict['aliases'])
+                location_list.append(loc_dict)
+            
+            return {"locations": location_list}
+            
+    except Exception as e:
+        logger.error(f"Error searching locations: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ... rest of your existing routes ...

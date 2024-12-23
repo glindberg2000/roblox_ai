@@ -73,16 +73,47 @@ def format_npc_as_lua(npc: dict, db=None) -> str:
         raise
 
 def format_asset_as_lua(asset: dict) -> str:
-    """Format single asset as Lua table entry"""
-    # Escape any quotes in the description
-    description = asset['description'].replace('"', '\\"')
+    """Format single asset as Lua table entry with location data"""
+    # Escape any quotes in strings
+    description = asset['description'].replace('"', '\\"') if asset.get('description') else ""
+    name = asset['name'].replace('"', '\\"')
     
-    # Match the NPC style formatting
-    return (f"        {{\n"
-            f"            assetId = \"{asset['asset_id']}\",\n"
-            f"            name = \"{asset['name']}\",\n"
-            f"            description = \"{description}\",\n"
-            f"        }},\n")
+    # Parse JSON fields
+    location_data = {}
+    if asset.get('location_data'):
+        try:
+            location_data = json.loads(asset['location_data']) if isinstance(asset['location_data'], str) else asset['location_data']
+        except:
+            location_data = {}
+            
+    aliases = []
+    if asset.get('aliases'):
+        try:
+            aliases = json.loads(asset['aliases']) if isinstance(asset['aliases'], str) else asset['aliases']
+        except:
+            aliases = []
+
+    # Format location data
+    location_info = ""
+    if asset.get('is_location'):
+        location_info = f"""
+            isLocation = true,
+            position = Vector3.new({asset.get('position_x', 0)}, {asset.get('position_y', 0)}, {asset.get('position_z', 0)}),
+            locationData = {{
+                area = "{location_data.get('area', 'unknown')}",
+                type = "{location_data.get('type', 'unknown')}",
+                owner = "{location_data.get('owner', '')}",
+                interactable = {str(location_data.get('interactable', False)).lower()},
+                tags = {{{', '.join(f'"{tag}"' for tag in location_data.get('tags', []))}}}
+            }},
+            aliases = {{{', '.join(f'"{alias}"' for alias in aliases)}}},"""
+
+    return f"""        {{
+            assetId = "{asset['asset_id']}",
+            name = "{name}",
+            description = "{description}",
+            type = "{asset.get('type', 'Model')}",{location_info}
+        }},\n"""
 
 def save_lua_database(game_slug: str, db: sqlite3.Connection) -> None:
     """Save both NPC and Asset Lua databases for a game"""
@@ -246,4 +277,46 @@ def ensure_game_directories(game_slug: str) -> Dict[str, Path]:
     except Exception as e:
         logger.error(f"Error in ensure_game_directories: {str(e)}")
         logger.error("Stack trace:", exc_info=True)
+        raise
+
+def save_databases(game_slug: str, db: sqlite3.Connection) -> None:
+    """Save both Lua and JSON databases for a game"""
+    try:
+        cursor = db.execute("SELECT id FROM games WHERE slug = ?", (game_slug,))
+        game = cursor.fetchone()
+        if not game:
+            raise ValueError(f"Game {game_slug} not found")
+            
+        game_id = game['id']
+        db_paths = get_database_paths(game_slug)
+        
+        # Get assets with all fields
+        cursor = db.execute("""
+            SELECT *
+            FROM assets 
+            WHERE game_id = ?
+            ORDER BY name
+        """, (game_id,))
+        assets = cursor.fetchall()
+        
+        # Save Lua format
+        asset_lua = "return {\n    assets = {\n"
+        for asset in assets:
+            asset_lua += format_asset_as_lua(dict(asset))
+        asset_lua += "    },\n}"
+        
+        with open(db_paths['asset']['lua'], 'w', encoding='utf-8') as f:
+            f.write(asset_lua)
+            logger.info(f"Wrote Lua asset database to {db_paths['asset']['lua']}")
+
+        # Save JSON format
+        asset_json = {"assets": [dict(asset) for asset in assets]}
+        with open(db_paths['asset']['json'], 'w', encoding='utf-8') as f:
+            json.dump(asset_json, f, indent=4)
+            logger.info(f"Wrote JSON asset database to {db_paths['asset']['json']}")
+
+        # Save NPCs as before...
+        
+    except Exception as e:
+        logger.error(f"Error saving databases: {str(e)}")
         raise
