@@ -4,10 +4,51 @@ import { state } from './state.js';
 
 // Add at the top of the file with other constants
 const AREA_DISPLAY_NAMES = {
+    // Core Areas
     'spawn_area': 'Spawn Area',
+    'downtown': 'Downtown',
     'market_district': 'Market District',
     'town_center': 'Town Center',
-    'residential': 'Residential Area'
+
+    // Residential Areas
+    'residential': 'Residential District',
+    'suburbs': 'Suburbs',
+    'hills': 'The Hills',
+    'apartments': 'Apartment Complex',
+
+    // Infrastructure
+    'train_station': 'Train Station',
+    'train_tracks': 'Train Tracks',
+    'bus_terminal': 'Bus Terminal',
+    'parking_lot': 'Parking Lot',
+
+    // Special Areas
+    'cemetery': 'Cemetery',
+    'crematorium': 'Crematorium',
+    'park': 'Central Park',
+    'plaza': 'Town Plaza',
+
+    // Commercial Areas
+    'shopping_center': 'Shopping Center',
+    'strip_mall': 'Strip Mall',
+    'food_court': 'Food Court',
+
+    // Industrial
+    'warehouse_district': 'Warehouse District',
+    'factory_zone': 'Factory Zone',
+    'loading_docks': 'Loading Docks',
+
+    // Underground/Utility Areas
+    'sewer_main': 'Main Sewer Line',
+    'sewer_east': 'East Sewer Network',
+    'sewer_west': 'West Sewer Network',
+    'sewer_junction': 'Sewer Junction',
+    'maintenance_tunnels': 'Maintenance Tunnels',
+    'utility_room': 'Utility Room',
+    'underground_storage': 'Underground Storage',
+    'drainage_system': 'Drainage System',
+    'water_treatment': 'Water Treatment Facility',
+    'electrical_substation': 'Electrical Substation',
 };
 
 export async function loadAssets() {
