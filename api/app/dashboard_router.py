@@ -1,7 +1,7 @@
 import logging
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Request, Depends
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Request, Depends, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 import json
 import xml.etree.ElementTree as ET
@@ -44,6 +44,9 @@ import uuid
 from fastapi.templating import Jinja2Templates
 import sqlite3
 from enum import Enum
+from openai import OpenAI
+import numpy as np
+from scipy.spatial.distance import cosine
 
 logger = logging.getLogger("roblox_app")
 
@@ -56,6 +59,21 @@ router = APIRouter(dependencies=[Depends(check_allowed_ips)])
 # Set up templates
 BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+# Initialize OpenAI client
+client = OpenAI()
+
+def get_embedding(text: str) -> List[float]:
+    """Get OpenAI embedding for text"""
+    response = client.embeddings.create(
+        model="text-embedding-ada-002",
+        input=text
+    )
+    return response.data[0].embedding
+
+def semantic_similarity(query_embedding: List[float], target_embedding: List[float]) -> float:
+    """Calculate cosine similarity between embeddings"""
+    return 1 - cosine(query_embedding, target_embedding)
 
 def slugify(text):
     """Generate a unique slug for the game."""
@@ -1014,8 +1032,66 @@ async def add_asset(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/api/locations")
-async def list_locations(game_id: int = None, area: str = None):
+# Define response models
+class LocationData(BaseModel):
+    area: str = Field(..., description="The zone this location belongs to")
+    type: str = Field(..., description="Type of location (shop, landmark, etc)")
+    owner: Optional[str] = Field(None, description="Who owns/manages this location")
+    interactable: bool = Field(False, description="Whether players can interact with this")
+    tags: List[str] = Field(default_factory=list, description="Categories/tags for this location")
+
+class Asset(BaseModel):
+    id: int
+    asset_id: str
+    name: str
+    description: Optional[str]
+    type: str
+    is_location: bool = False
+    position_x: Optional[float]
+    position_y: Optional[float]
+    position_z: Optional[float]
+    location_data: Optional[LocationData]
+    aliases: List[str] = []
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "asset_id": "96144138651755",
+                "name": "Pete's Merch Stand",
+                "type": "Prop",
+                "is_location": True,
+                "position_x": -10.289,
+                "position_y": 21.512,
+                "position_z": -127.797,
+                "location_data": {
+                    "area": "spawn_area",
+                    "type": "shop",
+                    "owner": "Pete",
+                    "interactable": True,
+                    "tags": ["shop", "retail"]
+                },
+                "aliases": ["stand", "merchant stand"]
+            }
+        }
+
+@router.get("/api/locations", 
+    response_model=List[Asset],
+    tags=["locations"],
+    summary="List all location assets",
+    description="""
+    Get a list of all assets marked as locations.
+    Can be filtered by game ID and area.
+    
+    Example:
+    ```bash
+    # Get all locations in spawn area
+    curl "http://localhost:8000/api/locations?game_id=61&area=spawn_area"
+    ```
+    """)
+async def list_locations(
+    game_id: Optional[int] = Query(None, description="Filter by game ID"),
+    area: Optional[str] = Query(None, description="Filter by area name")
+):
     """Get list of all location assets, optionally filtered by game and area"""
     try:
         with get_db() as db:
@@ -1144,6 +1220,82 @@ async def search_locations(
             
     except Exception as e:
         logger.error(f"Error searching locations: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/locations/semantic-search")
+async def semantic_location_search(
+    game_id: int,
+    query: str,
+    threshold: float = Query(0.8, description="Minimum similarity threshold (0-1)"),
+    limit: int = Query(3, description="Maximum number of results to return")
+):
+    """Search locations using semantic similarity"""
+    try:
+        # Add context to query
+        contextualized_query = f"Find a location in the game: {query}"
+        query_embedding = get_embedding(contextualized_query)
+        
+        with get_db() as db:
+            cursor = db.execute("""
+                SELECT id, asset_id, name, description, 
+                       position_x, position_y, position_z,
+                       location_data, aliases
+                FROM assets
+                WHERE is_location = TRUE
+                AND game_id = ?
+            """, (game_id,))
+            
+            locations = []
+            for loc in cursor.fetchall():
+                loc_dict = dict(loc)
+                
+                # Parse JSON fields
+                if loc_dict.get('location_data'):
+                    loc_dict['location_data'] = json.loads(loc_dict['location_data'])
+                if loc_dict.get('aliases'):
+                    loc_dict['aliases'] = json.loads(loc_dict['aliases'])
+                
+                # Create more structured searchable text
+                location_data = loc_dict.get('location_data', {})
+                search_text = f"""
+                This is a location in the game:
+                Name: {loc_dict['name']}
+                Description: {loc_dict['description']}
+                Type: {location_data.get('type', '')}
+                Area: {location_data.get('area', '')}
+                Owner: {location_data.get('owner', '')}
+                Also known as: {' '.join(loc_dict.get('aliases', []))}
+                """
+                
+                # Get embedding for location
+                loc_embedding = get_embedding(search_text)
+                
+                # Calculate similarity
+                similarity = semantic_similarity(query_embedding, loc_embedding)
+                
+                if similarity >= threshold:
+                    locations.append({
+                        **loc_dict,
+                        "similarity": similarity
+                    })
+            
+            # Sort by similarity and limit results
+            locations.sort(key=lambda x: x["similarity"], reverse=True)
+            locations = locations[:limit]
+            
+            if not locations:
+                return {
+                    "message": "No matching locations found",
+                    "locations": []
+                }
+            
+            return {
+                "message": f"Found {len(locations)} matching locations",
+                "locations": locations
+            }
+            
+    except Exception as e:
+        logger.error(f"Error in semantic search: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ... rest of your existing routes ...
