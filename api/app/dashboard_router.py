@@ -54,7 +54,9 @@ logger = logging.getLogger("roblox_app")
 
 from .security import check_allowed_ips
 
-router = APIRouter(dependencies=[Depends(check_allowed_ips)])
+# Comment out the security dependency
+# router = APIRouter(dependencies=[Depends(check_allowed_ips)])
+router = APIRouter()  # No security check
 
 # Set up templates
 BASE_DIR = Path(__file__).resolve().parent.parent

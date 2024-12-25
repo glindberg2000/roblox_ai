@@ -74,35 +74,46 @@ function ActionService.moveTo(npc, position)
     end
 end
 
-function ActionService.navigate(npc, destination)
-    LoggerService:debug("ACTION_SERVICE", string.format("NPC %s navigate request: %s", 
+function ActionService:handleNavigate(npc, data)
+    LoggerService:debug("ACTION_SERVICE", string.format(
+        "NPC %s navigate request: %s", 
         npc.displayName, 
-        destination
+        data.destination
     ))
-
-    -- If currently following, stop first
-    if npc.isFollowing then
-        ActionService.unfollow(npc)
-    end
-
-    -- Navigate to destination
-    local success = NavigationService:goToDestination(npc, destination)
     
-    if success then
-        LoggerService:debug("ACTION_SERVICE", string.format(
-            "NPC %s successfully navigated to %s",
-            npc.displayName,
-            destination
+    -- Check if NPC can move
+    if npc.isMovementLocked then
+        LoggerService:warn("NAVIGATION", string.format(
+            "NPC %s movement is locked - cannot navigate",
+            npc.displayName
         ))
-    else
-        LoggerService:warn("ACTION_SERVICE", string.format(
-            "NPC %s failed to navigate to %s",
-            npc.displayName,
-            destination
-        ))
+        return false
     end
-
-    return success
+    
+    -- Use coordinates directly if provided
+    if data.coordinates then
+        local targetPos = Vector3.new(
+            data.coordinates.x,
+            data.coordinates.y,
+            data.coordinates.z
+        )
+        
+        LoggerService:debug("NAVIGATION", string.format(
+            "Moving %s to coordinates: (%.1f, %.1f, %.1f)",
+            npc.displayName,
+            targetPos.X, targetPos.Y, targetPos.Z
+        ))
+        
+        -- Use MovementService to handle actual movement
+        self.movementService:moveNPCToPosition(npc, targetPos)
+        return true
+    end
+    
+    LoggerService:warn("NAVIGATION", string.format(
+        "No valid coordinates for %s navigation",
+        npc.displayName
+    ))
+    return false
 end
 
 return ActionService

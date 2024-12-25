@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from letta import ChatMemory, LLMConfig, EmbeddingConfig, create_client
 from letta.prompts import gpt_system
 from letta_roblox.client import LettaRobloxClient
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 from pydantic import BaseModel
 from .database import get_npc_context, create_agent_mapping, get_agent_mapping, get_db, get_player_info
 from .mock_player import MockPlayer
@@ -28,8 +28,7 @@ from letta_templates import (
     TOOL_INSTRUCTIONS,
     TOOL_REGISTRY,
     perform_action,
-    navigate_to,
-    examine_object
+    navigate_to
 )
 
 # Convert config to LLMConfig objects
@@ -353,10 +352,10 @@ def get_player_description(participant_id: str) -> str:
 @router.post("/chat/v2", response_model=ChatResponse)
 async def chat_with_npc_v2(request: ChatRequest):
     """New endpoint using direct Letta SDK"""
-    # Basic request logging
-    logger.info(f"Received request from game: {request.model_dump_json()}")
-
     try:
+        # Basic request logging
+        logger.info(f"Received request from game: {request.model_dump_json()}")
+
         # Get NPC context
         npc_details = get_npc_context(request.npc_id)
         if not npc_details:
@@ -416,12 +415,12 @@ Performing actions:
 You have access to the following tools:
 1. `perform_action` - For basic NPC actions like following
 2. `navigate_to` - For moving to specific locations
-3. `examine_object` - For examining objects
+3. `navigate_to` - For examining objects
 
 When asked to:
 - Follow someone: Use perform_action with action='follow'
 - Move somewhere: Use navigate_to with destination='location'
-- Examine something: Use examine_object with the object name
+- Examine something: Use navigate_to with the object name
 
 Always use these tools when asked to move, follow, examine, or navigate.
 Note: Tool names must be exactly as shown - no spaces or special characters.
@@ -465,55 +464,60 @@ From now on, you are going to act as your persona."""
             logger.error(f"Error sending message to Letta: {str(e)}")
             raise
         
-        # Use our new tool results extractor
+        # Extract tool results
         results = extract_tool_results(response)
-        logger.info(f"Extracted tool results: {json.dumps(results, indent=2)}")
-
-        message = None
-        action = {"type": "none"}
+        logger.info("Successfully extracted tool results")
         
-        for tool_call in results['tool_calls']:
-            if tool_call['name'] == 'perform_action' and tool_call['status'] == 'success':
-                # Access parsed arguments directly
-                args = tool_call['arguments']
-                action = {
-                    "type": args.get('action'),
-                    "target": args.get('target')
-                }
+        # Try to get navigation data
+        try:
+            message = "I'm working on it!"  # Default message
+            action = {"type": "none"}
+            
+            # Process navigation if present
+            for tool_call in results.get("tool_calls", []):
+                if tool_call["name"] == "navigate_to":
+                    logger.info("Found navigation tool call")
+                    result = json.loads(tool_call["result"])
+                    logger.info(f"Parsed navigation result: {result}")
+                    
+                    if result["status"] == "success":
+                        coords = result["coordinates"]
+                        action = {
+                            "type": "navigate",
+                            "data": {
+                                "destination": tool_call["arguments"]["destination"],
+                                "coordinates": coords
+                            }
+                        }
+                        message = "I'm heading to the location!"
+                        logger.info(f"Navigation action created: {action}")
                 
-            elif tool_call['name'] == 'navigate_to' and tool_call['status'] == 'success':
-                args = tool_call['arguments']
-                action = {
-                    "type": "navigate",
-                    "data": {
-                        "destination": args.get('destination')
-                    }
-                }
-                
-            elif tool_call['name'] == 'send_message':
-                args = tool_call['arguments']
-                message = args.get('message')
+                elif tool_call["name"] == "send_message":
+                    message = tool_call["arguments"].get("message", "Working on it!")
+                    logger.info(f"Got message from send_message: {message}")
 
-        # Use reasoning as fallback message
-        if not message and results['reasoning']:
-            message = results['reasoning']
+        except Exception as e:
+            logger.error(f"Error processing navigation: {str(e)}", exc_info=True)
+            message = "I'm having trouble with that right now."
+            action = {"type": "none"}
 
-        logger.info(f"Final response: message='{message}', action={action}")
-
+        # Return simplified response
+        logger.info(f"Sending response - Message: {message}, Action: {action}")
         return ChatResponse(
-            message=message or "I'm having trouble responding right now.",
-            conversation_id=None,
+            message=message,
+            action=action,
             metadata={
-                "participant_type": request_context.get("participant_type", "player"),
-                "interaction_id": request_context.get("interaction_id"),
-                "is_npc_chat": request_context.get("participant_type") == "npc"
-            },
-            action=action
+                "debug": "Simplified response for testing"
+            }
         )
 
     except Exception as e:
-        logger.error(f"Error in chat endpoint: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
+        return ChatResponse(
+            message="Something went wrong!",
+            action={"type": "none"},
+            metadata={"error": str(e)}
+        )
 
 # Tool registration function
 def register_base_tools(client) -> List[str]:
@@ -552,18 +556,18 @@ def extract_tool_results(response):
                 try:
                     # Parse the arguments JSON string
                     arguments = json.loads(msg.tool_call.arguments)
+                    
+                    current_tool = {
+                        'name': msg.tool_call.name,
+                        'arguments': arguments,  # Store parsed JSON
+                        'status': None,
+                        'result': None
+                    }
+                    results['tool_calls'].append(current_tool)
+                    
                 except json.JSONDecodeError:
-                    arguments = {}
-                    logger.warn(f"Could not parse tool arguments: {msg.tool_call.arguments}")
-                
-                current_tool = {
-                    'name': msg.tool_call.name,
-                    'arguments': arguments,  # Store parsed JSON
-                    'status': None,
-                    'result': None
-                }
-                results['tool_calls'].append(current_tool)
-            
+                    logger.error(f"Failed to parse tool arguments: {msg.tool_call.arguments}")
+                    
             # Handle Tool Returns
             elif isinstance(msg, ToolReturnMessage):
                 if current_tool:
@@ -577,4 +581,114 @@ def extract_tool_results(response):
                 results['reasoning'] = msg.reasoning
 
     return results
+
+def create_agent_for_npc(npc_context: dict, participant_id: str):
+    """Create agent with navigation tools and location memory"""
+    
+    # 1. Create memory blocks
+    memory = {
+        "persona": {
+            "name": npc_context["displayName"],
+            "description": npc_context["systemPrompt"]
+        },
+        "human": {
+            "name": participant_id,  # Player's name/ID
+            "description": "A Roblox player exploring the game"
+        },
+        "locations": {
+            "known_locations": [
+                # Slug-based location
+                {
+                    "name": "Pete's Stand",
+                    "description": "A friendly food stand run by Pete",
+                    "coordinates": [-12.0, 18.9, -127.0],
+                    "slug": "petes_stand"
+                },
+                # Coordinate-based locations
+                {
+                    "name": "Secret Garden",
+                    "description": "A hidden garden with rare flowers",
+                    "coordinates": [15.5, 20.0, -110.8]
+                    # No slug - will use coordinates
+                },
+                {
+                    "name": "Town Square",
+                    "description": "Central gathering place with fountain",
+                    "coordinates": [45.2, 12.0, -89.5],
+                    "slug": "town_square"  # Optional with coordinates
+                },
+                {
+                    "name": "Market District",
+                    "description": "Busy shopping area with many vendors",
+                    "coordinates": [-28.4, 15.0, -95.2],
+                    "slug": "market_district"
+                }
+            ]
+        }
+    }
+
+    # 2. Only register the tools we need
+    tools_to_register = {
+        "navigate_to": TOOL_REGISTRY["navigate_to"],  # Updated tool name
+        "perform_action": TOOL_REGISTRY["perform_action"]
+    }
+
+    # 3. Create agent with tools and memory
+    agent = direct_client.create_agent(
+        name=f"{npc_context['displayName']}_{participant_id}",
+        system=npc_context["systemPrompt"] + TOOL_INSTRUCTIONS,
+        memory=memory,
+        embedding_config=embedding_config,
+        llm_config=llm_config,
+        include_base_tools=True
+    )
+
+    # 4. Register only navigation tools
+    for name, info in tools_to_register.items():
+        tool = direct_client.create_tool(info["function"], name=name)
+        logger.info(f"Created tool: {name} for navigation")
+
+    return agent
+
+def process_tool_results(tool_results: dict) -> Tuple[str, dict]:
+    """Process tool results and extract message/action"""
+    
+    message = None
+    action = {"type": "none"}
+
+    try:
+        for tool_call in tool_results.get("tool_calls", []):
+            logger.info(f"Processing tool call: {tool_call}")
+            
+            if tool_call["name"] == "navigate_to":
+                # Arguments are already parsed, result needs parsing
+                result = json.loads(tool_call["result"])
+                logger.info(f"Parsed navigation result: {result}")
+                
+                if result["status"] == "success":
+                    coords = result["coordinates"]
+                    action = {
+                        "type": "navigate",
+                        "data": {
+                            "destination": tool_call["arguments"]["destination"],
+                            "coordinates": coords
+                        }
+                    }
+                    message = "I'm heading to the location!"
+                    logger.info(f"Navigation action created: {action}")
+                else:
+                    # On failure, use Letta's message
+                    message = result.get("message", "Sorry, I cannot find that location.")
+                    action = {"type": "none"}
+                    
+            elif tool_call["name"] == "send_message":
+                # Arguments are already parsed
+                message = tool_call["arguments"].get("message", "...")
+
+    except Exception as e:
+        logger.error(f"Error processing tool results: {str(e)}", exc_info=True)
+        message = "I'm having trouble with navigation right now."
+        action = {"type": "none"}
+
+    return message, action
 
