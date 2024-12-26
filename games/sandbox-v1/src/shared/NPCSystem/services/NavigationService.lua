@@ -9,9 +9,10 @@ local Destinations = {
     blacksmith = Vector3.new(-50, 10, 300),
     castle = Vector3.new(200, 10, -100),
     ["petes_merch_stand"] = Vector3.new(-10.289, 21.512, -127.797),
-    ["merch_stand"] = Vector3.new(-10.289, 21.512, -127.797), -- Alias
-    ["stand"] = Vector3.new(-10.289, 21.512, -127.797),       -- Another alias
-    ["merch"] = Vector3.new(-10.289, 21.512, -127.797)        -- Another alias
+    ["petes_stand"] = Vector3.new(-10.289, 21.512, -127.797),
+    ["merch_stand"] = Vector3.new(-10.289, 21.512, -127.797),
+    ["stand"] = Vector3.new(-10.289, 21.512, -127.797),
+    ["merch"] = Vector3.new(-10.289, 21.512, -127.797)
 }
 
 -- Add simple aliases/normalization
@@ -25,13 +26,17 @@ local function normalizeDestination(destinationName)
         ["stand"] = "petes_merch_stand",
         ["merchant stand"] = "petes_merch_stand",
         ["petes stand"] = "petes_merch_stand",
-        ["pete stand"] = "petes_merch_stand"
+        ["pete stand"] = "petes_merch_stand",
+        ["petes_stand"] = "petes_merch_stand"
     }
     
     return aliases[name] or destinationName
 end
 
 function NavigationService:goToDestination(npc, destinationName)
+    -- Ensure movement is unlocked here too
+    npc.movementLocked = false
+    
     -- Check if movement is locked
     if npc.isMovementLocked then
         LoggerService:warn("NAVIGATION", string.format(

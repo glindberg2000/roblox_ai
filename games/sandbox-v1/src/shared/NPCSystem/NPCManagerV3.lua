@@ -946,11 +946,13 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
             return
         end
 
-        -- Lock movement at start of interaction
-        if npc.model and npc.model:FindFirstChild("Humanoid") then
-            npc.model.Humanoid.WalkSpeed = 0
-            npc.isMovementLocked = true
-            LoggerService:debug("MOVEMENT", string.format("Locked movement for %s during interaction", npc.displayName))
+        -- Only lock movement if not navigating
+        if not npc.isNavigating then
+            npc.movementLocked = true
+            LoggerService:debug("MOVEMENT", string.format(
+                "Locked movement for %s during interaction",
+                npc.displayName
+            ))
         end
 
         local response = NPCChatHandler:HandleChat({
