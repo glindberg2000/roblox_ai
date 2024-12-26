@@ -18,6 +18,23 @@
             "aliases": "[]"
         },
         {
+            "id": 239,
+            "asset_id": "115172767371785",
+            "name": "Calvin's Calzone Restaurant",
+            "description": "Calvin Calzone restaurant features a rectangular structure with a flat, broad roof. The top is adorned with several cylindrical objects, possibly ventilation units. The base has a brick-textured side, contrasting with the smooth concrete-like surface. There are green elements at the rear, suggesting utility features or machinery, and seating patio in the front and indoor diner.",
+            "image_url": "https://tr.rbxcdn.com/180DAY-c2d5200f38cb46b31263f0d5d6d44e60/420/420/Model/Png/noFilter",
+            "type": "Building",
+            "tags": null,
+            "game_id": 61,
+            "created_at": "2024-12-26 05:20:34",
+            "location_data": "{\"area\": \"plaza\", \"type\": \"building\", \"owner\": \"Valterpoop\", \"interactable\": true, \"tags\": []}",
+            "is_location": 1,
+            "position_x": -41.0,
+            "position_y": 28.0,
+            "position_z": -102.0,
+            "aliases": "[\"restaurant\", \"calvin's\", \"calvin's restaurant\", \"diner\", \"calzone\"]"
+        },
+        {
             "id": 219,
             "asset_id": "94427113881273",
             "name": "Cap",
@@ -271,6 +288,23 @@
             "position_y": null,
             "position_z": null,
             "aliases": "[]"
+        },
+        {
+            "id": 238,
+            "asset_id": "122479059163582",
+            "name": "The Crematorium",
+            "description": "The crematorium is  a gray, industrial-styled structure with a flat roof and multiple sections. Notable features include a chimney with a white cap, two rounded protrusions resembling pipes, and a control panel with buttons. The design is simplistic, emphasizing a blocky, functional aesthetic typical of Roblox creations.",
+            "image_url": "https://tr.rbxcdn.com/180DAY-4f2e2402c431ab5af609a7201a4108a7/420/420/Model/Png/noFilter",
+            "type": "Building",
+            "tags": null,
+            "game_id": 61,
+            "created_at": "2024-12-26 05:03:58",
+            "location_data": "{\"area\": \"crematorium\", \"type\": \"building\", \"owner\": \"Valterpoop\", \"interactable\": true, \"tags\": []}",
+            "is_location": 1,
+            "position_x": -48.0,
+            "position_y": 26.0,
+            "position_z": -175.0,
+            "aliases": "[\"crematorium\"]"
         },
         {
             "id": 199,
