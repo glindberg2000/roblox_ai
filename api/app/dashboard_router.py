@@ -1076,31 +1076,24 @@ class Asset(BaseModel):
             }
         }
 
-@router.get("/api/locations", 
-    response_model=List[Asset],
-    tags=["locations"],
-    summary="List all location assets",
-    description="""
-    Get a list of all assets marked as locations.
-    Can be filtered by game ID and area.
-    
-    Example:
-    ```bash
-    # Get all locations in spawn area
-    curl "http://localhost:8000/api/locations?game_id=61&area=spawn_area"
-    ```
-    """)
-async def list_locations(
+@router.get("/api/locations")
+async def get_locations(
     game_id: Optional[int] = Query(None, description="Filter by game ID"),
     area: Optional[str] = Query(None, description="Filter by area name")
 ):
-    """Get list of all location assets, optionally filtered by game and area"""
+    """Get all location data from SQLite"""
     try:
         with get_db() as db:
             query = """
-                SELECT id, asset_id, name, description, type,
-                       position_x, position_y, position_z,
-                       location_data, aliases
+                SELECT 
+                    name,
+                    description,
+                    slug,
+                    position_x,
+                    position_y,
+                    position_z,
+                    location_data,
+                    aliases
                 FROM assets
                 WHERE is_location = TRUE
             """
@@ -1117,17 +1110,25 @@ async def list_locations(
             cursor = db.execute(query, params)
             locations = cursor.fetchall()
             
-            # Parse JSON fields
-            location_list = []
-            for loc in locations:
-                loc_dict = dict(loc)
-                if loc_dict.get('location_data'):
-                    loc_dict['location_data'] = json.loads(loc_dict['location_data'])
-                if loc_dict.get('aliases'):
-                    loc_dict['aliases'] = json.loads(loc_dict['aliases'])
-                location_list.append(loc_dict)
+            # Format locations as proposed
+            formatted_locations = {
+                "locations": [
+                    {
+                        "name": loc["name"],
+                        "description": loc["description"],
+                        "coordinates": [
+                            loc["position_x"],
+                            loc["position_y"],
+                            loc["position_z"]
+                        ],
+                        "slug": loc["slug"],
+                        **json.loads(loc["location_data"] or "{}"),
+                        "aliases": json.loads(loc["aliases"] or "[]")
+                    } for loc in locations
+                ]
+            }
             
-            return {"locations": location_list}
+            return formatted_locations
             
     except Exception as e:
         logger.error(f"Error fetching locations: {str(e)}")
