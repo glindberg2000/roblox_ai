@@ -468,39 +468,9 @@ From now on, you are going to act as your persona."""
         results = extract_tool_results(response)
         logger.info("Successfully extracted tool results")
         
-        # Try to get navigation data
-        try:
-            message = "I'm working on it!"  # Default message
-            action = {"type": "none"}
-            
-            # Process navigation if present
-            for tool_call in results.get("tool_calls", []):
-                if tool_call["name"] == "navigate_to":
-                    logger.info("Found navigation tool call")
-                    result = json.loads(tool_call["result"])
-                    logger.info(f"Parsed navigation result: {result}")
-                    
-                    if result["status"] == "success":
-                        coords = result["coordinates"]
-                        action = {
-                            "type": "navigate",
-                            "data": {
-                                "destination": tool_call["arguments"]["destination"],
-                                "coordinates": coords
-                            }
-                        }
-                        message = "I'm heading to the location!"
-                        logger.info(f"Navigation action created: {action}")
-                
-                elif tool_call["name"] == "send_message":
-                    message = tool_call["arguments"].get("message", "Working on it!")
-                    logger.info(f"Got message from send_message: {message}")
-
-        except Exception as e:
-            logger.error(f"Error processing navigation: {str(e)}", exc_info=True)
-            message = "I'm having trouble with that right now."
-            action = {"type": "none"}
-
+        # Use process_tool_results instead of inline processing
+        message, action = process_tool_results(results)
+        
         # Return simplified response
         logger.info(f"Sending response - Message: {message}, Action: {action}")
         return ChatResponse(
@@ -660,7 +630,29 @@ def process_tool_results(tool_results: dict) -> Tuple[str, dict]:
         for tool_call in tool_results.get("tool_calls", []):
             logger.info(f"Processing tool call: {tool_call}")
             
-            if tool_call["name"] == "navigate_to":
+            if tool_call["name"] == "perform_action":
+                # Handle perform_action tool
+                args = tool_call["arguments"]
+                if args.get("action") == "follow":
+                    action = {
+                        "type": "follow",
+                        "data": {
+                            "target": args.get("target")
+                        }
+                    }
+                    message = "I'll follow you!"
+                    logger.info(f"Follow action created: {action}")
+                elif args.get("action") == "unfollow":
+                    action = {
+                        "type": "unfollow",
+                        "data": {
+                            "target": args.get("target")
+                        }
+                    }
+                    message = "I'll stop following!"
+                    logger.info(f"Unfollow action created: {action}")
+                    
+            elif tool_call["name"] == "navigate_to":
                 # Arguments are already parsed, result needs parsing
                 result = json.loads(tool_call["result"])
                 logger.info(f"Parsed navigation result: {result}")
@@ -682,12 +674,11 @@ def process_tool_results(tool_results: dict) -> Tuple[str, dict]:
                     action = {"type": "none"}
                     
             elif tool_call["name"] == "send_message":
-                # Arguments are already parsed
                 message = tool_call["arguments"].get("message", "...")
 
     except Exception as e:
         logger.error(f"Error processing tool results: {str(e)}", exc_info=True)
-        message = "I'm having trouble with navigation right now."
+        message = "I'm having trouble right now."
         action = {"type": "none"}
 
     return message, action
