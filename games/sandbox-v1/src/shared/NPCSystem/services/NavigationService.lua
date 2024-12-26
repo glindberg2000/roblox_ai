@@ -31,7 +31,7 @@ local function normalizeDestination(destinationName)
     return aliases[name] or destinationName
 end
 
-function NavigationService:goToDestination(npc, destinationName, response)
+function NavigationService:goToDestination(npc, destinationName)
     -- Check if movement is locked
     if npc.isMovementLocked then
         LoggerService:warn("NAVIGATION", string.format(
@@ -39,25 +39,6 @@ function NavigationService:goToDestination(npc, destinationName, response)
             npc.displayName
         ))
         return false
-    end
-
-    local destination
-    if response and response.status == "success" and response.coordinates then
-        -- Use coordinates from Letta's response
-        destination = Vector3.new(
-            response.coordinates.x,
-            response.coordinates.y,
-            response.coordinates.z
-        )
-        LoggerService:debug("NAVIGATION", string.format(
-            "Using coordinates from Letta: (%0.1f, %0.1f, %0.1f)",
-            destination.X, destination.Y, destination.Z
-        ))
-    else
-        -- Fallback to destination table if needed
-        local normalizedName = normalizeDestination(destinationName)
-        destination = Destinations[normalizedName]
-        LoggerService:debug("NAVIGATION", "Using fallback destination lookup")
     end
 
     -- Check humanoid state
@@ -82,6 +63,10 @@ function NavigationService:goToDestination(npc, destinationName, response)
         humanoid.WalkSpeed = originalWalkSpeed
     end
 
+    -- Normalize the destination name first
+    local normalizedName = normalizeDestination(destinationName)
+    local destination = Destinations[normalizedName]
+    
     if not destination then
         LoggerService:warn("NAVIGATION", string.format(
             "Unknown destination: %s (normalized from: %s)", 
@@ -181,20 +166,6 @@ function NavigationService:goToDestination(npc, destinationName, response)
         normalizedName
     ))
     return true
-end
-
-function NavigationService:HandleLettaResponse(response)
-    if response.action and response.action.type == "navigate" then
-        local coords = response.action.data.coordinates
-        -- Convert to Vector3
-        local destination = Vector3.new(
-            coords.x,
-            coords.y,
-            coords.z
-        )
-        -- Start navigation
-        self:NavigateToPosition(destination)
-    end
 end
 
 return NavigationService 

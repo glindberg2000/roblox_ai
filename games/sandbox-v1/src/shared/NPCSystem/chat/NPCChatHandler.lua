@@ -3,10 +3,38 @@ local NPCChatHandler = {}
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local V4ChatClient = require(ReplicatedStorage.Shared.NPCSystem.chat.V4ChatClient)
+local V3ChatClient = require(ReplicatedStorage.Shared.NPCSystem.chat.V3ChatClient)
 local HttpService = game:GetService("HttpService")
 local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
 
+local recentResponses = {}
+local RESPONSE_CACHE_TIME = 1
+
 function NPCChatHandler:HandleChat(request)
+    -- Generate response ID
+    local responseId = string.format("%s_%s_%s", 
+        request.npc_id,
+        request.participant_id,
+        request.message
+    )
+    
+    -- Check for duplicate response
+    if recentResponses[responseId] then
+        if tick() - recentResponses[responseId] < RESPONSE_CACHE_TIME then
+            return nil -- Skip duplicate response
+        end
+    end
+    
+    -- Store response timestamp
+    recentResponses[responseId] = tick()
+    
+    -- Clean up old responses
+    for id, timestamp in pairs(recentResponses) do
+        if tick() - timestamp > RESPONSE_CACHE_TIME then
+            recentResponses[id] = nil
+        end
+    end
+    
     LoggerService:debug("CHAT", string.format("NPCChatHandler: Received request %s", 
         HttpService:JSONEncode(request)))
     
@@ -14,55 +42,31 @@ function NPCChatHandler:HandleChat(request)
     local response = self:attemptV4Chat(request)
     
     if response then
-        -- Log full response for debugging
-        LoggerService:debug("CHAT", string.format("NPCChatHandler: Raw V4 response: %s",
+        LoggerService:debug("CHAT", string.format("NPCChatHandler: V4 succeeded %s", 
             HttpService:JSONEncode(response)))
-            
-        -- Ensure we have a valid message
-        if not response.message then
-            response.message = "I'm having trouble responding right now."
-            LoggerService:warn("CHAT", "Missing message in response")
-        end
-        
-        -- Handle navigation action
-        if response.action and response.action.type == "navigate" then
-            -- Extract coordinates from action data
-            local coords = response.action.data.coordinates
-            if coords then
-                LoggerService:debug("CHAT", string.format(
-                    "Navigation coordinates extracted: x=%.1f, y=%.1f, z=%.1f",
-                    coords.x, coords.y, coords.z
-                ))
-            else
-                LoggerService:warn("CHAT", "Missing coordinates in navigation action")
-            end
-        end
-        
         return response
     end
     
-    LoggerService:warn("CHAT", "V4 chat failed, returning error response")
-    return {
-        message = "I'm having trouble understanding right now.",
-        action = { type = "none" },
-        metadata = {
-            error = "Chat failed"
-        }
-    }
+    return nil
 end
 
 function NPCChatHandler:attemptV4Chat(request)
-    LoggerService:debug("CHAT", "Sending request to V4ChatClient")
     local v4Response = V4ChatClient:SendMessage(request)
     
     if v4Response then
-        LoggerService:debug("CHAT", string.format("Got V4 response: %s",
-            HttpService:JSONEncode(v4Response)))
+        -- Ensure we have a valid message
+        if not v4Response.message then
+            v4Response.message = "..."
+        end
         return v4Response
     end
     
-    LoggerService:warn("CHAT", "V4ChatClient returned nil response")
-    return nil
+    -- If V4 failed, return error response
+    return {
+        message = "...",
+        action = { type = "none" },
+        metadata = {}
+    }
 end
 
 return NPCChatHandler 
