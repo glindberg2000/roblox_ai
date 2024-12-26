@@ -77,6 +77,7 @@ def format_asset_as_lua(asset: dict) -> str:
     # Escape any quotes in strings
     description = asset['description'].replace('"', '\\"') if asset.get('description') else ""
     name = asset['name'].replace('"', '\\"')
+    slug = asset.get('slug', '')
     
     # Parse JSON fields
     location_data = {}
@@ -111,6 +112,7 @@ def format_asset_as_lua(asset: dict) -> str:
     return f"""        {{
             assetId = "{asset['asset_id']}",
             name = "{name}",
+            slug = "{slug}",
             description = "{description}",
             type = "{asset.get('type', 'Model')}",{location_info}
         }},\n"""

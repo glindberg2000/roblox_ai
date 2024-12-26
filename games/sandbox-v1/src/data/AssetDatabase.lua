@@ -29,6 +29,22 @@ return {
             type = "Clothing",
         },
         {
+            assetId = "82710243908100",
+            name = "Chipotle",
+            description = "The Chipotle restaurant is represented as a sleek, modern building with a flat roof and a concrete-like facade. The design includes large front windows framed in dark materials, allowing natural light to flood the interior. A prominent entrance with double glass doors serves as a welcoming focal point. The roof features three ventilation units, emphasizing its functional, commercial nature. The overall aesthetic is clean, minimalistic, and industrial, reflecting Chipotle’s contemporary brand identity.",
+            type = "Building",
+            isLocation = true,
+            position = Vector3.new(-37.6, 27.0, 2.7),
+            locationData = {
+                area = "downtown",
+                type = "building",
+                owner = "Luca Chaudhari",
+                interactable = true,
+                tags = {"restaurant"}
+            },
+            aliases = {"chipotle"},
+        },
+        {
             assetId = "117944303189815",
             name = "Felipe",
             description = "The Roblox asset features a stylized, cartoonish human head stylized after Felepe. It has a smooth, predominantly white surface with exaggerated facial features. The eyes are simple black dots, while the lips are a prominent shade of red. A patch of light brown hair is visible on one side, adding to its quirky appearance.",
