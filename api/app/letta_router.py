@@ -653,29 +653,26 @@ def process_tool_results(tool_results: dict) -> Tuple[str, dict]:
                     logger.info(f"Unfollow action created: {action}")
                     
             elif tool_call["name"] == "navigate_to":
-                # Arguments are already parsed, result needs parsing
                 result = json.loads(tool_call["result"])
                 logger.info(f"Parsed navigation result: {result}")
                 
                 if result["status"] == "success":
-                    coords = result["coordinates"]
                     action = {
                         "type": "navigate",
-                        "data": {
-                            "destination": tool_call["arguments"]["destination"],
-                            "coordinates": coords
+                        "data": {  # Keep data wrapper for consistency
+                            "coordinates": {
+                                "x": 100,
+                                "y": 0,
+                                "z": 100
+                            }
                         }
                     }
-                    message = "I'm heading to the location!"
+                    message = result.get("message", "Moving to new location...")
                     logger.info(f"Navigation action created: {action}")
-                else:
-                    # On failure, use Letta's message
-                    message = result.get("message", "Sorry, I cannot find that location.")
-                    action = {"type": "none"}
                     
             elif tool_call["name"] == "send_message":
                 message = tool_call["arguments"].get("message", "...")
-
+                
     except Exception as e:
         logger.error(f"Error processing tool results: {str(e)}", exc_info=True)
         message = "I'm having trouble right now."
