@@ -714,7 +714,19 @@ local USE_ACTION_SERVICE = true  -- Ensure this is set to true
 function NPCManagerV3:executeAction(npc, player, action)
     LoggerService:debug("ACTION", string.format("Executing action: %s for %s", action.type, npc.displayName))
     
-    if action.type == "follow" then
+    if action.type == "navigate" then
+        LoggerService:debug("ACTION", string.format("Processing navigate action for %s", npc.displayName))
+        local ActionService = require(ReplicatedStorage.Shared.NPCSystem.services.ActionService)
+        
+        -- Pass the entire action object to maintain the coordinates
+        local success = ActionService.navigate(npc, action)
+        if not success then
+            LoggerService:warn("ACTION", string.format(
+                "Navigation failed for NPC %s",
+                npc.displayName
+            ))
+        end
+    elseif action.type == "follow" then
         if USE_ACTION_SERVICE then
             LoggerService:debug("ACTION", "Using ActionService to handle 'follow'")
             local ActionService = require(ReplicatedStorage.Shared.NPCSystem.services.ActionService)
@@ -732,31 +744,6 @@ function NPCManagerV3:executeAction(npc, player, action)
             LoggerService:debug("ACTION", "Using LEGACY 'stopFollowing' method for 'unfollow'")
             self:stopFollowing(npc)
         end
-    elseif action.type == "navigate" then
-        LoggerService:debug("ACTION", string.format("Processing navigate action for %s", npc.displayName))
-        local ActionService = require(ReplicatedStorage.Shared.NPCSystem.services.ActionService)
-        local destination = action.data and action.data.destination
-        
-        if not destination then
-            LoggerService:warn("ACTION", "No destination provided for navigate action")
-            return
-        end
-        
-        LoggerService:debug("ACTION", string.format(
-            "Using ActionService to handle 'navigate' to destination: %s",
-            typeof(destination) == "string" and destination or "custom coordinates"
-        ))
-        
-        local success = ActionService.navigate(npc, destination)
-        if not success then
-            LoggerService:warn("ACTION", string.format(
-                "Navigation failed for NPC %s to destination %s",
-                npc.displayName,
-                tostring(destination)
-            ))
-        end
-    elseif action.type == "emote" then
-        -- existing emote logic
     end
 end
 

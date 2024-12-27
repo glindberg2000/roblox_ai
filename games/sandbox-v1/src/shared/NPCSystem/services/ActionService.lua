@@ -1,18 +1,8 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local LoggerService = {
-    debug = function(_, category, message)
-        print(string.format("[DEBUG] [%s] %s", category, message))
-    end,
-    warn = function(_, category, message)
-        warn(string.format("[WARN] [%s] %s", category, message))
-    end
-}
-
+local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
 local NPCManagerV3 = require(ReplicatedStorage.Shared.NPCSystem.NPCManagerV3)
-local movementServiceInstance = NPCManagerV3.getInstance().movementService
-
 local NavigationService = require(ReplicatedStorage.Shared.NPCSystem.services.NavigationService)
+local movementServiceInstance = NPCManagerV3.getInstance().movementService
 
 local ActionService = {}
 
@@ -75,34 +65,27 @@ function ActionService.moveTo(npc, position)
 end
 
 function ActionService.navigate(npc, destination)
-    LoggerService:debug("ACTION_SERVICE", string.format("NPC %s navigate request: %s", 
-        npc.displayName, 
-        destination
-    ))
+    LoggerService:debug("ACTION_SERVICE", string.format("NPC %s navigate request", npc.displayName))
 
     -- If currently following, stop first
     if npc.isFollowing then
         ActionService.unfollow(npc)
     end
 
-    -- Navigate to destination
-    local success = NavigationService:goToDestination(npc, destination)
-    
-    if success then
+    -- Check if we have coordinates in the destination
+    if type(destination) == "table" and destination.data and destination.data.coordinates then
         LoggerService:debug("ACTION_SERVICE", string.format(
-            "NPC %s successfully navigated to %s",
+            "NPC %s navigating to coordinates: %d, %d, %d",
             npc.displayName,
-            destination
+            destination.data.coordinates.x,
+            destination.data.coordinates.y,
+            destination.data.coordinates.z
         ))
-    else
-        LoggerService:warn("ACTION_SERVICE", string.format(
-            "NPC %s failed to navigate to %s",
-            npc.displayName,
-            destination
-        ))
+        return NavigationService:Navigate(npc, nil, destination.data.coordinates)
     end
 
-    return success
+    LoggerService:warn("ACTION_SERVICE", "No coordinates provided for navigation")
+    return false
 end
 
 return ActionService
