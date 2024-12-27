@@ -6,6 +6,7 @@ from .config import SQLITE_DB_PATH
 from .paths import get_database_paths
 from typing import Optional, Dict, Any, Union
 from .models import AgentMapping
+import logging
 
 __all__ = [
     'get_db',
@@ -15,6 +16,8 @@ __all__ = [
     'create_agent_mapping',
     'get_agent_mapping'
 ]
+
+logger = logging.getLogger("roblox_app")
 
 @contextmanager
 def get_db():
@@ -581,6 +584,44 @@ def get_player_info(participant_id: str) -> Dict[str, str]:
             "description": result['description'] if result else "",
             "display_name": result['display_name'] if result else None
         }
+
+def get_location_coordinates(slug: str, game_id: int = 61) -> Optional[Dict]:
+    """Get location coordinates from assets table"""
+    try:
+        with get_db() as db:
+            # Match the query from the locations endpoint
+            query = """
+                SELECT 
+                    name,
+                    description,
+                    position_x,
+                    position_y,
+                    position_z,
+                    slug,
+                    location_data
+                FROM assets
+                WHERE is_location = TRUE
+                AND slug = ?
+                AND game_id = ?
+            """
+            
+            cursor = db.execute(query, (slug, game_id))
+            location = cursor.fetchone()
+            
+            if location:
+                logger.info(f"Found location: {location['name']} at coordinates: {location['position_x']}, {location['position_y']}, {location['position_z']}")
+                return {
+                    "x": location["position_x"],
+                    "y": location["position_y"],
+                    "z": location["position_z"]
+                }
+            
+            logger.warning(f"No location found for slug: {slug}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error getting location coordinates: {str(e)}")
+        return None
 
 # Add to the bottom of the file:
 if __name__ == "__main__":

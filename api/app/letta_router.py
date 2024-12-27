@@ -4,7 +4,7 @@ from letta.prompts import gpt_system
 from letta_roblox.client import LettaRobloxClient
 from typing import Dict, Any, Optional, List, Tuple
 from pydantic import BaseModel
-from .database import get_npc_context, create_agent_mapping, get_agent_mapping, get_db, get_player_info
+from .database import get_npc_context, create_agent_mapping, get_agent_mapping, get_db, get_player_info, get_location_coordinates
 from .mock_player import MockPlayer
 from .config import (
     DEFAULT_LLM, 
@@ -30,6 +30,8 @@ from letta_templates import (
     perform_action,
     navigate_to
 )
+import requests
+import httpx
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -622,7 +624,6 @@ def create_agent_for_npc(npc_context: dict, participant_id: str):
 
 def process_tool_results(tool_results: dict) -> Tuple[str, dict]:
     """Process tool results and extract message/action"""
-    
     message = None
     action = {"type": "none"}
 
@@ -657,16 +658,30 @@ def process_tool_results(tool_results: dict) -> Tuple[str, dict]:
                 logger.info(f"Parsed navigation result: {result}")
                 
                 if result["status"] == "success":
-                    action = {
-                        "type": "navigate",
-                        "data": {  # Keep data wrapper for consistency
-                            "coordinates": {
-                                "x": 100,
-                                "y": 0,
-                                "z": 100
+                    # Try to get coordinates from database
+                    logger.info(f"Looking up coordinates for slug: {result['slug']}")
+                    coordinates = get_location_coordinates(result["slug"])
+                    
+                    if coordinates:
+                        logger.info(f"Found coordinates in database: {coordinates}")
+                        action = {
+                            "type": "navigate",
+                            "data": {
+                                "coordinates": coordinates
                             }
                         }
-                    }
+                    else:
+                        logger.warning(f"No coordinates found for slug {result['slug']}, using fallback")
+                        action = {
+                            "type": "navigate",
+                            "data": {
+                                "coordinates": {
+                                    "x": 100,
+                                    "y": 0,
+                                    "z": 100
+                                }
+                            }
+                        }
                     message = result.get("message", "Moving to new location...")
                     logger.info(f"Navigation action created: {action}")
                     
@@ -679,4 +694,25 @@ def process_tool_results(tool_results: dict) -> Tuple[str, dict]:
         action = {"type": "none"}
 
     return message, action
+
+def get_coordinates_for_slug(slug: str) -> Optional[Dict]:
+    """Look up coordinates directly from database - synchronous version"""
+    try:
+        with get_db() as db:
+            location = db.execute(
+                "SELECT coordinates FROM locations WHERE slug = ? AND game_id = ?",
+                (slug, 61)
+            ).fetchone()
+            
+            if location and location['coordinates']:
+                coords = json.loads(location['coordinates'])
+                logger.info(f"Found coordinates for slug {slug}: {coords}")
+                return coords
+                
+        logger.warning(f"No location data found for slug: {slug}")
+        return None
+            
+    except Exception as e:
+        logger.error(f"Error getting coordinates for slug {slug}: {e}")
+        return None
 
