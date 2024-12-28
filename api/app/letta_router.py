@@ -38,11 +38,13 @@ from letta.schemas.message import (
     ReasoningMessage, 
     Message
 )
-from letta_templates import (
-    TOOL_INSTRUCTIONS,
+from letta_templates.npc_tools import (
+    TOOL_INSTRUCTIONS,  # Use official instructions
     TOOL_REGISTRY,
+    navigate_to,
+    navigate_to_coordinates,
     perform_action,
-    navigate_to
+    examine_object
 )
 import requests
 import httpx
@@ -65,7 +67,8 @@ def create_roblox_agent(
     memory: ChatMemory,
     system: str,
     embedding_config: Optional[EmbeddingConfig] = None,
-    llm_type: str = None
+    llm_type: str = None,
+    tools_section: str = TOOL_INSTRUCTIONS  # Use official instructions
 ):
     """Create a Letta agent configured for Roblox NPCs"""
     # Debug logging
@@ -423,27 +426,9 @@ Description: {player_info['description']}"""
             # Create agent using new structure from quickstart
             logger.info(f"Request context llm_type: {request.context.get('llm_type')}")
             system_prompt = gpt_system.get_system_text("memgpt_chat").strip()
-            tools_section = """
-Performing actions:
-You have access to the following tools:
-1. `perform_action` - For basic NPC actions like following
-2. `navigate_to` - For moving to specific locations
-3. `navigate_to` - For examining objects
-
-When asked to:
-- Follow someone: Use perform_action with action='follow'
-- Move somewhere: Use navigate_to with destination='location'
-- Examine something: Use navigate_to with the object name
-
-Always use these tools when asked to move, follow, examine, or navigate.
-Note: Tool names must be exactly as shown - no spaces or special characters.
-
-Base instructions finished.
-From now on, you are going to act as your persona."""
-
             system_prompt = system_prompt.replace(
-                "Base instructions finished.\nFrom now on, you are going to act as your persona.",
-                tools_section
+                "Base instructions finished.",
+                TOOL_INSTRUCTIONS + "\nBase instructions finished."
             )
 
             agent = create_roblox_agent(
