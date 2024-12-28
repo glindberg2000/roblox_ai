@@ -615,6 +615,7 @@ function NPCManagerV3:processAIResponse(npc, participant, response)
         if response.action.type == "end_conversation" then
             self:endInteraction(npc, participant)
         else
+            -- Use executeAction for all other actions
             self:executeAction(npc, participant, response.action)
         end
     end
@@ -709,16 +710,15 @@ function NPCManagerV3:displayNPCToNPCMessage(fromNPC, toNPC, message)
     })
 end
 
-local USE_ACTION_SERVICE = true  -- Ensure this is set to true
+local USE_ACTION_SERVICE = true  -- Make sure this is true
 
 function NPCManagerV3:executeAction(npc, player, action)
     LoggerService:debug("ACTION", string.format("Executing action: %s for %s", action.type, npc.displayName))
     
+    local ActionService = require(ReplicatedStorage.Shared.NPCSystem.services.ActionService)
+    
     if action.type == "navigate" then
         LoggerService:debug("ACTION", string.format("Processing navigate action for %s", npc.displayName))
-        local ActionService = require(ReplicatedStorage.Shared.NPCSystem.services.ActionService)
-        
-        -- Pass the entire action object to maintain the coordinates
         local success = ActionService.navigate(npc, action)
         if not success then
             LoggerService:warn("ACTION", string.format(
@@ -726,23 +726,33 @@ function NPCManagerV3:executeAction(npc, player, action)
                 npc.displayName
             ))
         end
+        
     elseif action.type == "follow" then
         if USE_ACTION_SERVICE then
             LoggerService:debug("ACTION", "Using ActionService to handle 'follow'")
-            local ActionService = require(ReplicatedStorage.Shared.NPCSystem.services.ActionService)
             ActionService.follow(npc, player)
         else
             LoggerService:debug("ACTION", "Using LEGACY 'startFollowing' method for 'follow'")
             self:startFollowing(npc, player)
         end
+        
     elseif action.type == "unfollow" then
         if USE_ACTION_SERVICE then
             LoggerService:debug("ACTION", "Using ActionService to handle 'unfollow'")
-            local ActionService = require(ReplicatedStorage.Shared.NPCSystem.services.ActionService)
             ActionService.unfollow(npc)
         else
             LoggerService:debug("ACTION", "Using LEGACY 'stopFollowing' method for 'unfollow'")
             self:stopFollowing(npc)
+        end
+        
+    elseif action.type == "emote" then
+        LoggerService:debug("ACTION", "Using ActionService to handle 'emote'")
+        local success = ActionService.emote(npc, action.data)
+        if not success then
+            LoggerService:warn("ACTION", string.format(
+                "Emote failed for NPC %s",
+                npc.displayName
+            ))
         end
     end
 end
@@ -1100,8 +1110,18 @@ end
 
 -- Initialize NPC with animations
 function NPCManagerV3:initializeNPC(npc)
-    local humanoid = npc:FindFirstChildOfClass("Humanoid")
+    local humanoid = npc.model:FindFirstChild("Humanoid")
     if humanoid then
+        -- Make sure Animator exists
+        if not humanoid:FindFirstChild("Animator") then
+            local animator = Instance.new("Animator")
+            animator.Parent = humanoid
+            LoggerService:debug("NPC", string.format(
+                "Created Animator for %s",
+                npc.displayName
+            ))
+        end
+        
         AnimationService:applyAnimations(humanoid)
     end
 end

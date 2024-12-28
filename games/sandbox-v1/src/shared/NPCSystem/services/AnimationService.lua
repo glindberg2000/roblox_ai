@@ -2,6 +2,16 @@ local AnimationManager = {}
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
 
+-- Add EMOTE_ANIMATIONS at the top level
+local EMOTE_ANIMATIONS = {
+    wave = "rbxassetid://507770239",
+    laugh = "rbxassetid://507770818",
+    dance = "rbxassetid://507771019",
+    cheer = "rbxassetid://507770677",
+    point = "rbxassetid://507770453",
+    sit = "rbxassetid://507770840"
+}
+
 -- Different animation IDs for R6 and R15
 local animations = {
     R6 = {
@@ -162,17 +172,47 @@ function AnimationManager:stopAnimations(humanoid)
     end
 end
 
-function AnimationManager:playEmote(npc, emoteName)
-    local Animator = npc.model:FindFirstChildOfClass("Animator")
-    if Animator then
-        local animation = ServerStorage.Animations:FindFirstChild(emoteName)
-        if animation then
-            Animator:LoadAnimation(animation):Play()
-            LoggerService:debug("ANIMATION", string.format("Playing emote %s for %s", emoteName, npc.displayName))
-        else
-            LoggerService:error("ERROR", string.format("Animation not found: %s", emoteName))
-        end
+function AnimationManager:playEmote(humanoid, emoteType)
+    -- Debug humanoid state
+    LoggerService:debug("ANIMATION", string.format(
+        "Humanoid state: RigType=%s, Animator=%s",
+        humanoid.RigType.Name,
+        humanoid:FindFirstChild("Animator") and "Found" or "Missing"
+    ))
+
+    -- Check if emote exists
+    if not EMOTE_ANIMATIONS[emoteType] then
+        LoggerService:error("ANIMATION", "Unknown emote type: " .. tostring(emoteType))
+        return false
     end
+
+    -- Create and load animation
+    local animation = Instance.new("Animation")
+    animation.AnimationId = EMOTE_ANIMATIONS[emoteType]
+    
+    -- Get or create Animator
+    local animator = humanoid:FindFirstChild("Animator")
+    if not animator then
+        animator = Instance.new("Animator")
+        animator.Parent = humanoid
+        LoggerService:debug("ANIMATION", "Created new Animator")
+    end
+    
+    -- Load and play with error checking
+    local success, result = pcall(function()
+        local track = animator:LoadAnimation(animation)
+        LoggerService:debug("ANIMATION", "Successfully loaded animation")
+        track:Play()
+        LoggerService:debug("ANIMATION", "Started playing animation")
+        return track
+    end)
+
+    if not success then
+        LoggerService:error("ANIMATION", "Animation error: " .. tostring(result))
+        return false
+    end
+
+    return true
 end
 
 return AnimationManager

@@ -628,8 +628,9 @@ def process_tool_results(tool_results: dict) -> Tuple[str, dict]:
             logger.info(f"Processing tool call: {tool_call}")
             
             if tool_call["name"] == "perform_action":
-                # Handle perform_action tool
                 args = tool_call["arguments"]
+                
+                # Handle different action types
                 if args.get("action") == "follow":
                     action = {
                         "type": "follow",
@@ -638,16 +639,23 @@ def process_tool_results(tool_results: dict) -> Tuple[str, dict]:
                         }
                     }
                     message = "I'll follow you!"
-                    logger.info(f"Follow action created: {action}")
+                    
                 elif args.get("action") == "unfollow":
                     action = {
                         "type": "unfollow",
+                        "data": {}
+                    }
+                    message = "I'll stop following!"
+                    
+                elif args.get("action") == "emote":
+                    action = {
+                        "type": "emote",
                         "data": {
+                            "emote_type": args.get("type"),
                             "target": args.get("target")
                         }
                     }
-                    message = "I'll stop following!"
-                    logger.info(f"Unfollow action created: {action}")
+                    message = f"*{args.get('type')}s*"
                     
             elif tool_call["name"] == "navigate_to":
                 result = json.loads(tool_call["result"])

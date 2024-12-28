@@ -3,6 +3,7 @@ local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.Logger
 local NPCManagerV3 = require(ReplicatedStorage.Shared.NPCSystem.NPCManagerV3)
 local NavigationService = require(ReplicatedStorage.Shared.NPCSystem.services.NavigationService)
 local movementServiceInstance = NPCManagerV3.getInstance().movementService
+local AnimationService = require(ReplicatedStorage.Shared.NPCSystem.services.AnimationService)
 
 local ActionService = {}
 
@@ -86,6 +87,67 @@ function ActionService.navigate(npc, destination)
 
     LoggerService:warn("ACTION_SERVICE", "No coordinates provided for navigation")
     return false
+end
+
+-- Add emote handling
+function ActionService.emote(npc, emoteData)
+    LoggerService:debug("ACTION_SERVICE", string.format(
+        "NPC %s performing emote: %s", 
+        npc.displayName,
+        emoteData.emote_type
+    ))
+
+    -- Debug NPC model structure
+    if not npc.model then
+        LoggerService:error("ACTION_SERVICE", "No model found for NPC")
+        return false
+    end
+
+    local humanoid = npc.model:FindFirstChild("Humanoid")
+    if not humanoid then
+        LoggerService:error("ACTION_SERVICE", "No humanoid found in NPC model")
+        return false
+    end
+
+    -- Check if model is R6 or R15
+    local isR15 = npc.model:FindFirstChild("UpperTorso") ~= nil
+    LoggerService:debug("ACTION_SERVICE", string.format(
+        "NPC %s is using %s rig",
+        npc.displayName,
+        isR15 and "R15" or "R6"
+    ))
+
+    -- Use simpler R6 animations if needed
+    local R6_EMOTES = {
+        wave = "rbxassetid://128777973",  -- Basic R6 wave
+        laugh = "rbxassetid://129423131", -- Basic R6 laugh
+        dance = "rbxassetid://182435998", -- Basic R6 dance
+        cheer = "rbxassetid://129423030", -- Basic R6 cheer
+        point = "rbxassetid://128853357", -- Basic R6 point
+        sit = "rbxassetid://178130996"    -- Basic R6 sit
+    }
+
+    -- Choose animation based on rig type
+    local animationId = isR15 and EMOTE_ANIMATIONS[emoteData.emote_type] or R6_EMOTES[emoteData.emote_type]
+    if not animationId then
+        LoggerService:error("ACTION_SERVICE", "No animation found for emote type: " .. emoteData.emote_type)
+        return false
+    end
+
+    -- Create and play animation
+    local animation = Instance.new("Animation")
+    animation.AnimationId = animationId
+    
+    local animator = humanoid:FindFirstChild("Animator")
+    if not animator then
+        animator = Instance.new("Animator")
+        animator.Parent = humanoid
+    end
+
+    local track = animator:LoadAnimation(animation)
+    track:Play()
+
+    return true
 end
 
 return ActionService
