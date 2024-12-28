@@ -800,83 +800,49 @@ async def create_npc(
     assetID: str = Form(...),
     system_prompt: str = Form(None),
     responseRadius: int = Form(20),
-    spawnX: float = Form(0),  # Individual coordinate fields
+    spawnX: float = Form(0),
     spawnY: float = Form(5),
     spawnZ: float = Form(0),
     abilities: str = Form("[]")
 ):
     try:
-        logger.info(f"Creating NPC for game {game_id}")
+        logger.info(f"Creating NPC with asset_id: {assetID}")
         
-        # Validate coordinates
-        try:
-            spawn_x = float(spawnX)
-            spawn_y = float(spawnY)
-            spawn_z = float(spawnZ)
-        except ValueError:
-            raise HTTPException(
-                status_code=400, 
-                detail="Invalid spawn coordinates - must be numbers"
-            )
-        
+        # Verify asset exists
         with get_db() as db:
-            # First check if game exists and get slug
-            cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
-            game = cursor.fetchone()
-            if not game:
-                raise HTTPException(status_code=404, detail="Game not found")
+            cursor = db.execute(
+                "SELECT asset_id FROM assets WHERE asset_id = ? AND game_id = ?",
+                (assetID, game_id)
+            )
+            asset = cursor.fetchone()
+            if not asset:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Asset {assetID} not found"
+                )
             
-            game_slug = game['slug']  # Get game slug for Lua update
-
-            # Generate a unique NPC ID
+            # Create NPC with verified asset_id
             npc_id = str(uuid.uuid4())
-            
-            # Create NPC record with new coordinate columns
             cursor.execute("""
                 INSERT INTO npcs (
-                    game_id,
-                    npc_id,
-                    display_name,
-                    asset_id,
-                    system_prompt,
-                    response_radius,
-                    spawn_x,
-                    spawn_y,
-                    spawn_z,
-                    abilities
+                    game_id, npc_id, display_name, asset_id,
+                    system_prompt, response_radius,
+                    spawn_x, spawn_y, spawn_z, abilities
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                RETURNING id
             """, (
-                game_id,
-                npc_id,
-                displayName,
-                assetID,
-                system_prompt,
-                responseRadius,
-                spawn_x,
-                spawn_y,
-                spawn_z,
-                abilities
+                game_id, npc_id, displayName, assetID,
+                system_prompt, responseRadius,
+                spawnX, spawnY, spawnZ, abilities
             ))
-            db_id = cursor.fetchone()['id']
-            
-            # Update Lua files
-            save_lua_database(game_slug, db)
-            
             db.commit()
             
-            return JSONResponse({
-                "id": db_id,
+            logger.info(f"Created NPC {displayName} with asset_id {assetID}")
+            
+            return {
+                "success": True,
                 "npc_id": npc_id,
-                "display_name": displayName,
-                "asset_id": assetID,
-                "spawn_position": {  # Format for frontend
-                    "x": spawn_x,
-                    "y": spawn_y,
-                    "z": spawn_z
-                },
                 "message": "NPC created successfully"
-            })
+            }
             
     except Exception as e:
         logger.error(f"Error creating NPC: {str(e)}")

@@ -35,7 +35,7 @@ async function saveNPCEdit(event) {
 
         const response = await fetch(`/api/npcs/${npcId}?game_id=${currentGame.id}`, {
             method: 'PUT',
-            headers: { 
+            headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(data)
@@ -237,6 +237,168 @@ function closeNPCEditModal() {
 
 // Make it globally available
 window.closeNPCEditModal = closeNPCEditModal;
+
+async function loadAssetOptions() {
+    if (!currentGame) return;
+
+    try {
+        const response = await fetch(`/api/assets?game_id=${currentGame.id}`);
+        const data = await response.json();
+
+        const assetSelect = document.getElementById('assetSelect');
+        if (!assetSelect) {
+            console.error('Asset select element not found');
+            return;
+        }
+
+        // Add debug logging
+        console.log('Found select element:', assetSelect);
+        console.log('Loading assets:', data.assets);
+
+        assetSelect.innerHTML = '<option value="">Select an asset...</option>';
+
+        data.assets.forEach(asset => {
+            const option = document.createElement('option');
+            option.value = asset.asset_id;
+            option.textContent = asset.name;
+            assetSelect.appendChild(option);
+            console.log(`Added option: ${asset.name} (${asset.asset_id})`);
+        });
+    } catch (error) {
+        console.error('Error loading assets:', error);
+    }
+}
+
+// Call this when showing NPC create form
+loadAssetOptions();
+
+// Add game selection handler
+function setCurrentGame(game) {
+    currentGame = game;
+    // Set the hidden game_id field
+    const gameIdField = document.getElementById('createNpcGameId');
+    if (gameIdField) {
+        gameIdField.value = game.id;
+        console.log('Set game ID to:', game.id);
+    }
+
+    // Update display
+    document.getElementById('currentGameDisplay').textContent = `Current Game: ${game.title}`;
+
+    // Load assets for the game
+    loadAssetOptions();
+}
+
+async function createNPC(event) {
+    event.preventDefault();
+    console.log('createNPC called');
+
+    try {
+        if (!currentGame) {
+            console.log('No game selected');
+            throw new Error('No game selected');
+        }
+
+        const formData = new FormData(event.target);
+        formData.set('game_id', currentGame.id);
+
+        // Debug form data
+        console.log('Form data being sent:');
+        for (let [key, value] of formData.entries()) {
+            console.log(`${key}: ${value}`);
+        }
+
+        const response = await fetch('/api/npcs', {
+            method: 'POST',
+            body: formData
+        });
+
+        const responseText = await response.text();
+        console.log('Raw response:', responseText);
+
+        let result;
+        try {
+            result = JSON.parse(responseText);
+        } catch (e) {
+            console.error('Failed to parse response:', e);
+            throw new Error('Invalid server response');
+        }
+
+        if (!response.ok) {
+            // Handle FastAPI validation errors
+            if (response.status === 422) {
+                const errors = result.detail;
+                // Format validation errors
+                const errorMessages = errors.map(err =>
+                    `${err.loc.join('.')}: ${err.msg}`
+                ).join('\n');
+                throw new Error(errorMessages);
+            }
+            throw new Error(result.detail || 'Failed to create NPC');
+        }
+
+        console.log('NPC created successfully');
+        showNotification('NPC created successfully', 'success');
+        loadNPCs();
+
+    } catch (error) {
+        console.error('Error in createNPC:', {
+            error,
+            name: error.name,
+            message: error.message,
+            status: error.status
+        });
+
+        // Show the actual validation error message
+        showNotification(error.message || 'Failed to create NPC', 'error');
+    }
+}
+
+// Add tab switching handler
+document.getElementById('nav-npcs').addEventListener('click', function () {
+    // Show NPCs tab
+    document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
+    document.getElementById('npcsTab').style.display = 'block';
+
+    // Load assets for select
+    loadAssetOptions();
+});
+
+// Load assets if NPCs tab is active on page load
+if (document.getElementById('npcsTab').style.display !== 'none') {
+    loadAssetOptions();
+}
+
+// Make functions globally available
+window.setCurrentGame = setCurrentGame;
+window.createNPC = createNPC;
+
+function showNotification(message, type = 'info') {
+    console.log('showNotification called with:', {
+        message: message,
+        type: type,
+        messageType: typeof message
+    });
+
+    // Ensure message is a string
+    const displayMessage = typeof message === 'object' ?
+        JSON.stringify(message) : String(message);
+
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification fixed top-4 right-4 p-4 rounded-lg shadow-lg ${type === 'error' ? 'bg-red-500' : 'bg-green-500'
+        } text-white`;
+    notification.textContent = displayMessage;
+
+    // Add to document
+    document.body.appendChild(notification);
+
+    // Remove after delay
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
 
 
 

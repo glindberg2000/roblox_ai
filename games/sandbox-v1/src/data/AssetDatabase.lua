@@ -8,10 +8,17 @@ return {
             type = "Model",
         },
         {
+            assetId = "127287329472058",
+            name = "Blue House",
+            slug = "",
+            description = "The Roblox asset features a low-profile, modern house with a prominent gray shingle roof. The exterior is painted in a soft blue, contrasting with a lighter gray base and foundation. The layout appears asymmetrical, with a small porch area. Overall, it conveys a simple, contemporary design suited for various gameplay environments.",
+            type = "Model",
+        },
+        {
             assetId = "103141024181350",
             name = "Bluesteel Hotel",
             slug = "",
-            description = "The Roblox asset features a modern countertop with a sleek design. It has a concrete top and base, complemented by textured wooden panels on the front, enhancing its aesthetic. The countertop includes three square containers on one side and a taller rectangular section, adding functionality. Its minimalist style suits various game settings.",
+            description = "The Roblox asset features the stylish Bluesteel Hotel, a two-story structure combining tan brick and concrete elements. The building showcases large black-framed windows on both floors, a modern entrance, and manicured grounds. Its contemporary design balances luxury with functionality, featuring well-appointed rooms with custom furnishings and mounted displays visible through the geometric window layout.",
             type = "Model",
         },
         {
@@ -36,6 +43,13 @@ return {
             type = "Model",
         },
         {
+            assetId = "96515141862988",
+            name = "DVDs",
+            slug = "",
+            description = "A small blue brick store full of DVDs that are used to play music.",
+            type = "Model",
+        },
+        {
             assetId = "71805483732140",
             name = "Egg Cafe",
             slug = "",
@@ -47,6 +61,13 @@ return {
             name = "Felipe",
             slug = "",
             description = "The Roblox asset features a stylized, cartoonish human head stylized after Felepe. It has a smooth, predominantly white surface with exaggerated facial features. The eyes are simple black dots, while the lips are a prominent shade of red. A patch of light brown hair is visible on one side, adding to its quirky appearance.",
+            type = "Model",
+        },
+        {
+            assetId = "83945343669361",
+            name = "Green House",
+            slug = "",
+            description = "The asset is a stylized house with a unique L-shaped design. It features a green exterior with a textured finish, complemented by a gray shingle roof. A large window is visible on the side, providing a modern touch. The foundation appears sturdy, with a light gray base contrasting the green walls, enhancing its overall appeal.",
             type = "Model",
         },
         {
@@ -92,6 +113,13 @@ return {
             type = "Model",
         },
         {
+            assetId = "109545808970510",
+            name = "Red House",
+            slug = "",
+            description = "The Roblox asset features a simple, rectangular building with a sloped gray shingle roof. The walls are a rich reddish-brown, complemented by a light-colored concrete base. Notable characteristics include a large square window on one side, providing a glimpse of the interior, which adds depth to the overall design.",
+            type = "Model",
+        },
+        {
             assetId = "106403462264097",
             name = "Regenerative Syringe",
             slug = "",
@@ -131,6 +159,20 @@ return {
             name = "The Crematorium",
             slug = "",
             description = "The crematorium is  a gray, industrial-styled structure with a flat roof and multiple sections. Notable features include a chimney with a white cap, two rounded protrusions resembling pipes, and a control panel with buttons. The design is simplistic, emphasizing a blocky, functional aesthetic typical of Roblox creations. This building is known for having a dark history and no  one knows who is the owner of this establishment.",
+            type = "Model",
+        },
+        {
+            assetId = "100534025208300",
+            name = "Waiter NPC",
+            slug = "",
+            description = "The Roblox asset features a character resembling a waiter, dressed in a black tuxedo with a white shirt and bow tie. The character has bright blonde hair styled upward and a cheerful yellow face with a smile. The sleeves of the uniform are white, contrasting with the black of the tuxedo.",
+            type = "Model",
+        },
+        {
+            assetId = "70413399996120",
+            name = "Yellow House",
+            slug = "",
+            description = "The Roblox asset features a single-story house with a sloped roof and a light yellow exterior. It has a textured gray shingle roof and a large front deck made of wood. The structure includes multiple windows framed in gray, enhancing visibility. A solid foundation with a concrete appearance supports the house, giving it a modern touch.",
             type = "Model",
         },
         {

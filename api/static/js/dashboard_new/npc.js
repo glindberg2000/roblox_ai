@@ -62,7 +62,7 @@ export async function editNPC(npcId) {
                     <select id="editNpcModel" required
                         class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
                         ${availableModels.map(model => `
-                            <option value="${model.assetId}" ${model.assetId === npc.assetId ? 'selected' : ''}>
+                            <option value="${model.asset_id}" ${model.asset_id === npc.assetId ? 'selected' : ''}>
                                 ${model.name}
                             </option>
                         `).join('')}
@@ -138,7 +138,7 @@ export async function editNPC(npcId) {
         if (form) {
             form.onsubmit = async (e) => {
                 e.preventDefault();
-                
+
                 // Get form values
                 const formData = {
                     displayName: form.querySelector('#editNpcDisplayName').value.trim(),
@@ -193,17 +193,40 @@ export async function saveNPCEdit(npcId, data) {
             body: JSON.stringify(formattedData)
         });
 
+        // Add response debugging
+        const responseText = await response.text();
+        console.log('Edit response:', responseText);
+
+        let result;
+        try {
+            result = JSON.parse(responseText);
+        } catch (e) {
+            console.error('Failed to parse edit response:', e);
+            throw new Error('Invalid server response');
+        }
+
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to update NPC');
+            // Handle validation errors
+            if (response.status === 422) {
+                const errors = result.detail;
+                if (Array.isArray(errors)) {
+                    const errorMessages = errors.map(err =>
+                        `${err.loc.join('.')}: ${err.msg}`
+                    ).join('\n');
+                    throw new Error(errorMessages);
+                }
+            }
+            throw new Error(result.detail || 'Failed to update NPC');
         }
 
         hideModal();
         showNotification('NPC updated successfully', 'success');
         loadNPCs();  // Refresh the list
+
     } catch (error) {
         console.error('Error saving NPC:', error);
         showNotification(error.message, 'error');
+        throw error;  // Re-throw to prevent modal close
     }
 }
 
@@ -226,17 +249,23 @@ function populateCreateAbilities() {
 
 // Add this function to populate the create form's asset selector
 async function populateCreateFormAssets() {
+    console.log('Populating create form assets...');
     try {
         const assets = await fetchAvailableModels();
+        console.log('Fetched assets:', assets);
+
         const assetSelect = document.getElementById('assetSelect');
         if (assetSelect) {
             assetSelect.innerHTML = '<option value="">Select a model...</option>';
             assets.forEach(asset => {
                 const option = document.createElement('option');
-                option.value = asset.assetId;
+                option.value = asset.asset_id;  // Make sure we're using the right field
                 option.textContent = asset.name;
                 assetSelect.appendChild(option);
+                console.log(`Added option: ${asset.name} (${asset.asset_id})`);
             });
+        } else {
+            console.error('Asset select element not found');
         }
     } catch (error) {
         console.error('Error populating create form assets:', error);
@@ -255,40 +284,94 @@ window.saveNPCEdit = saveNPCEdit;
 window.populateCreateAbilities = populateCreateAbilities;
 window.populateCreateFormAssets = populateCreateFormAssets;
 
-export async function createNPC(event) {
+async function createNPC(event) {
     event.preventDefault();
-    
+    console.log('createNPC called from npc.js');
+
     try {
-        const form = event.target;
-        const formData = new FormData(form);
+        if (!state.currentGame) {
+            throw new Error('No game selected');
+        }
+
+        const formData = new FormData(event.target);
         formData.set('game_id', state.currentGame.id);
 
         // Get abilities
-        const abilities = Array.from(form.querySelectorAll('input[name="abilities"]:checked'))
-            .map(cb => cb.value);
+        const abilities = Array.from(
+            event.target.querySelectorAll('input[name="abilities"]:checked')
+        ).map(cb => cb.value);
         formData.set('abilities', JSON.stringify(abilities));
+
+        // Debug form data
+        console.log('Form data being sent:');
+        for (let [key, value] of formData.entries()) {
+            console.log(`${key}: ${value}`);
+        }
 
         const response = await fetch('/api/npcs', {
             method: 'POST',
             body: formData
         });
 
+        const responseText = await response.text();
+        console.log('Raw response:', responseText);
+
+        let result;
+        try {
+            result = JSON.parse(responseText);
+            console.log('Parsed response:', result);
+        } catch (e) {
+            console.error('Failed to parse response:', e);
+            throw new Error('Invalid server response');
+        }
+
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to create NPC');
+            if (response.status === 422) {
+                const errors = result.detail;
+                if (Array.isArray(errors)) {
+                    const errorMessages = errors.map(err =>
+                        `${err.loc.join('.')}: ${err.msg}`
+                    ).join('\n');
+                    throw new Error(errorMessages);
+                }
+            }
+            // If not a validation error, use the detail message
+            const errorMessage = typeof result.detail === 'object' ?
+                JSON.stringify(result.detail) : result.detail;
+            throw new Error(errorMessage || 'Failed to create NPC');
         }
 
         showNotification('NPC created successfully', 'success');
-        form.reset();
-        loadNPCs();  // Refresh the list
+        loadNPCs();
 
     } catch (error) {
-        console.error('Error creating NPC:', error);
-        showNotification(error.message, 'error');
-    }
+        console.error('Error in createNPC:', {
+            error,
+            name: error.name,
+            message: error.message,
+            response: error.response
+        });
 
-    return false;  // Prevent form submission
+        showNotification(error.message || 'Failed to create NPC', 'error');
+    }
 }
 
 // Make function globally available
 window.createNPC = createNPC;
+
+// Make sure we call this when the game is selected
+function setCurrentGame(game) {
+    state.currentGame = game;
+    // Set the hidden game_id field
+    const gameIdField = document.getElementById('createNpcGameId');
+    if (gameIdField) {
+        gameIdField.value = game.id;
+        console.log('Set game ID to:', game.id);
+    }
+
+    // Update display
+    document.getElementById('currentGameDisplay').textContent = `Current Game: ${game.title}`;
+
+    // Load assets for the game
+    populateCreateFormAssets();
+}
