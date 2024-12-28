@@ -162,10 +162,17 @@ return {
             type = "Model",
         },
         {
-            assetId = "100534025208300",
-            name = "Waiter NPC",
+            assetId = "106939129445551",
+            name = "Waiter",
             slug = "",
-            description = "The Roblox asset features a character resembling a waiter, dressed in a black tuxedo with a white shirt and bow tie. The character has bright blonde hair styled upward and a cheerful yellow face with a smile. The sleeves of the uniform are white, contrasting with the black of the tuxedo.",
+            description = "The Roblox asset features a character dressed in a classic formal outfit. The figure has a bright yellow skin tone with a cheerful smile. It sports short, spiky blonde hair. The outfit includes a black tuxedo with a white shirt and bowtie, along with white cuffs on the sleeves, creating an elegant appearance suitable for formal events.",
+            type = "Model",
+        },
+        {
+            assetId = "116273800006797",
+            name = "Waiter Rebuilt",
+            slug = "",
+            description = "The Roblox asset features a character in formal attire, showcasing a classic tuxedo with a black vest and a white dress shirt. The character has a cheerful face with a smile, and stylish short brown hair. Notable characteristics include the prominent bow tie and oversized sleeves, typical of the Roblox style.",
             type = "Model",
         },
         {

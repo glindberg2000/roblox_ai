@@ -105,49 +105,32 @@ def check_migration_status(db_path=None):
     if db_path is None:
         from api.app.config import SQLITE_DB_PATH
         db_path = SQLITE_DB_PATH
+        
+    print(f"\nChecking migrations on {db_path}")
     
-    print(f"Checking migrations in {db_path}")
-    
-    conn = sqlite3.connect(db_path)
-    
-    try:
-        # First check if migrations table exists
-        cursor = conn.execute("""
-            SELECT name FROM sqlite_master 
-            WHERE type='table' AND name='migrations';
+    with sqlite3.connect(db_path) as conn:
+        # Create migrations table if it doesn't exist
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS migrations (
+                name TEXT PRIMARY KEY,
+                applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
         """)
         
-        if not cursor.fetchone():
-            print("! Migrations table does not exist")
-            print("→ Run migrations first with: python -m api.db.migrations")
-            return
-        
-        # Get applied migrations
-        cursor = conn.execute("SELECT name FROM migrations ORDER BY name")
-        applied = cursor.fetchall()
-        
-        if not applied:
-            print("No migrations applied yet")
-        else:
-            print("\nApplied migrations:")
-            for migration in applied:
-                print(f"✓ {migration[0]}")
-        
-        # Check for specific migrations
-        migrations_to_check = [
-            '007_add_location_data'
+        # List all migration files
+        migrations_dir = Path(__file__).parent
+        migrations = [
+            f.stem for f in migrations_dir.glob("*.py")
+            if f.stem not in ["__init__", "__main__"]
         ]
         
-        print("\nRequired migrations:")
-        for migration in migrations_to_check:
+        print("\nMigration status:")
+        for migration in sorted(migrations):
             cursor = conn.execute("SELECT 1 FROM migrations WHERE name = ?", (migration,))
             if cursor.fetchone():
                 print(f"✓ {migration} (applied)")
             else:
-                print(f"! {migration} (not applied)")
-    
-    finally:
-        conn.close()
+                print(f"! {migration} (pending)")
 
 if __name__ == "__main__":
     run_migrations()

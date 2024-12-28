@@ -808,8 +808,16 @@ async def create_npc(
     try:
         logger.info(f"Creating NPC with asset_id: {assetID}")
         
-        # Verify asset exists
         with get_db() as db:
+            # First get game info for Lua update
+            cursor = db.execute("SELECT slug FROM games WHERE id = ?", (game_id,))
+            game = cursor.fetchone()
+            if not game:
+                raise HTTPException(status_code=404, detail="Game not found")
+            
+            game_slug = game['slug']  # Get slug before creating NPC
+            
+            # Verify asset exists
             cursor = db.execute(
                 "SELECT asset_id FROM assets WHERE asset_id = ? AND game_id = ?",
                 (assetID, game_id)
@@ -835,6 +843,9 @@ async def create_npc(
                 spawnX, spawnY, spawnZ, abilities
             ))
             db.commit()
+            
+            # Now we have game_slug defined
+            save_lua_database(game_slug, db)
             
             logger.info(f"Created NPC {displayName} with asset_id {assetID}")
             
