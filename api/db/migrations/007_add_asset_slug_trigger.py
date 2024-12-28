@@ -1,14 +1,18 @@
 def migrate(db):
-    """Add slug column and trigger for automatic slug generation"""
-    print("Adding slug column and trigger...")
+    """Add slug trigger for automatic slug generation"""
+    print("Adding asset slug trigger...")
     
     try:
-        # Add slug column if it doesn't exist
-        db.execute("""
-            ALTER TABLE assets 
-            ADD COLUMN slug TEXT;
+        # First check if trigger exists
+        cursor = db.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='trigger' AND name='generate_asset_slug_insert'
         """)
-
+        
+        if cursor.fetchone():
+            print("✓ Slug trigger already exists, skipping")
+            return
+            
         # Create trigger for new rows
         db.execute("""
             CREATE TRIGGER IF NOT EXISTS generate_asset_slug_insert
@@ -27,46 +31,21 @@ def migrate(db):
                 WHERE id = NEW.id;
             END;
         """)
-
-        # Create trigger for updates to name
-        db.execute("""
-            CREATE TRIGGER IF NOT EXISTS generate_asset_slug_update
-            AFTER UPDATE OF name ON assets
-            WHEN NEW.name != OLD.name
-            BEGIN
-                UPDATE assets 
-                SET slug = LOWER(
-                    REPLACE(
-                        REPLACE(
-                            REPLACE(NEW.name, ' ', '_'),
-                            "'", ''
-                        ),
-                        '-', '_'
-                    )
-                )
-                WHERE id = NEW.id;
-            END;
-        """)
-
-        # Generate slugs for existing assets
-        db.execute("""
-            UPDATE assets 
-            SET slug = LOWER(
-                REPLACE(
-                    REPLACE(
-                        REPLACE(name, ' ', '_'),
-                        "'", ''
-                    ),
-                    '-', '_'
-                )
-            )
-            WHERE slug IS NULL;
-        """)
-
+        
         db.commit()
-        print("✓ Successfully added slug column and triggers")
+        print("✓ Successfully added slug trigger")
         
     except Exception as e:
-        print(f"! Failed to add slug column and triggers: {str(e)}")
+        print(f"! Failed to add slug trigger: {str(e)}")
+        db.rollback()
+        raise
+
+def rollback(db):
+    """Remove the trigger"""
+    try:
+        db.execute("DROP TRIGGER IF EXISTS generate_asset_slug_insert")
+        db.commit()
+    except Exception as e:
+        print(f"! Failed to remove trigger: {str(e)}")
         db.rollback()
         raise 

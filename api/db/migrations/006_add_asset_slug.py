@@ -1,33 +1,30 @@
 def migrate(db):
-    """Add slug column to assets table"""
-    print("Adding slug column to assets table...")
+    """Add slug column to assets table if it doesn't exist"""
+    print("Checking/adding slug column to assets table...")
     
     try:
-        # Add slug column
+        # First check if column exists
+        cursor = db.execute("PRAGMA table_info(assets)")
+        columns = [row[1] for row in cursor.fetchall()]
+        
+        if 'slug' in columns:
+            print("✓ Slug column already exists, skipping")
+            return
+            
+        # Add column if it doesn't exist
         db.execute("""
             ALTER TABLE assets 
             ADD COLUMN slug TEXT;
         """)
-
-        # Update existing assets with generated slugs
-        db.execute("""
-            UPDATE assets 
-            SET slug = LOWER(
-                REPLACE(
-                    REPLACE(
-                        REPLACE(name, ' ', '_'),
-                        "'", ''
-                    ),
-                    '-', '_'
-                )
-            )
-            WHERE slug IS NULL;
-        """)
-
+        
         db.commit()
-        print("✓ Successfully added and populated slug column")
+        print("✓ Successfully added slug column")
         
     except Exception as e:
-        print(f"! Failed to add slug column: {str(e)}")
+        print(f"! Failed to handle slug column: {str(e)}")
         db.rollback()
-        raise 
+        raise
+
+def rollback(db):
+    """No rollback needed since we check for existence"""
+    pass 
