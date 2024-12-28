@@ -4,7 +4,7 @@ from pathlib import Path
 import json
 from .config import SQLITE_DB_PATH
 from .paths import get_database_paths
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Union, List
 from .models import AgentMapping
 import logging
 
@@ -622,6 +622,45 @@ def get_location_coordinates(slug: str, game_id: int = 61) -> Optional[Dict]:
     except Exception as e:
         logger.error(f"Error getting location coordinates: {str(e)}")
         return None
+
+def get_all_locations(game_id: int = 61) -> List[Dict]:
+    """Get all locations with their coordinates and metadata"""
+    try:
+        with get_db() as db:
+            query = """
+                SELECT 
+                    name,
+                    description,
+                    position_x,
+                    position_y,
+                    position_z,
+                    slug,
+                    location_data
+                FROM assets
+                WHERE is_location = TRUE
+                AND json_extract(location_data, '$.area') IS NOT NULL
+                AND game_id = ?
+            """
+            
+            cursor = db.execute(query, (game_id,))
+            locations = cursor.fetchall()
+            
+            logger.info(f"Found {len(locations)} locations in database")
+            for loc in locations:
+                logger.debug(f"Location: {loc['name']}, slug: {loc['slug']}")
+            
+            return [
+                {
+                    "name": loc["name"],
+                    "description": loc["description"],
+                    "coordinates": [loc["position_x"], loc["position_y"], loc["position_z"]],
+                    "slug": loc["slug"]
+                } for loc in locations
+            ]
+            
+    except Exception as e:
+        logger.error(f"Error getting locations: {str(e)}")
+        return []
 
 # Add to the bottom of the file:
 if __name__ == "__main__":

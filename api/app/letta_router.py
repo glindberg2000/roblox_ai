@@ -1,10 +1,24 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
-from letta import ChatMemory, LLMConfig, EmbeddingConfig, create_client
+from letta import (
+    ChatMemory, 
+    LLMConfig, 
+    EmbeddingConfig, 
+    create_client,
+    BasicBlockMemory
+)
 from letta.prompts import gpt_system
 from letta_roblox.client import LettaRobloxClient
 from typing import Dict, Any, Optional, List, Tuple
 from pydantic import BaseModel
-from .database import get_npc_context, create_agent_mapping, get_agent_mapping, get_db, get_player_info, get_location_coordinates
+from .database import (
+    get_npc_context, 
+    create_agent_mapping, 
+    get_agent_mapping, 
+    get_db, 
+    get_player_info,
+    get_location_coordinates,
+    get_all_locations
+)
 from .mock_player import MockPlayer
 from .config import (
     DEFAULT_LLM, 
@@ -403,11 +417,8 @@ Name: {player_info['display_name'] or request_context.get('participant_name', 'a
 Description: {player_info['description']}"""
             
             # Create memory using the appropriate description
-            memory = ChatMemory(
-                human=human_description.strip(),
-                persona=f"""My name is {npc_details['display_name']}.
-{npc_details['system_prompt']}""".strip()
-            )
+            memory = create_agent_memory(direct_client, npc_details, human_description)
+            logger.info(f"Using memory for agent creation: {memory}")
             
             # Create agent using new structure from quickstart
             logger.info(f"Request context llm_type: {request.context.get('llm_type')}")
@@ -715,4 +726,54 @@ def get_coordinates_for_slug(slug: str) -> Optional[Dict]:
     except Exception as e:
         logger.error(f"Error getting coordinates for slug {slug}: {e}")
         return None
+
+def create_agent_memory(
+    direct_client: Any,
+    npc_details: Dict,
+    human_description: str
+) -> BasicBlockMemory:
+    """Create agent memory blocks including locations per LettaDev spec"""
+    # Get locations from database
+    known_locations = get_all_locations()
+    
+    # Simplify to just names and slugs
+    simplified_locations = [
+        {
+            "name": loc["name"],
+            "slug": loc["slug"]
+        } for loc in known_locations
+    ]
+    
+    logger.info(f"Loading {len(simplified_locations)} locations into agent memory")
+    logger.info(f"Simplified location data: {json.dumps(simplified_locations, indent=2)}")
+    
+    # Create memory blocks
+    persona_block = direct_client.create_block(
+        label="persona",
+        value=f"""My name is {npc_details['display_name']}.
+{npc_details['system_prompt']}""".strip(),
+        limit=2000
+    )
+    logger.info(f"Created persona block: {persona_block}")
+    
+    human_block = direct_client.create_block(
+        label="human",
+        value=human_description.strip(),
+        limit=2000
+    )
+    logger.info(f"Created human block: {human_block}")
+    
+    locations_block = direct_client.create_block(
+        label="locations",
+        value=json.dumps({
+            "known_locations": simplified_locations
+        }),
+        limit=5000
+    )
+    logger.info(f"Created locations block: {locations_block}")
+    
+    memory = BasicBlockMemory(blocks=[persona_block, human_block, locations_block])
+    logger.info(f"Created memory with blocks: {memory}")
+    
+    return memory
 
