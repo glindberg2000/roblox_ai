@@ -423,13 +423,7 @@ Description: {player_info['description']}"""
             memory = create_agent_memory(direct_client, npc_details, human_description)
             logger.info(f"Using memory for agent creation: {memory}")
             
-            # Create agent using new structure from quickstart
-            logger.info(f"Request context llm_type: {request.context.get('llm_type')}")
             system_prompt = gpt_system.get_system_text("memgpt_chat").strip()
-            system_prompt = system_prompt.replace(
-                "Base instructions finished.",
-                TOOL_INSTRUCTIONS + "\nBase instructions finished."
-            )
 
             agent = create_roblox_agent(
                 client=direct_client,

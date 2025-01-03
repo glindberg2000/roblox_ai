@@ -47,6 +47,7 @@ from enum import Enum
 from openai import OpenAI
 import numpy as np
 from scipy.spatial.distance import cosine
+from .security import require_admin, require_game_key
 
 logger = logging.getLogger("roblox_app")
 
@@ -555,6 +556,7 @@ async def get_npc(npc_id: str, game_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/api/npcs/{npc_id}")
+@require_admin
 async def update_npc(npc_id: str, game_id: int, request: Request):
     try:
         data = await request.json()
@@ -793,6 +795,7 @@ async def create_asset(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/api/npcs")
+@require_admin
 async def create_npc(
     request: Request,
     game_id: int = Form(...),
@@ -1276,6 +1279,23 @@ async def semantic_location_search(
             
     except Exception as e:
         logger.error(f"Error in semantic search: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Public chat endpoint
+@router.post("/api/chat/v2")
+async def chat_with_npc_v2(
+    request: Request,
+    npc_id: str,
+    message: str,
+    conversation_id: Optional[str] = None
+):
+    """Public chat endpoint"""
+    try:
+        # Process chat request
+        response = await process_chat(npc_id, message, conversation_id)
+        return response
+    except Exception as e:
+        logger.error(f"Chat error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ... rest of your existing routes ...
