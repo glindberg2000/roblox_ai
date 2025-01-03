@@ -2,29 +2,21 @@ from pathlib import Path
 from typing import Dict
 from .config import get_game_paths
 
-def get_database_paths(game_slug: str = "game1") -> Dict[str, Dict[str, Path]]:
-    """
-    Get paths to database files for a specific game
+def get_database_paths(game_slug: str = "sandbox-v1"):
+    """Get paths for game databases"""
+    game_paths = get_game_paths(game_slug)  # Now game_slug is defined
     
-    Args:
-        game_slug (str): The game identifier (e.g., "game1", "game2")
-        
-    Returns:
-        Dict containing paths to JSON and Lua database files
-    """
-    game_paths = get_game_paths(game_slug)
-    data_dir = game_paths['data']
-    
-    # Ensure the data directory exists
-    data_dir.mkdir(parents=True, exist_ok=True)
-    
-    return {
-        'asset': {
-            'json': data_dir / 'AssetDatabase.json',
-            'lua': data_dir / 'AssetDatabase.lua'
-        },
-        'npc': {
-            'json': data_dir / 'NPCDatabase.json',
-            'lua': data_dir / 'NPCDatabase.lua'
+    # Get paths for the specific game
+    if game_slug in game_paths:
+        data_dir = game_paths[game_slug]['data']
+        return {
+            'asset': {
+                'json': data_dir / 'AssetDatabase.json',
+                'lua': data_dir / 'AssetDatabase.lua'
+            },
+            'npc': {
+                'json': data_dir / 'NPCDatabase.json',
+                'lua': data_dir / 'NPCDatabase.lua'
+            }
         }
-    } 
+    return None 

@@ -6,15 +6,40 @@ from pathlib import Path
 # Base directory is the api folder
 BASE_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Games directory is one level up from api folder
-GAMES_DIR = BASE_DIR.parent / "games"
-
 # Database paths
 DB_DIR = BASE_DIR / "db"
 SQLITE_DB_PATH = DB_DIR / "game_data.db"
 
-# Ensure directories exist
-DB_DIR.mkdir(parents=True, exist_ok=True)
+# Add missing game paths function and directory
+GAMES_DIR = Path(os.path.dirname(BASE_DIR)) / "games"
+
+def get_game_paths(game_slug=None):
+    """Get paths for all game directories"""
+    if not GAMES_DIR.exists():
+        return {}
+    
+    if game_slug:
+        game_dir = GAMES_DIR / game_slug
+        if game_dir.is_dir():
+            return {
+                game_slug: {
+                    'root': game_dir,
+                    'data': game_dir / 'src' / 'data',
+                    'assets': game_dir / 'src' / 'assets'
+                }
+            }
+        return {}
+    
+    # Return all game directories
+    return {
+        d.name: {
+            'root': d,
+            'data': d / 'src' / 'data',
+            'assets': d / 'src' / 'assets'
+        }
+        for d in GAMES_DIR.iterdir() 
+        if d.is_dir()
+    }
 
 # Storage structure
 STORAGE_DIR = BASE_DIR / "storage"
@@ -26,87 +51,54 @@ AVATARS_DIR = STORAGE_DIR / "avatars"  # For player avatar images
 for directory in [STORAGE_DIR, ASSETS_DIR, THUMBNAILS_DIR, AVATARS_DIR]:
     directory.mkdir(parents=True, exist_ok=True)
 
-# Replace hard-coded ROBLOX_DIR with dynamic game-specific paths
-def get_game_paths(game_slug: str) -> dict:
-    """Get game-specific paths"""
-    game_dir = GAMES_DIR / game_slug  # Use GAMES_DIR constant
-    return {
-        'root': game_dir,
-        'src': game_dir / "src",
-        'assets': game_dir / "src" / "assets",
-        'data': game_dir / "src" / "data"
-    }
+# Roblox project paths (new additions)
+ROBLOX_DIR = Path(os.path.dirname(BASE_DIR)) / "src"
+ROBLOX_ASSETS_DIR = ROBLOX_DIR / "assets"
+ROBLOX_DATA_DIR = ROBLOX_DIR / "data"
 
-def ensure_game_directories(game_slug: str) -> None:
-    """Ensure all required directories exist for a specific game"""
-    paths = get_game_paths(game_slug)
-    for path in paths.values():
-        path.mkdir(parents=True, exist_ok=True)
+# Ensure Roblox directories exist
+for directory in [ROBLOX_ASSETS_DIR, ROBLOX_DATA_DIR]:
+    directory.mkdir(parents=True, exist_ok=True)
 
 # API URLs
 ROBLOX_API_BASE = "https://thumbnails.roblox.com/v1"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# NPC Configuration
+# Security settings
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "your-secure-admin-key")
+GAME_API_KEY = os.getenv("GAME_API_KEY", "your-game-integration-key")
+
+# LLM settings
+DEFAULT_LLM = os.getenv("DEFAULT_LLM", "gpt-4o-mini")
+
+# LLM configuration
+LLM_CONFIGS = {
+    "gpt-4o-mini": {
+        "model": "gpt-4o-mini",
+        "temperature": 0.7,
+        "max_tokens": 1000,
+        "top_p": 0.95,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+    }
+}
+
+# Embedding configuration
+DEFAULT_EMBEDDING = os.getenv("DEFAULT_EMBEDDING", "text-embedding-ada-002")
+EMBEDDING_CONFIGS = {
+    "default": {
+        "model": "text-embedding-ada-002",
+        "dimensions": 1536,
+        "normalize": True
+    }
+}
+
 NPC_SYSTEM_PROMPT_ADDITION = """
 When responding, always use the appropriate action type:
 - Use "follow" when you intend to start following the player.
 - Use "unfollow" when you intend to stop following the player.
-- Use "end_conversation" when you want to end the conversation naturally.
-- Use "navigate" to move the NPC to a specific location.
-- Use "emote" to perform an emote action. Specify the emote type as a sub-action, e.g., "emote:dance".
-- Use "jump" to make the NPC jump.
-- Use "run" to make the NPC run.
+- Use "stop_talking" when you want to end the conversation.
 - Use "none" for any other response that doesn't require a specific action.
-
-Conversations should end naturally and not go on forever. Use "end_conversation" when the conversation has reached a natural conclusion.
 
 Your response must always include an action, even if it's "none".
 """
-
-# API Configuration
-
-# Default LLM to use ("gpt4-mini", "claude", or "mixtral")
-DEFAULT_LLM = "gpt4-mini"
-
-# LLM Configuration
-LLM_CONFIGS = {
-    "gpt4-mini": {
-        "model": "gpt-4o-mini",
-        "model_endpoint_type": "openai",
-        "model_endpoint": "https://api.openai.com/v1",
-        "context_window": 128000,
-    },
-    "claude": {
-        "model": "claude-3-haiku-20240307",
-        "model_endpoint_type": "anthropic",
-        "model_endpoint": "https://api.anthropic.com/v1",
-        "context_window": 200000,
-    },
-    "mixtral": {
-        "model": "mixtral-8x7b",
-        "model_endpoint_type": "ollama",
-        "model_endpoint": "http://localhost:11434",
-        "context_window": 32000,
-    }
-}
-
-# Embedding Configuration
-EMBEDDING_CONFIGS = {
-    "openai": {
-        "embedding_endpoint_type": "openai",
-        "embedding_endpoint": "https://api.openai.com/v1",
-        "embedding_model": "text-embedding-ada-002",
-        "embedding_dim": 1536,
-        "embedding_chunk_size": 300
-    },
-    "anthropic": {
-        "embedding_endpoint_type": "anthropic",
-        "embedding_endpoint": "https://api.anthropic.com/v1",
-        "embedding_model": "claude-3-haiku-20240307",
-        "embedding_dim": 1536
-    }
-}
-
-# Default embedding config to use ("openai" or "anthropic")
-DEFAULT_EMBEDDING = "openai"
