@@ -223,39 +223,34 @@ def sync_game_files(game_slug: str) -> None:
     generate_lua_from_db(game_slug, 'asset')
     generate_lua_from_db(game_slug, 'npc')
 
-def ensure_game_directories(game_slug: str) -> Dict[str, Path]:
+def ensure_game_directories(game_slug: str, clone_from: Optional[str] = None) -> Dict[str, Path]:
     """Create and return game directory structure"""
-    print("Starting ensure_game_directories")
+    logger.info(f"Creating game directories for {game_slug}, cloning from: {clone_from}")
+    
     try:
-        logger.info(f"Games directory: {GAMES_DIR}")
-        logger.info(f"Games directory exists: {GAMES_DIR.exists()}")
-        
-        # Create GAMES_DIR if it doesn't exist
         GAMES_DIR.mkdir(parents=True, exist_ok=True)
-        logger.info("Created or verified GAMES_DIR exists")
-        
         game_root = GAMES_DIR / game_slug
-        logger.info(f"Game root will be: {game_root}")
         
-        # Copy from template location
-        template_dir = GAMES_DIR / "_template"
-        logger.info(f"Looking for template at: {template_dir}")
-        logger.info(f"Template directory exists: {template_dir.exists()}")
-        
-        if not template_dir.exists():
-            logger.error(f"Template directory not found at: {template_dir}")
-            raise FileNotFoundError(f"Template not found at {template_dir}")
+        # Determine source directory
+        if clone_from and (GAMES_DIR / clone_from).exists():
+            source_dir = GAMES_DIR / clone_from
+            logger.info(f"Cloning from existing game: {source_dir}")
+        else:
+            source_dir = GAMES_DIR / "_template"
+            logger.info(f"Using template directory: {source_dir}")
             
-        logger.info(f"Using template from: {template_dir}")
-        
+        if not source_dir.exists():
+            raise FileNotFoundError(f"Source directory not found at {source_dir}")
+            
+        # Remove existing directory if it exists
         if game_root.exists():
             logger.info(f"Removing existing game directory: {game_root}")
             shutil.rmtree(game_root)
             
-        logger.info(f"Copying template to: {game_root}")
-        # Use copytree with ignore_dangling_symlinks=True and dirs_exist_ok=True
-        shutil.copytree(template_dir, game_root, symlinks=False, 
-                       ignore_dangling_symlinks=True, 
+        # Copy from source
+        logger.info(f"Copying from {source_dir} to {game_root}")
+        shutil.copytree(source_dir, game_root, symlinks=False,
+                       ignore_dangling_symlinks=True,
                        dirs_exist_ok=True)
         
         # Define and ensure all required paths exist
@@ -272,8 +267,6 @@ def ensure_game_directories(game_slug: str) -> Dict[str, Path]:
             path.mkdir(parents=True, exist_ok=True)
             logger.info(f"Created {path_name} directory at: {path}")
             
-        logger.info(f"Successfully created game directories for {game_slug}")
-        logger.info(f"Returning paths dictionary: {paths}")
         return paths
         
     except Exception as e:
