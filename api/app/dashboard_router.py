@@ -138,14 +138,14 @@ async def create_game_endpoint(request: Request):
     try:
         data = await request.json()
         game_slug = slugify(data['title'])
-        clone_from = data.get('cloneFrom')  # Get the source game slug if cloning
+        clone_from = data.get('cloneFrom')
         
         logger.info(f"Creating game with title: {data['title']}, slug: {game_slug}, clone from: {clone_from}")
         
         try:
             # Create game directories from template
             logger.info("About to call ensure_game_directories")
-            paths = ensure_game_directories(game_slug)
+            paths = ensure_game_directories(game_slug, clone_from)
             logger.info(f"Got paths back: {paths}")
             
             if not paths:
@@ -167,70 +167,84 @@ async def create_game_endpoint(request: Request):
                     if clone_from:
                         logger.info(f"Cloning data from game: {clone_from}")
                         
-                        # Get source game ID
-                        cursor = db.execute("SELECT id FROM games WHERE slug = ?", (clone_from,))
-                        source_game = cursor.fetchone()
-                        if not source_game:
-                            raise ValueError(f"Source game {clone_from} not found")
+                        try:
+                            # Get source game ID
+                            cursor = db.execute("SELECT id FROM games WHERE slug = ?", (clone_from,))
+                            source_game = cursor.fetchone()
+                            if not source_game:
+                                raise ValueError(f"Source game {clone_from} not found")
+                            
+                            source_game_id = source_game['id']
+                            
+                            # Clone assets with better error handling
+                            logger.info("Cloning assets...")
+                            try:
+                                db.execute("""
+                                    INSERT INTO assets (
+                                        game_id, asset_id, name, description, image_url, type, tags,
+                                        is_location, position_x, position_y, position_z,
+                                        location_data, aliases
+                                    )
+                                    SELECT 
+                                        ?, asset_id, name, description, image_url, type, tags,
+                                        is_location, position_x, position_y, position_z,
+                                        location_data, aliases
+                                    FROM assets 
+                                    WHERE game_id = ?
+                                """, (game_id, source_game_id))
+                                logger.info("Assets cloned successfully")
+                            except Exception as e:
+                                logger.error(f"Error cloning assets: {str(e)}")
+                                raise
+                            
+                            # Clone NPCs with better error handling
+                            logger.info("Cloning NPCs...")
+                            try:
+                                cursor = db.execute("""
+                                    SELECT 
+                                        display_name, asset_id, model,
+                                        system_prompt, response_radius, spawn_x, spawn_y, spawn_z,
+                                        abilities
+                                    FROM npcs 
+                                    WHERE game_id = ?
+                                """, (source_game_id,))
+                                
+                                npcs = cursor.fetchall()
+                                for npc in npcs:
+                                    npc_id = str(uuid.uuid4())  # Generate new unique ID
+                                    db.execute("""
+                                        INSERT INTO npcs (
+                                            game_id, npc_id, display_name, asset_id, model,
+                                            system_prompt, response_radius, spawn_x, spawn_y, spawn_z,
+                                            abilities
+                                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    """, (
+                                        game_id,
+                                        npc_id,
+                                        npc['display_name'],
+                                        npc['asset_id'],
+                                        npc['model'],
+                                        npc['system_prompt'],
+                                        npc['response_radius'],
+                                        npc['spawn_x'],
+                                        npc['spawn_y'],
+                                        npc['spawn_z'],
+                                        npc['abilities']
+                                    ))
+                                logger.info(f"Cloned {len(npcs)} NPCs successfully")
+                            except Exception as e:
+                                logger.error(f"Error cloning NPCs: {str(e)}")
+                                raise
+                            
+                            # Commit transaction
+                            db.commit()
+                            logger.info("Database cloning completed successfully")
+                            
+                        except Exception as e:
+                            logger.error(f"Database error: {str(e)}")
+                            db.rollback()
+                            raise
                         
-                        source_game_id = source_game['id']
-                        
-                        # Clone assets
-                        logger.info("Cloning assets...")
-                        db.execute("""
-                            INSERT INTO assets (
-                                game_id, asset_id, name, description, image_url, type, tags
-                            )
-                            SELECT 
-                                ?, asset_id, name, description, image_url, type, tags
-                            FROM assets 
-                            WHERE game_id = ?
-                        """, (game_id, source_game_id))
-                        
-                        # Clone NPCs with new IDs
-                        logger.info("Cloning NPCs...")
-                        cursor = db.execute("""
-                            SELECT 
-                                display_name, asset_id, model,
-                                system_prompt, response_radius, spawn_x, spawn_y, spawn_z,
-                                abilities
-                            FROM npcs 
-                            WHERE game_id = ?
-                        """, (source_game_id,))
-                        
-                        npcs = cursor.fetchall()
-                        for npc in npcs:
-                            new_npc_id = str(uuid.uuid4())  # Generate new unique ID
-                            db.execute("""
-                                INSERT INTO npcs (
-                                    game_id, npc_id, display_name, asset_id, model,
-                                    system_prompt, response_radius, spawn_x, spawn_y, spawn_z,
-                                    abilities
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """, (
-                                game_id,
-                                new_npc_id,
-                                npc['display_name'],
-                                npc['asset_id'],
-                                npc['model'],
-                                npc['system_prompt'],
-                                npc['response_radius'],
-                                npc['spawn_x'],
-                                npc['spawn_y'],
-                                npc['spawn_z'],
-                                npc['abilities']
-                            ))
-                        
-                        # Copy asset files
-                        source_paths = get_game_paths(clone_from)
-                        if source_paths['assets'].exists():
-                            shutil.copytree(
-                                source_paths['assets'], 
-                                paths['assets'],
-                                dirs_exist_ok=True
-                            )
-                            logger.info("Copied asset files")
-                    
                     # Update project.json name
                     project_file = paths['root'] / "default.project.json"
                     if project_file.exists():
