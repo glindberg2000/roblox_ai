@@ -146,13 +146,10 @@ class ClusterCache:
         if context.get("participant_type") == "npc":
             current_npcs.add(context["participant_name"])
         
-        # Also check explicit nearby_npcs field if it exists
+        # Also add any NPCs from nearby_npcs field
         nearby_npcs = context.get("nearby_npcs", [])
         if nearby_npcs:
-            if isinstance(nearby_npcs[0], dict):
-                current_npcs.update(n["name"] for n in nearby_npcs)
-            else:
-                current_npcs.update(nearby_npcs)
+            current_npcs.update(nearby_npcs)
         
         logger.info(f"Current players in proximity: {current_players}")
         logger.info(f"Current NPCs in proximity: {current_npcs}")
@@ -160,8 +157,8 @@ class ClusterCache:
         # Get or create cluster info
         cluster_info = self.clusters.get(npc_id, {
             "members": {
-                "players": set(),
-                "npcs": set()
+                "players": current_players,
+                "npcs": current_npcs
             },
             "last_update": current_time,
             "context": {}

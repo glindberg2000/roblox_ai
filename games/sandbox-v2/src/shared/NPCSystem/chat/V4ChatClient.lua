@@ -167,6 +167,9 @@ end
 
 function V4ChatClient:SendMessage(data)
     LoggerService:debug("CHAT", "V4ChatClient: SendMessage called")
+    LoggerService:info("CHAT", string.format("Sending request to Letta API for NPC %s", data.npc_id))
+    LoggerService:info("CHAT", string.format("Letta payload: %s", HttpService:JSONEncode(data)))
+    
     -- Try Letta first
     local lettaResponse = handleLettaChat(data)
     if lettaResponse then

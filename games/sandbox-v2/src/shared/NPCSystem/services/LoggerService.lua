@@ -11,16 +11,22 @@ local config = {
     enabledCategories = {
         SYSTEM = true,
         NPC = true,
-        CHAT = true,
+        CHAT = {
+            debug = true,
+            info = true,
+            warn = true,
+            error = true
+        },
         INTERACTION = true,
         MOVEMENT = true,
-        ANIMATION = true,
+        ANIMATION = false,
         DATABASE = true,
         API = true,
-        ACTION = true,
-        ACTION_SERVICE = true,
-        NAVIGATION = true,
-        PATH_FINDING = true
+        PROXIMITY_MATRIX = true,
+        ACTION = false,
+        ACTION_SERVICE = false,
+        NAVIGATION = false,
+        PATH_FINDING = false
     },
     timeFormat = "%Y-%m-%d %H:%M:%S",
     outputToFile = false,
@@ -36,6 +42,11 @@ local levelPriority = {
 
 function LoggerService:shouldLog(level: LogLevel, category: LogCategory): boolean
     if not config.enabled then return false end
+    
+    if type(config.enabledCategories[category]) == "table" then
+        return config.enabledCategories[category][string.lower(level)] or false
+    end
+    
     if not config.enabledCategories[category] then return false end
     return levelPriority[level] >= levelPriority[config.minLevel]
 end

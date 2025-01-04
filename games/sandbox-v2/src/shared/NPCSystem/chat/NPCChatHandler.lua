@@ -35,15 +35,14 @@ function NPCChatHandler:HandleChat(request)
         end
     end
     
-    LoggerService:debug("CHAT", string.format("NPCChatHandler: Received request %s", 
-        HttpService:JSONEncode(request)))
+    LoggerService:info("CHAT", string.format("Processing chat request for NPC %s", request.npc_id))
     
     LoggerService:debug("CHAT", "NPCChatHandler: Attempting V4")
     local response = self:attemptV4Chat(request)
     
     if response then
-        LoggerService:debug("CHAT", string.format("NPCChatHandler: V4 succeeded %s", 
-            HttpService:JSONEncode(response)))
+        LoggerService:info("CHAT", string.format("NPC %s responded to %s", request.npc_id, request.participant_id))
+        LoggerService:debug("CHAT", string.format("Response details: %s", HttpService:JSONEncode(response)))
         return response
     end
     
