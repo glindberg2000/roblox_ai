@@ -172,19 +172,33 @@ function InteractionService:logProximityMatrix(npcs)
     local matrix = {}
     local positions = {}
     
-    -- First collect all positions
+    -- First collect all positions including NPCs and Players
     for _, npc in pairs(npcs) do
         if npc.model and npc.model.PrimaryPart then
             local pos = npc.model.PrimaryPart.Position
             positions[npc.displayName] = {
                 x = pos.X,
                 y = pos.Y,
-                z = pos.Z
+                z = pos.Z,
+                type = "npc"
             }
         end
     end
     
-    -- Build distance matrix
+    -- Add players to positions
+    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local pos = player.Character.HumanoidRootPart.Position
+            positions[player.Name] = {
+                x = pos.X,
+                y = pos.Y,
+                z = pos.Z,
+                type = "player"
+            }
+        end
+    end
+    
+    -- Build distance matrix including player distances
     for name1, pos1 in pairs(positions) do
         matrix[name1] = {}
         for name2, pos2 in pairs(positions) do
@@ -201,34 +215,34 @@ function InteractionService:logProximityMatrix(npcs)
     -- Log the matrix
     local output = "NPC Proximity Matrix:\n\n"
     
-    -- Log positions first
+    -- Log positions first, now with type indicators
     output = output .. "Positions:\n"
     for name, pos in pairs(positions) do
-        output = output .. string.format("- %s: (%.1f, %.1f, %.1f)\n", 
-            name, pos.x, pos.y, pos.z)
+        output = output .. string.format("- %s [%s]: (%.1f, %.1f, %.1f)\n", 
+            name, pos.type, pos.x, pos.y, pos.z)
     end
     
     -- Log distance matrix
     output = output .. "\nDistances:\n"
-    for npc1, distances in pairs(matrix) do
-        for npc2, dist in pairs(distances) do
+    for name1, distances in pairs(matrix) do
+        for name2, dist in pairs(distances) do
             output = output .. string.format("- %s <-> %s: %.1f\n",
-                npc1, npc2, dist)
+                name1, name2, dist)
         end
     end
     
-    -- After building the distance matrix, add cluster analysis
-    -- Analyze clusters
+    -- Analyze clusters (now including players)
     local clusters = {}
-    local clusterThreshold = 10  -- NPCs within 10 studs are considered in same cluster
+    local clusterThreshold = 10
     
     for name1, pos1 in pairs(positions) do
         local foundCluster = false
         for i, cluster in ipairs(clusters) do
-            -- Check if this NPC belongs in an existing cluster
-            for _, memberName in ipairs(cluster) do
+            for _, memberName in ipairs(cluster.members) do
                 if matrix[name1][memberName] <= clusterThreshold then
-                    table.insert(cluster, name1)
+                    table.insert(cluster.members, name1)
+                    cluster.npcs = cluster.npcs + (pos1.type == "npc" and 1 or 0)
+                    cluster.players = cluster.players + (pos1.type == "player" and 1 or 0)
                     foundCluster = true
                     break
                 end
@@ -236,17 +250,21 @@ function InteractionService:logProximityMatrix(npcs)
             if foundCluster then break end
         end
         
-        -- If not found in any cluster, start a new one
         if not foundCluster then
-            table.insert(clusters, {name1})
+            table.insert(clusters, {
+                members = {name1},
+                npcs = pos1.type == "npc" and 1 or 0,
+                players = pos1.type == "player" and 1 or 0
+            })
         end
     end
     
-    -- Add cluster information to output
+    -- Log enhanced cluster information
     output = output .. "\nClusters (within " .. clusterThreshold .. " studs):\n"
     for i, cluster in ipairs(clusters) do
-        output = output .. string.format("Cluster %d: %s\n", 
-            i, table.concat(cluster, ", "))
+        output = output .. string.format("Cluster %d (%d NPCs, %d Players): %s\n",
+            i, cluster.npcs, cluster.players,
+            table.concat(cluster.members, ", "))
     end
     
     LoggerService:debug("PROXIMITY_MATRIX", output)
