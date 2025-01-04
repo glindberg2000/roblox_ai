@@ -6,62 +6,18 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local NPCSystem = Shared:WaitForChild("NPCSystem")
 local LoggerService = require(NPCSystem.services.LoggerService)
 
+-- Store the last calculated clusters
+local lastClusters = {}
+local lastUpdateTime = 0
+local CLUSTER_UPDATE_INTERVAL = 1 -- Update clusters every second
+
 function InteractionService:checkRangeAndEndConversation(npc1, npc2)
-    -- Only check range if NPCs are actually in conversation
-    if not (npc1.inConversation and npc2.inConversation) then
-        return false
-    end
-
-    if not npc1.model or not npc2.model then 
-        LoggerService:debug("PROXIMITY", string.format(
-            "Missing model for one of the NPCs (%s or %s)",
-            npc1.displayName or "unknown",
-            npc2.displayName or "unknown"
-        ))
-        return 
-    end
-    
-    if not npc1.model.PrimaryPart or not npc2.model.PrimaryPart then 
-        LoggerService:debug("PROXIMITY", string.format(
-            "Missing PrimaryPart for one of the NPCs (%s or %s)",
-            npc1.displayName or "unknown",
-            npc2.displayName or "unknown"
-        ))
-        return 
-    end
-
-    local pos1 = npc1.model.PrimaryPart.Position
-    local pos2 = npc2.model.PrimaryPart.Position
-    local distance = (pos1 - pos2).Magnitude
-    -- Use a larger distance if either NPC is following or being followed
-    local maxDistance = (npc1.isFollowing or npc2.isFollowing) and 30 or (npc1.responseRadius or 20)
-
-    LoggerService:debug("PROXIMITY", string.format(
-        "Range Check Details:\n" ..
-        "- NPC1: %s (pos: %.1f, %.1f, %.1f, following: %s)\n" ..
-        "- NPC2: %s (pos: %.1f, %.1f, %.1f, following: %s)\n" ..
-        "- Distance: %.2f\n" ..
-        "- Max Distance: %.2f\n" ..
-        "- In Conversation: %s and %s",
-        npc1.displayName, pos1.X, pos1.Y, pos1.Z, tostring(npc1.isFollowing),
-        npc2.displayName, pos2.X, pos2.Y, pos2.Z, tostring(npc2.isFollowing),
-        distance,
-        maxDistance,
-        tostring(npc1.inConversation),
-        tostring(npc2.inConversation)
-    ))
-
-    if distance > maxDistance then
-        LoggerService:log("INTERACTION", string.format(
-            "%s and %s are out of range (%.2f > %.2f), ending conversation\n" ..
-            "- %s position: %.1f, %.1f, %.1f (following: %s)\n" ..
-            "- %s position: %.1f, %.1f, %.1f (following: %s)",
-            npc1.displayName,
-            npc2.displayName,
-            distance,
-            maxDistance,
-            npc1.displayName, pos1.X, pos1.Y, pos1.Z, tostring(npc1.isFollowing),
-            npc2.displayName, pos2.X, pos2.Y, pos2.Z, tostring(npc2.isFollowing)
+    -- Use cluster data to determine if conversation should end
+    local cluster1 = self:getClusterForEntity(npc1.displayName)
+    if not cluster1 or not table.find(cluster1.members, npc2.displayName) then
+        LoggerService:info("INTERACTION", string.format(
+            "Ending conversation - NPCs no longer in same cluster (%s <-> %s)",
+            npc1.displayName, npc2.displayName
         ))
         return true
     end
@@ -69,6 +25,17 @@ function InteractionService:checkRangeAndEndConversation(npc1, npc2)
 end
 
 function InteractionService:canInteract(npc1, npc2)
+    -- First check if they're in the same cluster
+    local cluster1 = self:getClusterForEntity(npc1.displayName)
+    if not cluster1 or not table.find(cluster1.members, npc2.displayName) then
+        LoggerService:debug("INTERACTION", string.format(
+            "Cannot interact - NPCs not in same cluster:\n" ..
+            "- %s and %s are too far apart",
+            npc1.displayName, npc2.displayName
+        ))
+        return false
+    end
+    
     -- Check if either NPC is already in conversation
     if npc1.inConversation or npc2.inConversation then
         LoggerService:debug("INTERACTION", string.format(
@@ -145,27 +112,26 @@ function InteractionService:unlockNPCsAfterInteraction(npc1, npc2)
     ))
 end
 
-function InteractionService:checkProximity(npc1, npc2)
-    if not npc1.model or not npc2.model then return false end
-    
-    local pos1 = npc1.model.PrimaryPart.Position
-    local pos2 = npc2.model.PrimaryPart.Position
-    local distance = (pos1 - pos2).Magnitude
-    local maxDistance = (npc1.isFollowing or npc2.isFollowing) and 30 or (npc1.responseRadius or 20)
+function InteractionService:getClusterForEntity(entityName)
+    -- Return cached cluster info if recent enough
+    if os.time() - lastUpdateTime < CLUSTER_UPDATE_INTERVAL then
+        for _, cluster in ipairs(lastClusters) do
+            if table.find(cluster.members, entityName) then
+                return cluster
+            end
+        end
+    end
+    return nil
+end
 
-    LoggerService:debug("PROXIMITY", string.format(
-        "Initial Proximity Check:\n" ..
-        "- NPC1: %s (pos: %.1f, %.1f, %.1f)\n" ..
-        "- NPC2: %s (pos: %.1f, %.1f, %.1f)\n" ..
-        "- Distance: %.2f\n" ..
-        "- Max Distance: %.2f",
-        npc1.displayName, pos1.X, pos1.Y, pos1.Z,
-        npc2.displayName, pos2.X, pos2.Y, pos2.Z,
-        distance,
-        maxDistance
-    ))
+function InteractionService:checkProximity(npc1, npc2)
+    -- Use cluster data instead of direct distance check
+    local cluster1 = self:getClusterForEntity(npc1.displayName)
+    if cluster1 then
+        return table.find(cluster1.members, npc2.displayName) ~= nil
+    end
     
-    return distance <= maxDistance
+    return false
 end
 
 function InteractionService:logProximityMatrix(npcs)
@@ -267,7 +233,42 @@ function InteractionService:logProximityMatrix(npcs)
             table.concat(cluster.members, ", "))
     end
     
+    -- Store clusters for later use
+    lastClusters = clusters
+    lastUpdateTime = os.time()
+    
     LoggerService:debug("PROXIMITY_MATRIX", output)
+end
+
+function InteractionService:handleClusterChanges(oldClusters, newClusters)
+    for _, newCluster in ipairs(newClusters) do
+        -- Find matching old cluster
+        local oldCluster = nil
+        for _, old in ipairs(oldClusters) do
+            if #old.members == #newCluster.members then
+                -- Check if members match
+                local matches = true
+                for _, member in ipairs(old.members) do
+                    if not table.find(newCluster.members, member) then
+                        matches = false
+                        break
+                    end
+                end
+                if matches then
+                    oldCluster = old
+                    break
+                end
+            end
+        end
+
+        -- If cluster composition changed, notify members
+        if not oldCluster then
+            for _, memberName in ipairs(newCluster.members) do
+                -- Notify this member about their new cluster mates
+                -- This would replace the current "NPC entered area" messages
+            end
+        end
+    end
 end
 
 return InteractionService 

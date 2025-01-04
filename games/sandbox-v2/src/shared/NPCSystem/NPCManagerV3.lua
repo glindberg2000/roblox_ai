@@ -1135,100 +1135,34 @@ function NPCManagerV3:initializeNPC(npc)
 end
 
 -- Add this new function to get all nearby entities
-function NPCManagerV3:getNearbyEntities(npc)
-    local nearbyEntities = {}
-    local npcPosition = npc.model and npc.model.PrimaryPart and npc.model.PrimaryPart.Position
-    
-    LoggerService:debug("PROXIMITY", string.format(
-        "Checking proximity for %s (responseRadius: %.2f)",
-        npc.displayName,
-        npc.responseRadius or 0
-    ))
-    
-    if not npcPosition then
-        LoggerService:warn("PROXIMITY", string.format(
-            "No position found for NPC %s",
-            npc.displayName
-        ))
-        return nearbyEntities
+function NPCManagerV3:getClusterMembers(npc)
+    local cluster = InteractionService:getClusterForEntity(npc.displayName)
+    if not cluster then
+        return {}
     end
     
-    -- Get nearby NPCs first
-    local npcs = workspace:FindFirstChild("NPCs")
-    if npcs then
-        LoggerService:debug("PROXIMITY", string.format(
-            "Found %d NPCs in workspace, checking which are near %s",
-            #npcs:GetChildren(),
-            npc.displayName
-        ))
-        
-        for _, otherNPC in ipairs(npcs:GetChildren()) do
-            if otherNPC ~= npc.model and otherNPC:FindFirstChild("HumanoidRootPart") then
-                local distance = (otherNPC.HumanoidRootPart.Position - npcPosition).Magnitude
-                
-                LoggerService:debug("PROXIMITY", string.format(
-                    "Distance between %s and %s: %.2f (max: %.2f)",
-                    npc.displayName,
-                    otherNPC:GetAttribute("DisplayName") or otherNPC.Name,
-                    distance,
-                    npc.responseRadius or 20
-                ))
-                
-                if distance <= (npc.responseRadius or 20) then
-                    local npcData = {
-                        id = otherNPC:GetAttribute("NpcId"),
-                        name = otherNPC:GetAttribute("DisplayName") or otherNPC.Name,
-                        type = "npc",
-                        distance = distance
-                    }
-                    table.insert(nearbyEntities, npcData)
-                    
-                    LoggerService:info("PROXIMITY", string.format(
-                        "Added NPC %s to %s's nearby entities (distance: %.2f)",
-                        npcData.name,
-                        npc.displayName,
-                        distance
-                    ))
-                end
-            end
+    local members = {}
+    for _, memberName in ipairs(cluster.members) do
+        if memberName ~= npc.displayName then
+            table.insert(members, {
+                name = memberName,
+                type = memberName == game.Players:GetPlayerFromCharacter(workspace:FindFirstChild(memberName)) and "player" or "npc"
+            })
         end
     end
     
-    -- Get nearby players
-    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
-        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local distance = (player.Character.HumanoidRootPart.Position - npcPosition).Magnitude
-            if distance <= npc.responseRadius then
-                local playerData = {
-                    id = tostring(player.UserId),
-                    name = player.Name,
-                    type = "player",
-                    distance = distance
-                }
-                table.insert(nearbyEntities, playerData)
-                
-                LoggerService:info("PROXIMITY", string.format(
-                    "Added player %s to %s's nearby entities (distance: %.2f)",
-                    player.Name,
-                    npc.displayName,
-                    distance
-                ))
-            end
-        end
-    end
-    
-    return nearbyEntities
+    return members
 end
 
 -- Update the chat context creation to include nearby entities
 function NPCManagerV3:createChatContext(npc, participant)
-    local nearbyEntities = self:getNearbyEntities(npc)
+    local clusterMembers = self:getClusterMembers(npc)
     
     -- Separate into players and NPCs
     local nearbyPlayers = {}
     local nearbyNPCs = {}
     
-    for _, entity in ipairs(nearbyEntities) do
+    for _, entity in ipairs(clusterMembers) do
         if entity.type == "player" then
             table.insert(nearbyPlayers, entity.name)
         elseif entity.type == "npc" then
