@@ -271,4 +271,8 @@ function InteractionService:handleClusterChanges(oldClusters, newClusters)
     end
 end
 
+function InteractionService:getLatestClusters()
+    return lastClusters or {}  -- Return cached clusters
+end
+
 return InteractionService 

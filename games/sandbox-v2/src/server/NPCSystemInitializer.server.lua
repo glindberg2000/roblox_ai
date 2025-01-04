@@ -59,6 +59,12 @@ end
 
 print("NPCSystemInitializer: LoggerService loaded")
 
+-- Initialize GameStateService early
+local GameStateService = require(NPCSystem.services.GameStateService)
+_G.GameStateService = GameStateService
+LoggerService:info("SYSTEM", "GameStateService loaded and initialized")
+LoggerService:info("SNAPSHOT", "Verifying GameStateService initialization...")
+
 local function ensureStorage()
 	print("NPCSystemInitializer: Verifying storage folders...")
 

@@ -3,7 +3,7 @@ print("LoggerService loaded")
 local LoggerService = {}
 
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
-export type LogCategory = "SYSTEM" | "NPC" | "CHAT" | "INTERACTION" | "MOVEMENT" | "ANIMATION" | "DATABASE" | "API"
+export type LogCategory = "SYSTEM" | "NPC" | "CHAT" | "INTERACTION" | "MOVEMENT" | "ANIMATION" | "DATABASE" | "API" | "SNAPSHOT"
 
 local config = {
     enabled = true,
@@ -23,6 +23,12 @@ local config = {
         DATABASE = true,
         API = true,
         PROXIMITY_MATRIX = true,
+        SNAPSHOT = {
+            debug = true,
+            info = true,
+            warn = true,
+            error = true
+        },
         ACTION = false,
         ACTION_SERVICE = false,
         NAVIGATION = false,

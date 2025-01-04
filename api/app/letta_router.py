@@ -48,7 +48,7 @@ from letta_templates.npc_tools import (
 )
 import requests
 import httpx
-from .models import ClusterCache
+from .models import ClusterCache, GameSnapshot
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -804,3 +804,32 @@ def create_agent_memory(
     
     return memory
 
+@router.post("/letta/v1/snapshot/game")
+async def handle_game_snapshot(snapshot: GameSnapshot):
+    try:
+        logger.info("Received game snapshot")
+        logger.debug(f"Snapshot details: {snapshot.dict()}")
+        
+        # Process clusters
+        logger.info(f"Processing {len(snapshot.clusters)} clusters")
+        for i, cluster in enumerate(snapshot.clusters):
+            logger.info(f"Cluster {i+1}: {len(cluster.members)} members "
+                       f"({cluster.npcs} NPCs, {cluster.players} players)")
+        
+        # Process human context
+        logger.info(f"Processing context for {len(snapshot.humanContext)} entities")
+        
+        return {
+            "success": True,
+            "message": "Snapshot processed",
+            "timestamp": datetime.now().isoformat(),
+            "stats": {
+                "clusters": len(snapshot.clusters),
+                "entities": len(snapshot.humanContext),
+                "events": len(snapshot.events)
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing game snapshot: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
