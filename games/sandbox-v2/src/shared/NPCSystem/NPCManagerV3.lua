@@ -1126,4 +1126,161 @@ function NPCManagerV3:initializeNPC(npc)
     end
 end
 
+-- Add this new function to get all nearby entities
+function NPCManagerV3:getNearbyEntities(npc)
+    local nearbyEntities = {}
+    local npcPosition = npc.model and npc.model.PrimaryPart and npc.model.PrimaryPart.Position
+    
+    if not npcPosition then
+        LoggerService:warn("PROXIMITY", string.format(
+            "No position found for NPC %s",
+            npc.displayName
+        ))
+        return nearbyEntities
+    end
+    
+    -- Get nearby NPCs first
+    local npcs = workspace:FindFirstChild("NPCs")
+    if npcs then
+        LoggerService:debug("PROXIMITY", string.format(
+            "Checking NPCs near %s at position (%.1f, %.1f, %.1f)",
+            npc.displayName,
+            npcPosition.X,
+            npcPosition.Y,
+            npcPosition.Z
+        ))
+        
+        for _, otherNPC in ipairs(npcs:GetChildren()) do
+            if otherNPC ~= npc.model and otherNPC:FindFirstChild("HumanoidRootPart") then
+                local distance = (otherNPC.HumanoidRootPart.Position - npcPosition).Magnitude
+                
+                LoggerService:debug("PROXIMITY", string.format(
+                    "Distance between %s and %s: %.2f (radius: %.2f)",
+                    npc.displayName,
+                    otherNPC:GetAttribute("DisplayName") or otherNPC.Name,
+                    distance,
+                    npc.responseRadius
+                ))
+                
+                if distance <= npc.responseRadius then
+                    local npcData = {
+                        id = otherNPC:GetAttribute("NpcId"),
+                        name = otherNPC:GetAttribute("DisplayName") or otherNPC.Name,
+                        type = "npc",
+                        distance = distance
+                    }
+                    table.insert(nearbyEntities, npcData)
+                    
+                    LoggerService:info("PROXIMITY", string.format(
+                        "Added NPC %s to %s's nearby entities (distance: %.2f)",
+                        npcData.name,
+                        npc.displayName,
+                        distance
+                    ))
+                end
+            end
+        end
+    end
+    
+    -- Get nearby players
+    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local distance = (player.Character.HumanoidRootPart.Position - npcPosition).Magnitude
+            if distance <= npc.responseRadius then
+                local playerData = {
+                    id = tostring(player.UserId),
+                    name = player.Name,
+                    type = "player",
+                    distance = distance
+                }
+                table.insert(nearbyEntities, playerData)
+                
+                LoggerService:info("PROXIMITY", string.format(
+                    "Added player %s to %s's nearby entities (distance: %.2f)",
+                    player.Name,
+                    npc.displayName,
+                    distance
+                ))
+            end
+        end
+    end
+    
+    return nearbyEntities
+end
+
+-- Update the chat context creation to include nearby entities
+function NPCManagerV3:createChatContext(npc, participant)
+    -- Get all nearby entities
+    local nearbyEntities = self:getNearbyEntities(npc)
+    
+    -- Separate into players and NPCs
+    local nearbyPlayers = {}
+    local nearbyNPCs = {}
+    
+    for _, entity in ipairs(nearbyEntities) do
+        if entity.type == "player" then
+            table.insert(nearbyPlayers, entity)
+        elseif entity.type == "npc" then
+            table.insert(nearbyNPCs, entity)
+        end
+    end
+    
+    -- Debug log the entities
+    LoggerService:debug("CONTEXT", string.format(
+        "Found %d nearby players and %d nearby NPCs for %s",
+        #nearbyPlayers,
+        #nearbyNPCs,
+        npc.displayName
+    ))
+    
+    -- Create the context
+    local context = {
+        participant_name = participant.Name,
+        participant_type = participant:GetParticipantType(),
+        is_new_conversation = not self:hasRecentInteraction(npc.id, participant:GetParticipantId()),
+        npc_location = npc.currentLocation or "Unknown",
+        nearby_players = nearbyPlayers,
+        nearby_npcs = nearbyNPCs,
+        interaction_history = self:getInteractionHistory(npc.id, participant:GetParticipantId())
+    }
+    
+    -- Log the final context
+    LoggerService:debug("CONTEXT", string.format(
+        "Created context for %s: %s",
+        npc.displayName,
+        HttpService:JSONEncode(context)
+    ))
+    
+    return context
+end
+
+-- Update the chat handling to refresh proximity data
+function NPCManagerV3:handleChat(npc, participant, message)
+    LoggerService:debug("CHAT", "Starting handleChat...")
+    
+    -- Refresh proximity data before sending chat
+    local context = self:createChatContext(npc, participant)
+    
+    LoggerService:debug("CHAT", string.format(
+        "Created context with %d nearby players and %d nearby NPCs",
+        #context.nearby_players,
+        #context.nearby_npcs
+    ))
+    
+    -- Create the request
+    local request = {
+        npc_id = npc.id,
+        participant_id = participant:GetParticipantId(),
+        message = message,
+        context = context
+    }
+    
+    LoggerService:debug("CHAT", string.format(
+        "Sending request: %s",
+        HttpService:JSONEncode(request)
+    ))
+    
+    return NPCChatHandler:HandleChat(request)
+end
+
 return NPCManagerV3

@@ -1,8 +1,11 @@
 # app/models.py
 
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List, Literal
-from datetime import datetime
+from typing import Optional, Dict, Any, List, Literal, Set
+from datetime import datetime, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
 
 class NPCAction(BaseModel):
     type: Literal["follow", "unfollow", "stop_talking", "none"]
@@ -106,3 +109,139 @@ def get_agent_mapping(
         """, (npc_id, participant_id, agent_type))
         result = cursor.fetchone()
         return AgentMapping(**dict(result)) if result else None
+
+class ClusterCache:
+    """
+    Manages NPC cluster information with delayed member removal.
+    
+    Attributes:
+        clusters: Dict mapping npc_id to cluster information
+        pending_removals: Dict tracking entities pending removal from clusters
+        REMOVAL_DELAY: How long to keep entities in context after leaving
+    """
+    def __init__(self):
+        self.clusters: Dict[str, Dict] = {}  # npc_id -> cluster info
+        self.pending_removals: Dict[str, Dict] = {}  # npc_id_entity_id -> removal timestamp
+        self.REMOVAL_DELAY = timedelta(seconds=30)
+    
+    def update_from_context(self, npc_id: str, context: dict) -> Dict:
+        """Update cluster info from chat context"""
+        current_time = datetime.now()
+        
+        logger.info(f"Updating cluster for NPC {npc_id}")
+        
+        # Extract nearby entities from context
+        current_players = set()
+        current_npcs = set()
+        
+        # Handle nearby players
+        nearby_players = context.get("nearby_players", [])
+        if nearby_players:
+            if isinstance(nearby_players[0], dict):
+                current_players = {p["name"] for p in nearby_players}
+            else:
+                current_players = set(nearby_players)
+            
+        # Handle nearby NPCs - check if participant is an NPC
+        if context.get("participant_type") == "npc":
+            current_npcs.add(context["participant_name"])
+        
+        # Also check explicit nearby_npcs field if it exists
+        nearby_npcs = context.get("nearby_npcs", [])
+        if nearby_npcs:
+            if isinstance(nearby_npcs[0], dict):
+                current_npcs.update(n["name"] for n in nearby_npcs)
+            else:
+                current_npcs.update(nearby_npcs)
+        
+        logger.info(f"Current players in proximity: {current_players}")
+        logger.info(f"Current NPCs in proximity: {current_npcs}")
+        
+        # Get or create cluster info
+        cluster_info = self.clusters.get(npc_id, {
+            "members": {
+                "players": set(),
+                "npcs": set()
+            },
+            "last_update": current_time,
+            "context": {}
+        })
+        
+        # Handle new players
+        new_players = current_players - cluster_info["members"]["players"]
+        if new_players:
+            logger.info(f"New players joined cluster {npc_id}: {new_players}")
+            cluster_info["members"]["players"].update(new_players)
+        
+        # Handle new NPCs
+        new_npcs = current_npcs - cluster_info["members"]["npcs"]
+        if new_npcs:
+            logger.info(f"New NPCs joined cluster {npc_id}: {new_npcs}")
+            cluster_info["members"]["npcs"].update(new_npcs)
+        
+        # Handle members who left
+        left_players = cluster_info["members"]["players"] - current_players
+        left_npcs = cluster_info["members"]["npcs"] - current_npcs
+        
+        for member in left_players:
+            self._add_to_pending_removals(npc_id, member, "player")
+        for member in left_npcs:
+            self._add_to_pending_removals(npc_id, member, "npc")
+        
+        # Process pending removals
+        self._process_pending_removals(npc_id)
+        
+        # Update context
+        cluster_info["context"] = context
+        cluster_info["last_update"] = current_time
+        self.clusters[npc_id] = cluster_info
+        
+        logger.info(f"Final cluster state for {npc_id}: {cluster_info}")
+        
+        return cluster_info
+
+    def _process_pending_removals(self, npc_id):
+        # Get pending removals for this NPC
+        pending = [
+            info for key, info in self.pending_removals.items()
+            if key.startswith(f"{npc_id}_")
+        ]
+        if not pending:
+            return
+
+        # Get the cluster for this NPC
+        cluster = self.clusters.get(npc_id)
+        if not cluster:
+            return
+
+        # Process each pending removal
+        for info in pending:
+            try:
+                member_type = info["type"]  # "player" or "npc"
+                member = info["member"]
+                
+                # Remove from appropriate set in members dict
+                if member in cluster["members"][f"{member_type}s"]:
+                    cluster["members"][f"{member_type}s"].discard(member)
+                    logger.info(f"Removed {member_type} {member} from cluster {npc_id}")
+                    
+                # Remove from pending removals
+                removal_key = f"{npc_id}_{member}"
+                if removal_key in self.pending_removals:
+                    del self.pending_removals[removal_key]
+                    
+            except Exception as e:
+                logger.error(f"Error removing member from cluster: {e}")
+                logger.error(f"Cluster state: {cluster}")
+                logger.error(f"Info: {info}")
+
+    def _add_to_pending_removals(self, npc_id: str, member: str, member_type: str):
+        """Add a member to pending removals"""
+        removal_key = f"{npc_id}_{member}"
+        if removal_key not in self.pending_removals:
+            self.pending_removals[removal_key] = {
+                "timestamp": datetime.now(),
+                "member": member,
+                "type": member_type
+            }
+            logger.info(f"Added {member} to pending removals")

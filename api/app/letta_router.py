@@ -48,6 +48,7 @@ from letta_templates.npc_tools import (
 )
 import requests
 import httpx
+from .models import ClusterCache
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -380,10 +381,26 @@ def get_player_description(participant_id: str) -> str:
         ).fetchone()
         return result['description'] if result else ""
 
+# Initialize cluster cache
+cluster_cache = ClusterCache()
+
 @router.post("/chat/v2", response_model=ChatResponse)
 async def chat_with_npc_v2(request: ChatRequest):
-    """New endpoint using direct Letta SDK"""
     try:
+        # Update cluster info from context
+        cluster_info = cluster_cache.update_from_context(
+            npc_id=request.npc_id,
+            context=request.context
+        )
+        
+        # Add enhanced cluster context to request
+        request.context["cluster"] = {
+            "members": list(cluster_info["members"]),
+            "history": cluster_info.get("context", {}).get("interaction_history", [])
+        }
+        
+        logger.info(f"Enhanced context with cluster info: {request.context['cluster']}")
+        
         # Basic request logging
         logger.info(f"Received request from game: {request.model_dump_json()}")
 
