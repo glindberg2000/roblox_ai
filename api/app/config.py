@@ -79,16 +79,21 @@ LLM_CONFIGS = {
         "max_tokens": 1000,
         "top_p": 0.95,
         "frequency_penalty": 0,
-        "presence_penalty": 0
+        "presence_penalty": 0,
+        "model_endpoint_type": "openai",
+        "model_endpoint": "https://api.openai.com/v1",
+        "context_window": 128000
     }
 }
 
 # Embedding configuration
 DEFAULT_EMBEDDING = os.getenv("DEFAULT_EMBEDDING", "text-embedding-ada-002")
 EMBEDDING_CONFIGS = {
-    "default": {
-        "model": "text-embedding-ada-002",
-        "dimensions": 1536,
+    "text-embedding-ada-002": {
+        "embedding_model": "text-embedding-ada-002",
+        "embedding_dim": 1536,
+        "embedding_endpoint_type": "openai",
+        "context_window": 128000,
         "normalize": True
     }
 }
