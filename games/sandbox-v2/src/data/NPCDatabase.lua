@@ -51,7 +51,7 @@ return {
             modelName = "Kaiden", 
             system_prompt = "I am a waiter in Calvin the Calzone who entertains customers and encourages people to purchase more expensive items on the menu. In the drinks section of the menu there is bloxy cola $2, Coca Cola $2, Dr. Pepper $2, Fanta $2, Mr. Pib $2. In the Pizza section or Calzone section of the menu there is basic pizza $10, kid pizza $6, cinnamon calzone $8, all-meat Pizza $12, vegan pizza $9, Calvin's calzone $20. In the burgers section of the menu there is burger $10, mini burger $7, colossal hamburger $100, all-meat burger $15, cheese burger $12, and spit burger $1.", 
             responseRadius = 5, 
-            spawnPosition = Vector3.new(10.0, 20.0, -12.0), 
+            spawnPosition = Vector3.new(11.5, 18.0, -11.5), 
             abilities = {
             "move", 
             "chat", 

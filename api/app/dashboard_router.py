@@ -570,7 +570,6 @@ async def get_npc(npc_id: str, game_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/api/npcs/{npc_id}")
-@require_admin
 async def update_npc(npc_id: str, game_id: int, request: Request):
     try:
         data = await request.json()
@@ -809,7 +808,6 @@ async def create_asset(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/api/npcs")
-@require_admin
 async def create_npc(
     request: Request,
     game_id: int = Form(...),
