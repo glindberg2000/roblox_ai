@@ -242,3 +242,27 @@ class ClusterCache:
                 "type": member_type
             }
             logger.info(f"Added {member} to pending removals")
+
+class ClusterData(BaseModel):
+    members: List[str]
+    npcs: int
+    players: int
+
+class GroupData(BaseModel):
+    primary: str
+    members: List[str]
+    npcs: int
+    players: int
+    formed: int
+
+class HumanContextData(BaseModel):
+    relationships: List[Any]
+    currentGroups: GroupData
+    recentInteractions: List[Any]
+    lastSeen: int
+
+class GameSnapshot(BaseModel):
+    timestamp: int
+    clusters: List[ClusterData]
+    events: List[Any]
+    humanContext: Dict[str, HumanContextData]
