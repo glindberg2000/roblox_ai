@@ -68,7 +68,7 @@ def create_roblox_agent(
     system: str,
     embedding_config: Optional[EmbeddingConfig] = None,
     llm_type: str = None,
-    tools_section: str = TOOL_INSTRUCTIONS  # Use official instructions
+    tools_section: str = TOOL_INSTRUCTIONS
 ):
     """Create a Letta agent configured for Roblox NPCs"""
     # Debug logging
@@ -85,6 +85,10 @@ def create_roblox_agent(
     
     # Create LLMConfig object once
     llm_config = LLMConfig(**llm_config_dict)
+    
+    # Add debug logging to see the final config object
+    logger.info(f"Created LLMConfig object: {llm_config}")
+    logger.info(f"LLMConfig model_endpoint: {llm_config.model_endpoint}")
     
     # Use provided embedding config or default from config
     if not embedding_config:
@@ -243,17 +247,25 @@ Description: {player_info['description']}"""
         # Send message to agent
         logger.info(f"Sending message to agent {agent_mapping.letta_agent_id}")
         try:
-            logger.info(f"Using direct_client: {direct_client}")
-            logger.info(f"Agent ID: {agent_mapping.letta_agent_id}")
-            logger.info(f"Message: {request.message}")
+            logger.info(f"Message details:")
+            logger.info(f"  agent_id: {agent_mapping.letta_agent_id}")
+            logger.info(f"  role: {message_role}")
+            logger.info(f"  message: {request.message}")
+            logger.info(f"  direct_client: {direct_client}")
+            
             response = direct_client.send_message(
                 agent_id=agent_mapping.letta_agent_id,
-                role="user",
+                role=message_role,
                 message=request.message
             )
-            logger.info(f"Got response from Letta: {response}")
+            
+            logger.info(f"Response type: {type(response)}")
+            logger.info(f"Response content: {response}")
+            
         except Exception as e:
-            logger.error(f"Error sending message to Letta: {str(e)}", exc_info=True)
+            logger.error(f"Error sending message to Letta: {str(e)}")
+            logger.error(f"Error type: {type(e)}")
+            logger.error(f"Error details: {e.__dict__}")
             raise
         
         # Extract message from function call
@@ -446,14 +458,25 @@ Description: {player_info['description']}"""
         # Send message to agent
         logger.info(f"Sending message to agent {agent_mapping.letta_agent_id}")
         try:
+            logger.info(f"Message details:")
+            logger.info(f"  agent_id: {agent_mapping.letta_agent_id}")
+            logger.info(f"  role: {message_role}")
+            logger.info(f"  message: {request.message}")
+            logger.info(f"  direct_client: {direct_client}")
+            
             response = direct_client.send_message(
                 agent_id=agent_mapping.letta_agent_id,
                 role=message_role,
                 message=request.message
             )
-            logger.info(f"Got response from Letta: {response}")
+            
+            logger.info(f"Response type: {type(response)}")
+            logger.info(f"Response content: {response}")
+            
         except Exception as e:
             logger.error(f"Error sending message to Letta: {str(e)}")
+            logger.error(f"Error type: {type(e)}")
+            logger.error(f"Error details: {e.__dict__}")
             raise
         
         # Extract tool results
