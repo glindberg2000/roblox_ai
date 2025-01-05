@@ -116,7 +116,6 @@ class ClusterData(BaseModel):
     players: int
 
 class GroupData(BaseModel):
-    primary: str
     members: List[str]
     npcs: int
     players: int

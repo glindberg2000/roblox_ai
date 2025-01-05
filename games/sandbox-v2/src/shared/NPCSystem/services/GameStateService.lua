@@ -41,7 +41,6 @@ function GameStateService:updateHumanContext(cluster)
         
         -- Update group membership
         gameState.humanContext[member].currentGroups = {
-            primary = member,
             members = cluster.members,
             npcs = cluster.npcs,
             players = cluster.players,

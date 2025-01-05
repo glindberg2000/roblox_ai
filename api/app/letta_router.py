@@ -798,8 +798,9 @@ async def handle_game_snapshot(snapshot: GameSnapshot):
         logger.info(f"Processing context for {len(snapshot.humanContext)} entities")
         for entity_id, context in snapshot.humanContext.items():
             logger.info(f"Entity {entity_id}: "
-                       f"Group={context.currentGroups.members}, "
-                       f"Primary={context.currentGroups.primary}")
+                       f"Group={context.currentGroups.members} "
+                       f"(NPCs={context.currentGroups.npcs}, "
+                       f"Players={context.currentGroups.players})")
         
         return {
             "success": True,
