@@ -6,6 +6,7 @@ from letta import (
     create_client,
     BasicBlockMemory
 )
+from datetime import datetime
 from letta.prompts import gpt_system
 from letta_roblox.client import LettaRobloxClient
 from typing import Dict, Any, Optional, List, Tuple
@@ -25,6 +26,11 @@ from .config import (
     LLM_CONFIGS, 
     EMBEDDING_CONFIGS, 
     DEFAULT_EMBEDDING
+)
+from .models import (
+    GameSnapshot,
+    ClusterData,
+    HumanContextData
 )
 import logging
 import json
@@ -48,7 +54,6 @@ from letta_templates.npc_tools import (
 )
 import requests
 import httpx
-from .models import ClusterCache, GameSnapshot
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -381,49 +386,22 @@ def get_player_description(participant_id: str) -> str:
         ).fetchone()
         return result['description'] if result else ""
 
-# Initialize cluster cache
-cluster_cache = ClusterCache()
-
 @router.post("/chat/v2", response_model=ChatResponse)
 async def chat_with_npc_v2(request: ChatRequest):
     try:
-        # Update cluster info from context
-        cluster_info = cluster_cache.update_from_context(
-            npc_id=request.npc_id,
-            context=request.context
-        )
-        
-        # Add enhanced cluster context to request
-        request.context["cluster"] = {
-            "members": list(cluster_info["members"]),
-            "history": cluster_info.get("context", {}).get("interaction_history", [])
-        }
-        
-        logger.info(f"Enhanced context with cluster info: {request.context['cluster']}")
-        
-        # Basic request logging
-        logger.info(f"Received request from game: {request.model_dump_json()}")
-
-        # Get NPC context
-        npc_details = get_npc_context(request.npc_id)
-        if not npc_details:
-            raise HTTPException(status_code=404, detail="NPC not found")
-
-        # Initialize context if None
-        request_context = request.context or {}
+        logger.info(f"Processing chat request for NPC {request.npc_id}")
+        logger.info(f"Processing chat request with context: {request.context}")
         
         # Determine message role
         message_role = "user"  # Always treat incoming messages as user messages
-        logger.info(f"Message role: {message_role} for {request.participant_id} -> {request.npc_id}")
         
-        # Get existing agent mapping with strict ordering
-        agent_mapping = get_agent_mapping(
-            npc_id=request.npc_id,
-            participant_id=request.participant_id,
-            strict_order=True  # Ensure we get the right direction
+        # Get or create agent mapping
+        mapping = get_agent_mapping(
+            request.npc_id,
+            request.participant_id
         )
         
-        if not agent_mapping:
+        if not mapping:
             # Get NPC details for memory
             npc_details = get_npc_context(request.npc_id)
             
@@ -463,26 +441,26 @@ Description: {player_info['description']}"""
             )
             
             # Store mapping
-            agent_mapping = create_agent_mapping(
+            mapping = create_agent_mapping(
                 npc_id=request.npc_id,
                 participant_id=request.participant_id,
                 agent_id=agent.id  # Note: agent.id instead of agent["id"]
             )
-            print(f"Created new agent mapping: {agent_mapping}")
+            print(f"Created new agent mapping: {mapping}")
         else:
-            print(f"Using existing agent {agent_mapping.letta_agent_id} for {request.participant_id}")
+            print(f"Using existing agent {mapping.letta_agent_id} for {request.participant_id}")
         
         # Send message to agent
-        logger.info(f"Sending message to agent {agent_mapping.letta_agent_id}")
+        logger.info(f"Sending message to agent {mapping.letta_agent_id}")
         try:
             logger.info(f"Message details:")
-            logger.info(f"  agent_id: {agent_mapping.letta_agent_id}")
+            logger.info(f"  agent_id: {mapping.letta_agent_id}")
             logger.info(f"  role: {message_role}")
             logger.info(f"  message: {request.message}")
             logger.info(f"  direct_client: {direct_client}")
             
             response = direct_client.send_message(
-                agent_id=agent_mapping.letta_agent_id,
+                agent_id=mapping.letta_agent_id,
                 role=message_role,
                 message=request.message
             )
@@ -804,7 +782,7 @@ def create_agent_memory(
     
     return memory
 
-@router.post("/letta/v1/snapshot/game")
+@router.post("/snapshot/game")
 async def handle_game_snapshot(snapshot: GameSnapshot):
     try:
         logger.info("Received game snapshot")
@@ -813,11 +791,15 @@ async def handle_game_snapshot(snapshot: GameSnapshot):
         # Process clusters
         logger.info(f"Processing {len(snapshot.clusters)} clusters")
         for i, cluster in enumerate(snapshot.clusters):
-            logger.info(f"Cluster {i+1}: {len(cluster.members)} members "
-                       f"({cluster.npcs} NPCs, {cluster.players} players)")
+            logger.info(f"Cluster {i+1}: Members={cluster.members} "
+                       f"(NPCs={cluster.npcs}, Players={cluster.players})")
         
         # Process human context
         logger.info(f"Processing context for {len(snapshot.humanContext)} entities")
+        for entity_id, context in snapshot.humanContext.items():
+            logger.info(f"Entity {entity_id}: "
+                       f"Group={context.currentGroups.members}, "
+                       f"Primary={context.currentGroups.primary}")
         
         return {
             "success": True,

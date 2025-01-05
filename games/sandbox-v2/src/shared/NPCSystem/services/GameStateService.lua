@@ -41,7 +41,7 @@ function GameStateService:updateHumanContext(cluster)
         
         -- Update group membership
         gameState.humanContext[member].currentGroups = {
-            primary = cluster.id,
+            primary = member,
             members = cluster.members,
             npcs = cluster.npcs,
             players = cluster.players,
@@ -70,8 +70,20 @@ end
 -- Sync with backend
 function GameStateService:syncWithBackend()
     LoggerService:debug("SNAPSHOT", "Starting syncWithBackend...")
+    -- Filter clusters to only include those with NPCs
+    local npcClusters = {}
+    for _, cluster in ipairs(gameState.clusters) do
+        if cluster.npcs > 0 then
+            table.insert(npcClusters, cluster)
+        end
+    end
+    LoggerService:debug("SNAPSHOT", string.format(
+        "Filtered %d clusters down to %d NPC-containing clusters",
+        #gameState.clusters, #npcClusters
+    ))
+    
     local payload = {
-        clusters = gameState.clusters,
+        clusters = npcClusters,
         events = gameState.events,
         humanContext = gameState.humanContext,
         timestamp = os.time()
