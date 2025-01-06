@@ -253,16 +253,19 @@ Description: {player_info['description']}"""
         # Send message to agent
         logger.info(f"Sending message to agent {agent_mapping.letta_agent_id}")
         try:
+            # Get name from context
+            speaker_name = request.context.get("participant_name")
             logger.info(f"Message details:")
             logger.info(f"  agent_id: {agent_mapping.letta_agent_id}")
             logger.info(f"  role: {message_role}")
             logger.info(f"  message: {request.message}")
-            logger.info(f"  direct_client: {direct_client}")
+            logger.info(f"  speaker_name: {speaker_name}")
             
             response = direct_client.send_message(
                 agent_id=agent_mapping.letta_agent_id,
                 role=message_role,
-                message=request.message
+                message=request.message,
+                name=speaker_name
             )
             
             logger.info(f"Response type: {type(response)}")
@@ -453,16 +456,19 @@ Description: {player_info['description']}"""
         # Send message to agent
         logger.info(f"Sending message to agent {mapping.letta_agent_id}")
         try:
+            # Get name from context
+            speaker_name = request.context.get("participant_name")
             logger.info(f"Message details:")
             logger.info(f"  agent_id: {mapping.letta_agent_id}")
             logger.info(f"  role: {message_role}")
             logger.info(f"  message: {request.message}")
-            logger.info(f"  direct_client: {direct_client}")
+            logger.info(f"  speaker_name: {speaker_name}")
             
             response = direct_client.send_message(
                 agent_id=mapping.letta_agent_id,
                 role=message_role,
-                message=request.message
+                message=request.message,
+                name=speaker_name
             )
             
             logger.info(f"Response type: {type(response)}")
