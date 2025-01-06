@@ -396,7 +396,8 @@ async def chat_with_npc_v2(request: ChatRequest):
         logger.info(f"Processing chat request with context: {request.context}")
         
         # Determine message role
-        message_role = "user"  # Always treat incoming messages as user messages
+        message_role = "system" if request.message.startswith("[SYSTEM]") else "user"
+        logger.info(f"Determined message role: {message_role} for message: {request.message[:50]}...")
         
         # Get or create agent mapping
         mapping = get_agent_mapping(
