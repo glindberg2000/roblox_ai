@@ -967,6 +967,7 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
             context = {
                 participant_type = participantType,
                 participant_name = participant.Name,
+                speaker_name = npc.displayName, 
                 is_new_conversation = false,
                 interaction_history = {},
                 nearby_players = self:getVisiblePlayers(npc),
