@@ -54,6 +54,10 @@ from letta_templates.npc_tools import (
 )
 import requests
 import httpx
+from letta_templates import (
+    create_personalized_agent,
+    chat_with_agent
+)
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -448,7 +452,7 @@ Description: {player_info['description']}"""
             mapping = create_agent_mapping(
                 npc_id=request.npc_id,
                 participant_id=request.participant_id,
-                agent_id=agent.id  # Note: agent.id instead of agent["id"]
+                agent_id=agent.id
             )
             print(f"Created new agent mapping: {mapping}")
         else:
@@ -823,3 +827,75 @@ async def handle_game_snapshot(snapshot: GameSnapshot):
     except Exception as e:
         logger.error(f"Error processing game snapshot: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/chat/v3", response_model=ChatResponse)
+async def chat_with_npc_v3(request: ChatRequest):
+    try:
+        logger.info(f"Processing chat request for NPC {request.npc_id}")
+        logger.info(f"Processing chat request with context: {request.context}")
+        
+        # Determine message role (from v2)
+        message_role = "system" if request.message.startswith("[SYSTEM]") else "user"
+        logger.info(f"Determined message role: {message_role} for message: {request.message[:50]}...")
+        
+        # Get or create agent mapping (from v2)
+        mapping = get_agent_mapping(
+            request.npc_id,
+            request.participant_id
+        )
+        
+        if not mapping:
+            # Get NPC details (from v2)
+            npc_details = get_npc_context(request.npc_id)
+            
+            # Only change: Use template's create_personalized_agent instead of create_roblox_agent
+            agent = create_personalized_agent(
+                name=f"npc_{npc_details['display_name']}_{request.npc_id[:8]}",
+                client=direct_client
+            )
+            
+            mapping = create_agent_mapping(
+                npc_id=request.npc_id,
+                participant_id=request.participant_id,
+                agent_id=agent.id
+            )
+            print(f"Created new agent mapping: {mapping}")
+        else:
+            print(f"Using existing agent {mapping.letta_agent_id} for {request.participant_id}")
+        
+        # Send message using templates (only other change)
+        logger.info(f"Sending message to agent {mapping.letta_agent_id}")
+        try:
+            response = chat_with_agent(
+                client=direct_client,
+                agent_id=mapping.letta_agent_id,
+                message=request.message,
+                role=message_role,
+                name=request.context.get("participant_name")
+            )
+            
+            logger.info(f"Response type: {type(response)}")
+            logger.info(f"Response content: {response}")
+            
+        except Exception as e:
+            logger.error(f"Error sending message to Letta: {str(e)}")
+            logger.error(f"Error type: {type(e)}")
+            logger.error(f"Error details: {e.__dict__}")
+            raise
+        
+        # Return in v2 format
+        return ChatResponse(
+            message=response,  # response is already the message string
+            action={"type": "none"},  # Default action
+            metadata={
+                "debug": "V3 response using templates"
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
+        return ChatResponse(
+            message="Something went wrong!",
+            action={"type": "none"},
+            metadata={"error": str(e)}
+        )
