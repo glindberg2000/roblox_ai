@@ -18,9 +18,7 @@ from .database import (
     get_db, 
     get_player_info,
     get_location_coordinates,
-    get_all_locations,
-    create_agent_mapping_v3,
-    get_agent_mapping_v3
+    get_all_locations
 )
 from .mock_player import MockPlayer
 from .config import (
@@ -247,12 +245,12 @@ Description: {player_info['description']}"""
             )
             
             # Store new agent mapping
-            agent_mapping = create_agent_mapping(
+            mapping = create_agent_mapping(
                 npc_id=request.npc_id,
                 participant_id=request.participant_id,
                 agent_id=agent["id"]
             )
-            print(f"Created new agent mapping: {agent_mapping}")
+            print(f"Created new agent mapping: {mapping}")
         else:
             print(f"Using existing agent {agent_mapping.letta_agent_id} for {request.participant_id}")
         
@@ -532,49 +530,6 @@ def register_base_tools(client) -> List[str]:
     
     return tool_ids
 
-def extract_tool_results(response):
-    """Extract tool results using SDK message types"""
-    results = {
-        'tool_calls': [],
-        'reasoning': None,
-        'final_message': None
-    }
-    
-    if hasattr(response, 'messages'):
-        current_tool = None
-        
-        for msg in response.messages:
-            # Handle Tool Calls
-            if isinstance(msg, ToolCallMessage):
-                try:
-                    # Parse the arguments JSON string
-                    arguments = json.loads(msg.tool_call.arguments)
-                    
-                    current_tool = {
-                        'name': msg.tool_call.name,
-                        'arguments': arguments,  # Store parsed JSON
-                        'status': None,
-                        'result': None
-                    }
-                    results['tool_calls'].append(current_tool)
-                    
-                except json.JSONDecodeError:
-                    logger.error(f"Failed to parse tool arguments: {msg.tool_call.arguments}")
-                    
-            # Handle Tool Returns
-            elif isinstance(msg, ToolReturnMessage):
-                if current_tool:
-                    current_tool.update({
-                        'status': msg.status,
-                        'result': msg.tool_return
-                    })
-            
-            # Handle Reasoning
-            elif isinstance(msg, ReasoningMessage):
-                results['reasoning'] = msg.reasoning
-
-    return results
-
 def create_agent_for_npc(npc_context: dict, participant_id: str):
     """Create agent with navigation tools and location memory"""
     
@@ -830,30 +785,33 @@ async def handle_game_snapshot(snapshot: GameSnapshot):
         logger.error(f"Error processing game snapshot: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/chat/v3", response_model=ChatResponse)
 async def chat_with_npc_v3(request: ChatRequest):
     try:
         logger.info(f"Processing chat request for NPC {request.npc_id}")
         logger.info(f"Processing chat request with context: {request.context}")
         
-        # Determine message role
+        # Determine message role (from v2)
         message_role = "system" if request.message.startswith("[SYSTEM]") else "user"
         logger.info(f"Determined message role: {message_role} for message: {request.message[:50]}...")
         
-        # Get or create agent mapping (using v3 functions)
-        mapping = get_agent_mapping_v3(request.npc_id)
+        # Get or create agent mapping (from v2)
+        mapping = get_agent_mapping(
+            request.npc_id,
+            request.participant_id
+        )
         
         if not mapping:
-            # Get NPC details
+            # Get NPC details (from v2)
             npc_details = get_npc_context(request.npc_id)
             
             # Create agent with required memory blocks
             agent = create_personalized_agent(
-                name=npc_details['display_name'],  # Just use NPC name
+                name=f"npc_{npc_details['display_name']}_{request.npc_id[:8]}",
                 client=direct_client,
                 minimal_prompt=True,
                 memory_blocks={
-                    # Keep existing memory blocks structure
                     "persona": {
                         "name": npc_details['display_name'],
                         "personality": npc_details.get('system_prompt', ''),
@@ -884,63 +842,68 @@ async def chat_with_npc_v3(request: ChatRequest):
                 }
             )
 
-            # Create mapping using v3 function
-            mapping = create_agent_mapping_v3(
+            # After agent creation - inspect details
+            logger.info("\nVerifying system prompt:")
+            agent_details = direct_client.get_agent(agent.id)
+            logger.info(f"System prompt: {agent_details.system}")
+            logger.info(f"Tools available: {[t.name for t in agent_details.tools]}")
+
+            # Create mapping
+            mapping = create_agent_mapping(
                 npc_id=request.npc_id,
+                participant_id=request.participant_id,
                 agent_id=agent.id
             )
         else:
             print(f"Using existing agent {mapping.letta_agent_id} for {request.participant_id}")
-
-        # Send message to agent (using existing v2 code)
+        
+        # Send message using templates
         logger.info(f"Sending message to agent {mapping.letta_agent_id}")
         try:
-            # Get name from context
-            speaker_name = request.context.get("participant_name")
-            logger.info(f"Message details:")
-            logger.info(f"  agent_id: {mapping.letta_agent_id}")
-            logger.info(f"  role: {message_role}")
-            logger.info(f"  message: {request.message}")
-            logger.info(f"  speaker_name: {speaker_name}")
-            
-            response = direct_client.send_message(
+            response = chat_with_agent(
+                client=direct_client,
                 agent_id=mapping.letta_agent_id,
-                role=message_role,
                 message=request.message,
-                name=speaker_name
+                role=message_role,
+                name=request.context.get("participant_name")
             )
             
+            # Debug response structure
             logger.info(f"Response type: {type(response)}")
-            logger.info(f"Response content: {response}")
+            logger.info(f"Response attributes: {dir(response)}")
+            if hasattr(response, 'messages'):
+                logger.info(f"Message types: {[type(m) for m in response.messages]}")
             
+            # Extract tool results
+            results = extract_tool_results(response)
+            logger.info("Successfully extracted tool results")
+            
+            # Get message and action from tool results
+            message, action = process_tool_results(results)
+            
+            # If no message from tools, use the direct response
+            if not message:
+                message = response.content if hasattr(response, 'content') else str(response)
+            
+            logger.info(f"Sending response - Message: {message}, Action: {action}")
+
+            return ChatResponse(
+                message=message,
+                action=action,
+                metadata={"debug": "V3 response with tool results"}
+            )
+
         except Exception as e:
-            logger.error(f"Error sending message to Letta: {str(e)}")
+            logger.error(f"Error in chat endpoint: {str(e)}")
             logger.error(f"Error type: {type(e)}")
-            logger.error(f"Error details: {e.__dict__}")
-            raise
-        
-        # Extract tool results (using existing v2 code)
-        results = extract_tool_results(response)
-        logger.info("Successfully extracted tool results")
-        
-        # Use process_tool_results instead of inline processing
-        message, action = process_tool_results(results)
-        
-        # Return simplified response
-        logger.info(f"Sending response - Message: {message}, Action: {action}")
-        return ChatResponse(
-            message=message,
-            action=action,
-            metadata={
-                "debug": "Simplified response for testing"
-            }
-        )
+            logger.error(f"Error details: {e.__dict__ if hasattr(e, '__dict__') else {}}")
+            
+            return ChatResponse(
+                message=f"Error processing response: {str(e)}",
+                action={"type": "none"},
+                metadata={"error": str(e)}
+            )
 
     except Exception as e:
-        logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
-        return ChatResponse(
-            message="Something went wrong!",
-            action={"type": "none"},
-            metadata={"error": str(e)}
-        )
-
+        logger.error(f"Outer error in chat endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
