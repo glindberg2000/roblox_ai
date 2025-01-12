@@ -848,18 +848,47 @@ async def chat_with_npc_v3(request: ChatRequest):
             # Get NPC details (from v2)
             npc_details = get_npc_context(request.npc_id)
             
-            # Only change: Use template's create_personalized_agent instead of create_roblox_agent
+            # Create agent with required memory blocks
             agent = create_personalized_agent(
                 name=f"npc_{npc_details['display_name']}_{request.npc_id[:8]}",
-                client=direct_client
+                client=direct_client,
+                memory_blocks={
+                    "persona": {
+                        "name": npc_details['display_name'],
+                        "personality": npc_details.get('system_prompt', ''),
+                        "interests": [],
+                        "journal": []
+                    },
+                    "status": {
+                        "current_location": request.context.get('npc_location', 'Unknown'),
+                        "current_action": f"Just spawned at {datetime.now().isoformat()}",
+                        "movement_state": "stationary"
+                    },
+                    "group_members": {
+                        "members": {},
+                        "summary": "No players nearby",
+                        "updates": [],
+                        "last_updated": datetime.now().isoformat()
+                    },
+                    "locations": {
+                        "known_locations": [
+                            {
+                                "name": loc["name"],
+                                "coordinates": loc["coordinates"],
+                                "slug": loc["slug"]
+                            }
+                            for loc in get_all_locations()
+                        ]
+                    }
+                }
             )
             
             mapping = create_agent_mapping(
                 npc_id=request.npc_id,
                 participant_id=request.participant_id,
-                agent_id=agent.id
+                letta_agent_id=agent.agent_id,
+                agent_type="letta"
             )
-            print(f"Created new agent mapping: {mapping}")
         else:
             print(f"Using existing agent {mapping.letta_agent_id} for {request.participant_id}")
         
