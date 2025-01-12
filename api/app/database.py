@@ -662,6 +662,29 @@ def get_all_locations(game_id: int = 61) -> List[Dict]:
         logger.error(f"Error getting locations: {str(e)}")
         return []
 
+def create_agent_mapping_v3(npc_id: str, agent_id: str) -> AgentMapping:
+    """Create a new v3 agent mapping (group chatbot)"""
+    with get_db() as db:
+        cursor = db.execute("""
+            INSERT INTO npc_agents (npc_id, participant_id, letta_agent_id)
+            VALUES (?, 'letta_v3', ?)
+            RETURNING *
+        """, (npc_id, agent_id))
+        result = cursor.fetchone()
+        db.commit()
+        return AgentMapping(**dict(result))
+
+def get_agent_mapping_v3(npc_id: str) -> Optional[AgentMapping]:
+    """Get agent mapping for group chatbot"""
+    with get_db() as db:
+        cursor = db.execute("""
+            SELECT * FROM npc_agents 
+            WHERE npc_id = ? AND participant_id = 'letta_v3'
+            LIMIT 1
+        """, (npc_id,))
+        result = cursor.fetchone()
+        return AgentMapping(**dict(result)) if result else None
+
 # Add to the bottom of the file:
 if __name__ == "__main__":
     debug_list_npcs()
