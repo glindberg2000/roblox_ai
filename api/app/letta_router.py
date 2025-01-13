@@ -62,6 +62,8 @@ from letta_templates import (
     update_group_status
 )
 from .cache import get_npc_id_from_name, get_npc_description, get_agent_id  # Add import
+from letta_templates.npc_utils import get_memory_block
+from letta_templates import print_agent_details
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -990,4 +992,27 @@ def process_snapshot_groups(human_context):
             current_location="Unknown",  # Default for now
             current_action="idle"        # Default for now
         )
+
+async def update_group_status(client, agent_id: str, 
+                            nearby_players: List[Dict], current_location: str,
+                            current_action: str):
+    """Update agent's group status and context"""
+    try:
+        # Update group status
+        await client.update_agent_group_status(
+            agent_id=agent_id,
+            nearby_players=nearby_players,
+            current_location=current_location,
+            current_action=current_action
+        )
+        
+        # Verify stored data (debug)
+        group_block = await get_memory_block(client, agent_id, "group_members")
+        status_block = await get_memory_block(client, agent_id, "status")
+        logger.debug(f"Agent {agent_id} group block: {json.dumps(group_block, indent=2)}")
+        logger.debug(f"Agent {agent_id} status block: {json.dumps(status_block, indent=2)}")
+        
+    except Exception as e:
+        logger.error(f"Failed to update group status for {agent_id}: {str(e)}")
+        raise
 
