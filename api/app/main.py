@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
 import logging
+from .cache import init_static_cache
 
 # Configure logging
 logging.basicConfig(
@@ -89,6 +90,8 @@ async def serve_dashboard(request: Request, allowed_ips=Depends(check_allowed_ip
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting Roblox API server...")
+    init_static_cache()
+    logger.info("Static caches initialized")
 
 @app.on_event("shutdown")
 async def shutdown_event():

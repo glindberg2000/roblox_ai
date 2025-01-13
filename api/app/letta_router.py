@@ -58,8 +58,10 @@ import requests
 import httpx
 from letta_templates import (
     create_personalized_agent,
-    chat_with_agent
+    chat_with_agent,
+    update_group_status
 )
+from .cache import get_npc_id_from_name, get_npc_description, get_agent_id  # Add import
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -814,6 +816,9 @@ async def handle_game_snapshot(snapshot: GameSnapshot):
                        f"Group={context.currentGroups.members} "
                        f"(NPCs={context.currentGroups.npcs}, "
                        f"Players={context.currentGroups.players})")
+            
+        # Add group status updates
+        process_snapshot_groups(snapshot.humanContext)
         
         return {
             "success": True,
@@ -942,5 +947,47 @@ async def chat_with_npc_v3(request: ChatRequest):
             message="Something went wrong!",
             action={"type": "none"},
             metadata={"error": str(e)}
+        )
+
+def process_snapshot_groups(human_context):
+    """Process group updates from snapshot data"""
+    for entity_name, context in human_context.items():
+        # Skip if not an NPC
+        npc_id = get_npc_id_from_name(entity_name)
+        if not npc_id:
+            continue
+            
+        # Skip if no agent ID for this NPC
+        agent_id = get_agent_id(npc_id)
+        if not agent_id:
+            logger.warning(f"No agent ID found for NPC {entity_name} ({npc_id}), skipping group update")
+            continue
+
+        # Get group members excluding the NPC itself
+        group_members = [
+            member for member in context.currentGroups.members
+            if member != entity_name  # Filter out self from group
+        ]
+        
+        # Convert to format expected by update_group_status
+        nearby_players = [
+            {
+                'id': member,
+                'name': member,
+                'appearance': get_npc_description(member) or '',  # Get NPC descriptions from cache
+                'notes': ''
+            }
+            for member in group_members
+        ]
+        
+        logger.info(f"Updating group for {entity_name} (ID: {npc_id})")
+        logger.info(f"  Group members: {group_members}")
+        
+        update_group_status(
+            client=direct_client,
+            agent_id=agent_id,
+            nearby_players=nearby_players,
+            current_location="Unknown",  # Default for now
+            current_action="idle"        # Default for now
         )
 
