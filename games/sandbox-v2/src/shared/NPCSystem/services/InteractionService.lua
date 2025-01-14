@@ -12,11 +12,11 @@ local lastUpdateTime = 0
 local CLUSTER_UPDATE_INTERVAL = 1 -- Update clusters every second
 
 function InteractionService:checkRangeAndEndConversation(npc1, npc2)
-    -- Use cluster data to determine if conversation should end
+    -- Only check cluster membership without range messages
     local cluster1 = self:getClusterForEntity(npc1.displayName)
     if not cluster1 or not table.find(cluster1.members, npc2.displayName) then
-        LoggerService:info("INTERACTION", string.format(
-            "Ending conversation - NPCs no longer in same cluster (%s <-> %s)",
+        LoggerService:debug("CLUSTER", string.format(
+            "NPCs in different clusters: %s, %s",
             npc1.displayName, npc2.displayName
         ))
         return true
@@ -25,90 +25,43 @@ function InteractionService:checkRangeAndEndConversation(npc1, npc2)
 end
 
 function InteractionService:canInteract(npc1, npc2)
-    -- First check if they're in the same cluster
+    -- Only check cluster membership for proximity awareness
     local cluster1 = self:getClusterForEntity(npc1.displayName)
     if not cluster1 or not table.find(cluster1.members, npc2.displayName) then
-        LoggerService:debug("INTERACTION", string.format(
-            "Cannot interact - NPCs not in same cluster:\n" ..
-            "- %s and %s are too far apart",
+        LoggerService:debug("CLUSTER", string.format(
+            "NPCs in different clusters: %s, %s",
             npc1.displayName, npc2.displayName
         ))
         return false
     end
     
-    -- Check if either NPC is already in conversation
-    if npc1.inConversation or npc2.inConversation then
-        LoggerService:debug("INTERACTION", string.format(
-            "Cannot interact - NPCs in conversation:\n" ..
-            "- %s: inConversation=%s\n" ..
-            "- %s: inConversation=%s",
-            npc1.displayName, tostring(npc1.inConversation),
-            npc2.displayName, tostring(npc2.inConversation)
-        ))
-        return false
-    end
-    
-    -- Check abilities
-    if not npc1.abilities or not npc2.abilities then
-        LoggerService:debug("INTERACTION", string.format(
-            "Cannot interact - Missing abilities:\n" ..
-            "- %s: %s\n" ..
-            "- %s: %s",
-            npc1.displayName, tostring(npc1.abilities ~= nil),
-            npc2.displayName, tostring(npc2.abilities ~= nil)
-        ))
-        return false
-    end
-    
-    -- Check if they can chat
-    if not (table.find(npc1.abilities, "chat") and table.find(npc2.abilities, "chat")) then
-        LoggerService:debug("INTERACTION", string.format(
-            "Cannot interact - Missing chat ability:\n" ..
-            "- %s: %s\n" ..
-            "- %s: %s",
-            npc1.displayName, tostring(table.find(npc1.abilities, "chat") ~= nil),
-            npc2.displayName, tostring(table.find(npc2.abilities, "chat") ~= nil)
-        ))
-        return false
-    end
-    
+    -- Remove all other checks - let backend handle them
     return true
 end
 
 function InteractionService:lockNPCsForInteraction(npc1, npc2)
+    -- Remove movement locking but keep conversation state
     npc1.inConversation = true
     npc2.inConversation = true
-    npc1.movementState = "locked"
-    npc2.movementState = "locked"
     LoggerService:debug("INTERACTION", string.format(
-        "Locked NPCs for interaction:\n" ..
-        "- %s: inConversation=%s, movementState=%s\n" ..
-        "- %s: inConversation=%s, movementState=%s",
-        npc1.displayName, tostring(npc1.inConversation), npc1.movementState,
-        npc2.displayName, tostring(npc2.inConversation), npc2.movementState
+        "Started conversation between:\n" ..
+        "- %s\n" ..
+        "- %s",
+        npc1.displayName,
+        npc2.displayName
     ))
 end
 
 function InteractionService:unlockNPCsAfterInteraction(npc1, npc2)
-    LoggerService:debug("INTERACTION", string.format(
-        "Unlocking NPCs (before):\n" ..
-        "- %s: inConversation=%s, movementState=%s\n" ..
-        "- %s: inConversation=%s, movementState=%s",
-        npc1.displayName, tostring(npc1.inConversation), npc1.movementState,
-        npc2.displayName, tostring(npc2.inConversation), npc2.movementState
-    ))
-
+    -- Remove movement unlocking but keep conversation cleanup
     npc1.inConversation = false
     npc2.inConversation = false
-    npc1.movementState = "free"
-    npc2.movementState = "free"
-
     LoggerService:debug("INTERACTION", string.format(
-        "Unlocking NPCs (after):\n" ..
-        "- %s: inConversation=%s, movementState=%s\n" ..
-        "- %s: inConversation=%s, movementState=%s",
-        npc1.displayName, tostring(npc1.inConversation), npc1.movementState,
-        npc2.displayName, tostring(npc2.inConversation), npc2.movementState
+        "Ended conversation between:\n" ..
+        "- %s\n" ..
+        "- %s",
+        npc1.displayName,
+        npc2.displayName
     ))
 end
 
@@ -241,33 +194,13 @@ function InteractionService:logProximityMatrix(npcs)
 end
 
 function InteractionService:handleClusterChanges(oldClusters, newClusters)
+    -- Just track cluster changes without sending notifications
     for _, newCluster in ipairs(newClusters) do
-        -- Find matching old cluster
-        local oldCluster = nil
-        for _, old in ipairs(oldClusters) do
-            if #old.members == #newCluster.members then
-                -- Check if members match
-                local matches = true
-                for _, member in ipairs(old.members) do
-                    if not table.find(newCluster.members, member) then
-                        matches = false
-                        break
-                    end
-                end
-                if matches then
-                    oldCluster = old
-                    break
-                end
-            end
-        end
-
-        -- If cluster composition changed, notify members
-        if not oldCluster then
-            for _, memberName in ipairs(newCluster.members) do
-                -- Notify this member about their new cluster mates
-                -- This would replace the current "NPC entered area" messages
-            end
-        end
+        LoggerService:debug("CLUSTER", string.format(
+            "Cluster updated: %d members (%s)",
+            #newCluster.members,
+            table.concat(newCluster.members, ", ")
+        ))
     end
 end
 

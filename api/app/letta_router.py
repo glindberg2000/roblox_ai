@@ -9,7 +9,7 @@ from letta import (
 from datetime import datetime
 from letta.prompts import gpt_system
 from letta_roblox.client import LettaRobloxClient
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List, Tuple, Set
 from pydantic import BaseModel
 from .database import (
     get_npc_context, 
@@ -62,7 +62,11 @@ from letta_templates import (
     update_group_status
 )
 from .cache import get_npc_id_from_name, get_npc_description, get_agent_id  # Add import
-from letta_templates.npc_utils import get_memory_block
+from letta_templates.npc_utils import (
+    get_memory_block,
+    update_memory_block,
+    update_group_status  # Add this!
+)
 from letta_templates import print_agent_details
 
 # Convert config to LLMConfig objects
@@ -803,39 +807,25 @@ def create_agent_memory(
 async def handle_game_snapshot(snapshot: GameSnapshot):
     try:
         logger.info("Received game snapshot")
-        logger.debug(f"Snapshot details: {snapshot.dict()}")
         
-        # Process clusters
         logger.info(f"Processing {len(snapshot.clusters)} clusters")
         for i, cluster in enumerate(snapshot.clusters):
             logger.info(f"Cluster {i+1}: Members={cluster.members} "
                        f"(NPCs={cluster.npcs}, Players={cluster.players})")
-        
-        # Process human context
+            
         logger.info(f"Processing context for {len(snapshot.humanContext)} entities")
         for entity_id, context in snapshot.humanContext.items():
             logger.info(f"Entity {entity_id}: "
-                       f"Group={context.currentGroups.members} "
-                       f"(NPCs={context.currentGroups.npcs}, "
-                       f"Players={context.currentGroups.players})")
+                       f"Group={context.currentGroups.members}")
             
-        # Add group status updates
-        process_snapshot_groups(snapshot.humanContext)
+        # Add await here
+        await process_snapshot_groups(snapshot.humanContext)
         
-        return {
-            "success": True,
-            "message": "Snapshot processed",
-            "timestamp": datetime.now().isoformat(),
-            "stats": {
-                "clusters": len(snapshot.clusters),
-                "entities": len(snapshot.humanContext),
-                "events": len(snapshot.events)
-            }
-        }
+        return {"status": "success"}
         
     except Exception as e:
         logger.error(f"Error processing game snapshot: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise
 
 @router.post("/chat/v3", response_model=ChatResponse)
 async def chat_with_npc_v3(request: ChatRequest):
@@ -951,68 +941,204 @@ async def chat_with_npc_v3(request: ChatRequest):
             metadata={"error": str(e)}
         )
 
-def process_snapshot_groups(human_context):
-    """Process group updates from snapshot data"""
-    for entity_name, context in human_context.items():
-        # Skip if not an NPC
-        npc_id = get_npc_id_from_name(entity_name)
-        if not npc_id:
-            continue
-            
-        # Skip if no agent ID for this NPC
-        agent_id = get_agent_id(npc_id)
-        if not agent_id:
-            logger.warning(f"No agent ID found for NPC {entity_name} ({npc_id}), skipping group update")
-            continue
-
-        # Get group members excluding the NPC itself
-        group_members = [
-            member for member in context.currentGroups.members
-            if member != entity_name  # Filter out self from group
-        ]
-        
-        # Convert to format expected by update_group_status
-        nearby_players = [
-            {
-                'id': member,
-                'name': member,
-                'appearance': get_npc_description(member) or '',  # Get NPC descriptions from cache
-                'notes': ''
-            }
-            for member in group_members
-        ]
-        
-        logger.info(f"Updating group for {entity_name} (ID: {npc_id})")
-        logger.info(f"  Group members: {group_members}")
-        
-        update_group_status(
-            client=direct_client,
-            agent_id=agent_id,
-            nearby_players=nearby_players,
-            current_location="Unknown",  # Default for now
-            current_action="idle"        # Default for now
-        )
-
-async def update_group_status(client, agent_id: str, 
-                            nearby_players: List[Dict], current_location: str,
-                            current_action: str):
-    """Update agent's group status and context"""
+async def process_snapshot_groups(human_context):
+    """Process group updates from snapshot data using LettaDev patterns"""
     try:
-        # Update group status
-        await client.update_agent_group_status(
-            agent_id=agent_id,
-            nearby_players=nearby_players,
-            current_location=current_location,
-            current_action=current_action
-        )
+        # Group NPCs by their current group members
+        cluster_groups = {}
         
-        # Verify stored data (debug)
-        group_block = await get_memory_block(client, agent_id, "group_members")
-        status_block = await get_memory_block(client, agent_id, "status")
-        logger.debug(f"Agent {agent_id} group block: {json.dumps(group_block, indent=2)}")
-        logger.debug(f"Agent {agent_id} status block: {json.dumps(status_block, indent=2)}")
+        for entity_name, context in human_context.items():
+            group_key = tuple(sorted(context.currentGroups.members))
+            
+            if group_key not in cluster_groups:
+                cluster_groups[group_key] = {
+                    'members': set(context.currentGroups.members),
+                    'agent_ids': []
+                }
+            
+            npc_id = get_npc_id_from_name(entity_name)
+            if npc_id:
+                agent_id = get_agent_id(npc_id)
+                if agent_id:
+                    cluster_groups[group_key]['agent_ids'].append(agent_id)
+                    logger.debug(f"Added agent {agent_id} for NPC {entity_name} to group {group_key}")
+
+        # Process each cluster using update_group_status
+        for members_key, data in cluster_groups.items():
+            logger.info(f"Processing cluster with members: {list(data['members'])}")
+            
+            nearby_players = [
+                {
+                    "id": member,
+                    "name": member,
+                    "appearance": get_npc_description(member) or '',
+                    "notes": ''
+                }
+                for member in data['members']
+            ]
+            
+            # Update each NPC in cluster
+            for agent_id in data['agent_ids']:
+                try:
+                    # Use synchronous version
+                    update_group_status(
+                        client=direct_client,
+                        agent_id=agent_id,
+                        nearby_players=nearby_players,
+                        current_location="Unknown",  # TODO: Get from context
+                        current_action="idle"
+                    )
+                    logger.info(f"Updated group status for agent {agent_id}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to update agent {agent_id}: {str(e)}")
+                    continue
+            
+    except Exception as e:
+        logger.error(f"Error in process_snapshot_groups: {str(e)}")
+        raise
+
+def update_group_status(client, agent_id: str, nearby_players: list, 
+                       current_location: str, current_action: str = "idle"):
+    """Update group and status blocks together"""
+    try:
+        # Get current blocks
+        status = get_memory_block(client, agent_id, "status")
+        group = get_memory_block(client, agent_id, "group_members")
+        
+        # Track group changes
+        current_members = set(group.get("members", {}).keys())
+        new_members = set(p["id"] for p in nearby_players)
+        
+        # Calculate who joined and left
+        joined = new_members - current_members
+        left = current_members - new_members
+        
+        updates = []
+        if joined:
+            joined_names = [p["name"] for p in nearby_players if p["id"] in joined]
+            updates.append(f"{', '.join(joined_names)} joined the group")
+        if left:
+            left_names = [group["members"][pid]["name"] for pid in left]
+            updates.append(f"{', '.join(left_names)} left the group")
+        
+        # Update status (preserve existing fields)
+        status.update({
+            "current_location": current_location,
+            "previous_location": status.get("current_location"),
+            "current_action": current_action,
+            "movement_state": "stationary" if current_action == "idle" else "moving"
+        })
+        
+        # Update group (simplified structure)
+        members = {}
+        for player in nearby_players:
+            members[player.get("id")] = {
+                "name": player["name"],
+                "appearance": player.get("appearance", ""),
+                "notes": player.get("notes", "")
+            }
+        
+        # Keep last 10 group change updates
+        MAX_UPDATES = 10
+        existing_updates = group.get("updates", [])
+        new_updates = updates + existing_updates
+        if len(new_updates) > MAX_UPDATES:
+            new_updates = new_updates[:MAX_UPDATES]
+        
+        group.update({
+            "members": members,
+            "summary": f"Current members: {', '.join(p['name'] for p in nearby_players)}",
+            "updates": new_updates,
+            "last_updated": datetime.now().isoformat()
+        })
+        
+        # Save updates (not async)
+        update_memory_block(client, agent_id, "status", status)
+        update_memory_block(client, agent_id, "group_members", group)
+        
+        logger.debug(f"Updated blocks for agent {agent_id}:")
+        logger.debug(f"Group: {json.dumps(group, indent=2)}")
+        logger.debug(f"Status: {json.dumps(status, indent=2)}")
         
     except Exception as e:
         logger.error(f"Failed to update group status for {agent_id}: {str(e)}")
         raise
+
+def verify_group_state(client, agent_ids: List[str], snapshot_data: Dict):
+    """Debug helper to check group state consistency"""
+    logger.info("\nSnapshot vs Memory State Check:")
+    
+    # 1. Print snapshot state
+    logger.info(f"\nSnapshot shows cluster:")
+    logger.info(json.dumps(snapshot_data, indent=2))
+    
+    # 2. Check each agent's memory
+    for agent_id in agent_ids:
+        try:
+            group_block = get_memory_block(client, agent_id, "group_members")
+            logger.info(f"\nAgent {agent_id} memory shows:")
+            logger.info(json.dumps(group_block, indent=2))
+            
+            # Highlight inconsistencies
+            memory_members = set(group_block.get("members", {}).keys())
+            snapshot_members = set(snapshot_data.get("cluster_members", []))
+            
+            if memory_members != snapshot_members:
+                logger.warning("\nMismatch detected!")
+                logger.warning(f"Missing in memory: {snapshot_members - memory_members}")
+                logger.warning(f"Extra in memory: {memory_members - snapshot_members}")
+        except Exception as e:
+            logger.error(f"Error checking agent {agent_id}: {str(e)}")
+
+def run_group_health_check(client, members: Tuple[str, ...]) -> bool:
+    """Regular health check for group state"""
+    try:
+        # Get agent IDs for members
+        agent_ids = []
+        for member in members:
+            npc_id = get_npc_id_from_name(member)
+            if npc_id:
+                agent_id = get_agent_id(npc_id)
+                if agent_id:
+                    agent_ids.append(agent_id)
+        
+        if not agent_ids:
+            logger.warning("No agent IDs found for health check")
+            return False
+            
+        # Compare group states
+        states: Dict[str, Set[str]] = {}
+        for agent_id in agent_ids:
+            try:
+                group = get_memory_block(client, agent_id, "group_members")
+                if group and "members" in group:
+                    states[agent_id] = set(group["members"].keys())
+            except Exception as e:
+                logger.error(f"Error getting state for {agent_id}: {str(e)}")
+                continue
+        
+        if not states:
+            logger.warning("No states found to compare")
+            return False
+            
+        # Find inconsistencies
+        reference_state = next(iter(states.values()))
+        mismatched = {
+            agent_id: members 
+            for agent_id, members in states.items() 
+            if members != reference_state
+        }
+        
+        if mismatched:
+            logger.warning("Found state mismatches:")
+            for agent_id, members in mismatched.items():
+                logger.warning(f"Agent {agent_id}: {members}")
+            return False
+            
+        return True
+        
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return False
 
