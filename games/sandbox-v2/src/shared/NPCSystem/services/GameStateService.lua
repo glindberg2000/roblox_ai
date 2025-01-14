@@ -29,15 +29,81 @@ local CONFIG = {
 LoggerService:info("SNAPSHOT", "Setting up heartbeat...")
 
 function GameStateService:updateHumanContext(cluster)
-    for _, member in ipairs(cluster.members) do
-        if not gameState.humanContext[member] then
-            gameState.humanContext[member] = {
-                relationships = {},
-                currentGroups = {},
-                recentInteractions = {},
-                lastSeen = os.time()
-            }
+    -- Only log workspace contents once at startup
+    if not self.workspaceLogged then
+        LoggerService:debug("SNAPSHOT", "[Position] ===== Workspace Contents =====")
+        for _, child in ipairs(game.Workspace:GetChildren()) do
+            if child:IsA("Model") or child:IsA("Folder") then
+                LoggerService:debug("SNAPSHOT", string.format("[Position] %s (%s)", 
+                    child.Name, child.ClassName))
+            end
         end
+        LoggerService:debug("SNAPSHOT", "[Position] =============================")
+        self.workspaceLogged = true
+    end
+
+    for _, member in ipairs(cluster.members) do
+        -- Try multiple ways to find the character
+        local character = game.Workspace:FindFirstChild(member)
+        if not character then
+            local npcFolder = game.Workspace:FindFirstChild("NPCs")
+            if npcFolder then
+                character = npcFolder:FindFirstChild(member)
+            end
+            
+            if not character then
+                local Players = game:GetService("Players")
+                local player = Players:FindFirstChild(member)
+                if player then
+                    character = player.Character
+                end
+            end
+        end
+        
+        local location = "Unknown"
+        local positionData = nil
+        
+        if character then
+            local success, position = pcall(function()
+                return character:GetPivot().Position
+            end)
+            
+            if success then
+                -- Only log when we successfully get a position
+                LoggerService:info("SNAPSHOT", string.format("[Position] %s at: %.1f, %.1f, %.1f",
+                    member, position.X, position.Y, position.Z))
+                
+                -- Store position in consistent format
+                positionData = {
+                    x = position.X,
+                    y = position.Y,
+                    z = position.Z
+                }
+                location = "Unknown"  -- Named location can be added later
+            end
+        end
+        
+        -- Create or update context
+        local contextData = {
+            relationships = {},
+            currentGroups = {},
+            recentInteractions = {},
+            lastSeen = os.time(),
+            location = location,
+            position = positionData
+        }
+        
+        if not gameState.humanContext[member] then
+            gameState.humanContext[member] = contextData
+        else
+            -- Update existing context
+            gameState.humanContext[member].location = location
+            gameState.humanContext[member].position = positionData
+        end
+        
+        -- Debug log the final context
+        LoggerService:debug("SNAPSHOT", string.format("[Position] Pre-sync data for %s: %s",
+            member, HttpService:JSONEncode(gameState.humanContext[member])))
         
         -- Update group membership
         gameState.humanContext[member].currentGroups = {
@@ -69,17 +135,14 @@ end
 -- Sync with backend
 function GameStateService:syncWithBackend()
     LoggerService:debug("SNAPSHOT", "Starting syncWithBackend...")
-    -- Filter clusters to only include those with NPCs
+    
+    -- Remove detailed context logging
     local npcClusters = {}
     for _, cluster in ipairs(gameState.clusters) do
         if cluster.npcs > 0 then
             table.insert(npcClusters, cluster)
         end
     end
-    LoggerService:debug("SNAPSHOT", string.format(
-        "Filtered %d clusters down to %d NPC-containing clusters",
-        #gameState.clusters, #npcClusters
-    ))
     
     local payload = {
         clusters = npcClusters,
@@ -88,8 +151,9 @@ function GameStateService:syncWithBackend()
         timestamp = os.time()
     }
     
-    LoggerService:debug("SNAPSHOT", string.format("Payload prepared with %d clusters, %d events", 
-        #gameState.clusters, #gameState.events))
+    -- Only log summary
+    LoggerService:info("SNAPSHOT", string.format("Sending snapshot with %d clusters, %d entities",
+        #npcClusters, #gameState.humanContext))
     
     -- Send to Letta snapshot endpoint
     local success, response = pcall(function()
