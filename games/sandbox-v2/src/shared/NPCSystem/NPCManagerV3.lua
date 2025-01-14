@@ -488,25 +488,21 @@ function NPCManagerV3:setupClickDetector(npc)
 end
 
 function NPCManagerV3:startInteraction(npc1, npc2)
-    if not InteractionService:canInteract(npc1, npc2) then
-        return false
-    end
-    
-    InteractionService:lockNPCsForInteraction(npc1, npc2)
-    
-    -- Old interaction code...
+    -- Remove local gatekeeping, just pass through to backend
+    LoggerService:debug("INTERACTION", string.format(
+        "Forwarding interaction request to backend: %s <-> %s",
+        npc1.displayName, npc2.displayName
+    ))
+    return true
 end
 
 function NPCManagerV3:endInteraction(npc, participant)
-    -- Unlock movement and perform any necessary cleanup
-    if npc.model and npc.model:FindFirstChild("Humanoid") then
-        npc.model.Humanoid.WalkSpeed = npc.defaultWalkSpeed or 16
-        npc.isMovementLocked = false
-        LoggerService:debug("MOVEMENT", string.format("Unlocked movement for %s after ending interaction", npc.displayName))
+    -- Only handle cleanup of conversation state
+    if npc.isInteracting then
+        npc.isInteracting = false
+        npc.interactingPlayer = nil
     end
-
-    -- Additional cleanup logic if needed
-    -- ...
+    -- Remove any movement lock handling
 end
 
 function NPCManagerV3:getCacheKey(npc, player, message)
@@ -908,14 +904,6 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
     local participantId = participantType == "player" and participant.UserId or participant.npcId
     local participantName = participant.Name or participant.displayName
 
-    -- Clean up any existing interactions
-    if npc.isInteracting then
-        self:endInteraction(npc)
-    end
-    if participantType == "npc" and participant.isInteracting then
-        self:endInteraction(participant)
-    end
-
     LoggerService:debug(
         "Starting interaction - NPC: %s, Participant: %s (%s), Message: %s",
         npc.displayName,
@@ -927,39 +915,11 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
     -- Generate unique interaction ID
     local interactionId = HttpService:GenerateGUID()
     
-    -- Check if we can create new interaction thread
-    if #self.threadPool.interactionThreads >= self.threadLimits.interaction then
-        LoggerService:debug("THREAD", "Maximum interaction threads reached, queuing interaction")
-        return
-    end
-    
     -- Create new thread for interaction
     local thread = task.spawn(function()
         -- Add thread to pool
         table.insert(self.threadPool.interactionThreads, interactionId)
         
-        -- Original interaction logic
-        local cooldownKey = npc.id .. "_" .. participant.UserId
-        local lastInteraction = self.conversationCooldowns[cooldownKey]
-        
-        if lastInteraction and (os.time() - lastInteraction) < 30 then
-            LoggerService:debug(
-                "Interaction between %s and %s is on cooldown",
-                npc.displayName,
-                participant.Name
-            )
-            return
-        end
-
-        -- Only lock movement if not navigating
-        if not npc.isNavigating then
-            npc.movementLocked = true
-            LoggerService:debug("MOVEMENT", string.format(
-                "Locked movement for %s during interaction",
-                npc.displayName
-            ))
-        end
-
         local response = NPCChatHandler:HandleChat({
             message = message,
             npc_id = npc.id,
@@ -975,18 +935,10 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
             }
         })
         
-        if not response then
-            -- Unlock movement on failure
-            if npc.model and npc.model:FindFirstChild("Humanoid") then
-                npc.model.Humanoid.WalkSpeed = npc.defaultWalkSpeed or 16
-                npc.isMovementLocked = false
-                LoggerService:debug("MOVEMENT", string.format("Unlocked movement for %s after failed interaction", npc.displayName))
-            end
-            return nil
+        if response then
+            -- Process response (this handles chat bubbles and actions)
+            self:processAIResponse(npc, participant, response)
         end
-
-        -- Process response (this handles chat bubbles and actions)
-        self:processAIResponse(npc, participant, response)
 
         -- Clean up thread when done
         for i, threadId in ipairs(self.threadPool.interactionThreads) do
@@ -994,21 +946,6 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
                 table.remove(self.threadPool.interactionThreads, i)
                 break
             end
-        end
-    end)
-    
-    -- Monitor thread
-    task.spawn(function()
-        local success, result = pcall(function()
-            task.wait(30) -- Timeout after 30 seconds
-            if thread then
-                task.cancel(thread)
-                LoggerService:debug(string.format("Terminated hung interaction thread %s", interactionId))
-            end
-        end)
-        
-        if not success then
-            LoggerService:error(string.format("Thread monitoring failed: %s", result))
         end
     end)
 end
