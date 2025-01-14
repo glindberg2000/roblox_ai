@@ -972,10 +972,10 @@ async def process_snapshot_groups(human_context):
         for entity_name, context in human_context.items():
             position = getattr(context, "position", None)
             
-            # Format location string if we have position
+            # Get narrative location if we have position
             location = "Unknown"
             if position:
-                location = f"{getattr(position, 'x', 0)}, {getattr(position, 'y', 0)}, {getattr(position, 'z', 0)}"
+                location = position.get_location_narrative()  # Use narrative instead of coordinates
                 logger.debug(f"[Position] Formatted location for {entity_name}: {location}")
             
             # Debug group formation
@@ -1042,7 +1042,7 @@ async def process_snapshot_groups(human_context):
                         client=direct_client,
                         agent_id=agent_id,
                         nearby_players=nearby_players,
-                        current_location=location,
+                        current_location=location,  # This will now be the narrative
                         current_action="idle"
                     )
                     

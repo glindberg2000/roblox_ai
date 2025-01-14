@@ -126,6 +126,97 @@ class PositionData(BaseModel):
     y: float
     z: float
 
+    def __init__(self, **data):
+        # Round coordinates to 3 decimal places for cleaner output
+        for coord in ['x', 'y', 'z']:
+            if coord in data:
+                data[coord] = round(float(data[coord]), 3)
+        super().__init__(**data)
+
+    def get_nearest_location(self) -> str:
+        """Calculate nearest known location from cache"""
+        try:
+            if not LOCATION_CACHE:
+                return "Unknown Area"
+
+            min_distance = float('inf')
+            nearest = "Unknown Area"
+
+            for slug, loc_data in LOCATION_CACHE.items():
+                # Get coordinates from location data
+                loc_x, loc_y, loc_z = loc_data["coordinates"]
+                
+                distance = (
+                    (self.x - loc_x)**2 + 
+                    (self.y - loc_y)**2 + 
+                    (self.z - loc_z)**2
+                )**0.5
+
+                if distance < min_distance:
+                    min_distance = distance
+                    nearest = loc_data["name"]  # Use name from location data
+
+            # Only return location name if reasonably close
+            return nearest if min_distance <= 15 else "Unknown Area"
+
+        except Exception as e:
+            logger.error(f"Error calculating nearest location: {str(e)}")
+            return "Unknown Area"
+
+    def get_location_narrative(self) -> str:
+        """Generate narrative description of position relative to known locations"""
+        try:
+            # Import cache here to avoid circular imports
+            from .cache import LOCATION_CACHE
+            
+            logger.debug(f"Generating location narrative for position ({self.x}, {self.y}, {self.z})")
+            
+            if not LOCATION_CACHE:
+                logger.warning("Location cache is empty")
+                return f"at coordinates ({self.x}, {self.y}, {self.z})"
+
+            min_distance = float('inf')
+            nearest = None
+
+            for slug, loc_data in LOCATION_CACHE.items():
+                loc_x, loc_y, loc_z = loc_data["coordinates"]
+                distance = (
+                    (self.x - loc_x)**2 + 
+                    (self.y - loc_y)**2 + 
+                    (self.z - loc_z)**2
+                )**0.5
+                
+                logger.debug(f"Distance to {loc_data['name']}: {distance}")
+
+                if distance < min_distance:
+                    min_distance = distance
+                    nearest = loc_data
+
+            if nearest:
+                narrative = self._get_distance_description(min_distance, nearest['name'])
+                logger.debug(f"Generated narrative: {narrative}")
+                return narrative
+
+            return f"at coordinates ({self.x}, {self.y}, {self.z})"
+
+        except Exception as e:
+            logger.error(f"Error generating location narrative: {str(e)}")
+            return f"at coordinates ({self.x}, {self.y}, {self.z})"
+
+    def _get_distance_description(self, distance: float, location_name: str) -> str:
+        """Helper to generate distance-based description"""
+        if distance <= 5:
+            return f"at the entrance to {location_name}"
+        elif distance <= 15:
+            return f"right outside {location_name}"
+        elif distance <= 30:
+            return f"near {location_name}"
+        elif distance <= 50:
+            return f"in the vicinity of {location_name}"
+        else:
+            # For very far locations, let's just use coordinates
+            return f"at ({self.x}, {self.y}, {self.z})"
+
 class HumanContextData(BaseModel):
     relationships: List[Any] = []
     currentGroups: GroupData
