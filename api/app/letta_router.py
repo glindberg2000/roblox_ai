@@ -81,6 +81,12 @@ from letta_templates import print_agent_details
 #     for name, config in EMBEDDING_CONFIGS.items()
 # }
 
+logger = logging.getLogger("roblox_app")
+logger.setLevel(logging.DEBUG)  # Set to DEBUG to see all logs
+
+# Add a debug message to verify level
+logger.debug("=== LOGGER DEBUG TEST ===")
+
 def create_roblox_agent(
     client, 
     name: str,
@@ -138,8 +144,6 @@ def create_roblox_agent(
         tool_ids=tool_ids,
         description="A Roblox NPC"
     )
-
-logger = logging.getLogger("roblox_app")
 
 # Initialize router and client
 router = APIRouter(prefix="/letta/v1", tags=["letta"])
@@ -944,28 +948,72 @@ async def chat_with_npc_v3(request: ChatRequest):
 async def process_snapshot_groups(human_context):
     """Process group updates from snapshot data using LettaDev patterns"""
     try:
+        logger.info("🔍 === SNAPSHOT DEBUG START ===")  # Use emoji for visibility
+        
+        # Test log at different levels
+        logger.debug("🔍 DEBUG TEST")
+        logger.info("🔍 INFO TEST")
+        logger.warning("🔍 WARNING TEST")
+        logger.error("🔍 ERROR TEST")
+        
+        for entity_name, context in human_context.items():
+            logger.info(f"🔍 Entity: {entity_name}")  # Use INFO instead of DEBUG
+            logger.info(f"🔍 Raw context: {context}")
+            logger.info(f"🔍 Has position: {hasattr(context, 'position')}")
+            
+            if hasattr(context, 'position'):
+                logger.info(f"🔍 Position values: x={getattr(context.position, 'x', None)}, "
+                          f"y={getattr(context.position, 'y', None)}, "
+                          f"z={getattr(context.position, 'z', None)}")
+
         # Group NPCs by their current group members
         cluster_groups = {}
         
         for entity_name, context in human_context.items():
+            position = getattr(context, "position", None)
+            
+            # Format location string if we have position
+            location = "Unknown"
+            if position:
+                location = f"{getattr(position, 'x', 0)}, {getattr(position, 'y', 0)}, {getattr(position, 'z', 0)}"
+                logger.debug(f"[Position] Formatted location for {entity_name}: {location}")
+            
+            # Debug group formation
             group_key = tuple(sorted(context.currentGroups.members))
+            logger.debug(f"\nProcessing group for {entity_name}")
+            logger.debug(f"Group key: {group_key}")
             
             if group_key not in cluster_groups:
                 cluster_groups[group_key] = {
                     'members': set(context.currentGroups.members),
-                    'agent_ids': []
+                    'agent_ids': [],
+                    'locations': {}
                 }
+                logger.debug(f"Created new cluster group: {cluster_groups[group_key]}")
             
+            # Store location
+            cluster_groups[group_key]['locations'][entity_name] = location
+            logger.debug(f"Stored location for {entity_name}: {location}")
+            
+            # Get agent info
             npc_id = get_npc_id_from_name(entity_name)
             if npc_id:
                 agent_id = get_agent_id(npc_id)
                 if agent_id:
                     cluster_groups[group_key]['agent_ids'].append(agent_id)
-                    logger.debug(f"Added agent {agent_id} for NPC {entity_name} to group {group_key}")
+                    logger.debug(f"Added agent {agent_id} for {entity_name}")
+                    
+                    # Debug current memory state
+                    status = get_memory_block(direct_client, agent_id, "status")
+                    logger.debug(f"\nCurrent status for {entity_name} ({agent_id}):")
+                    logger.debug(json.dumps(status, indent=2))
 
-        # Process each cluster using update_group_status
+        # Process clusters
+        logger.debug("\n=== PROCESSING CLUSTERS ===")
         for members_key, data in cluster_groups.items():
-            logger.info(f"Processing cluster with members: {list(data['members'])}")
+            logger.debug(f"\nCluster members: {members_key}")
+            logger.debug(f"Locations: {data['locations']}")
+            logger.debug(f"Agent IDs: {data['agent_ids']}")
             
             nearby_players = [
                 {
@@ -977,22 +1025,38 @@ async def process_snapshot_groups(human_context):
                 for member in data['members']
             ]
             
-            # Update each NPC in cluster
             for agent_id in data['agent_ids']:
                 try:
-                    # Use synchronous version
+                    member_name = next(name for name in data['members'] 
+                                    if get_agent_id(get_npc_id_from_name(name)) == agent_id)
+                    location = data['locations'].get(member_name, "Unknown")
+                    
+                    logger.debug(f"\nUpdating agent {agent_id} ({member_name})")
+                    logger.debug(f"Location to set: {location}")
+                    
+                    # Get pre-update state
+                    pre_status = get_memory_block(direct_client, agent_id, "status")
+                    logger.debug(f"Pre-update status: {json.dumps(pre_status, indent=2)}")
+                    
                     update_group_status(
                         client=direct_client,
                         agent_id=agent_id,
                         nearby_players=nearby_players,
-                        current_location="Unknown",  # TODO: Get from context
+                        current_location=location,
                         current_action="idle"
                     )
-                    logger.info(f"Updated group status for agent {agent_id}")
+                    
+                    # Verify update
+                    post_status = get_memory_block(direct_client, agent_id, "status")
+                    logger.debug(f"Post-update status: {json.dumps(post_status, indent=2)}")
+                    
+                    logger.info(f"Updated group status for agent {agent_id} at {location}")
                     
                 except Exception as e:
                     logger.error(f"Failed to update agent {agent_id}: {str(e)}")
                     continue
+        
+        logger.debug("=== SNAPSHOT DEBUG END ===")
             
     except Exception as e:
         logger.error(f"Error in process_snapshot_groups: {str(e)}")
@@ -1022,13 +1086,15 @@ def update_group_status(client, agent_id: str, nearby_players: list,
             left_names = [group["members"][pid]["name"] for pid in left]
             updates.append(f"{', '.join(left_names)} left the group")
         
-        # Update status (preserve existing fields)
-        status.update({
+        # Update status (preserve existing fields including coordinates)
+        existing_status = status.copy()  # Make a copy
+        existing_status.update({
             "current_location": current_location,
             "previous_location": status.get("current_location"),
             "current_action": current_action,
             "movement_state": "stationary" if current_action == "idle" else "moving"
         })
+        status = existing_status  # Use updated copy
         
         # Update group (simplified structure)
         members = {}
@@ -1058,8 +1124,8 @@ def update_group_status(client, agent_id: str, nearby_players: list,
         update_memory_block(client, agent_id, "group_members", group)
         
         logger.debug(f"Updated blocks for agent {agent_id}:")
-        logger.debug(f"Group: {json.dumps(group, indent=2)}")
         logger.debug(f"Status: {json.dumps(status, indent=2)}")
+        logger.debug(f"Group: {json.dumps(group, indent=2)}")
         
     except Exception as e:
         logger.error(f"Failed to update group status for {agent_id}: {str(e)}")

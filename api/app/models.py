@@ -121,11 +121,18 @@ class GroupData(BaseModel):
     players: int
     formed: int
 
+class PositionData(BaseModel):
+    x: float
+    y: float
+    z: float
+
 class HumanContextData(BaseModel):
-    relationships: List[Any]
-    currentGroups: GroupData
-    recentInteractions: List[Any]
+    relationships: List[Any] = []
+    currentGroups: Any
+    recentInteractions: List[Any] = []
     lastSeen: int
+    position: Optional[PositionData] = None
+    location: Optional[str] = None
 
 class GameSnapshot(BaseModel):
     timestamp: int
