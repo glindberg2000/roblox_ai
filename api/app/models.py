@@ -128,7 +128,7 @@ class PositionData(BaseModel):
 
 class HumanContextData(BaseModel):
     relationships: List[Any] = []
-    currentGroups: Any
+    currentGroups: GroupData
     recentInteractions: List[Any] = []
     lastSeen: int
     position: Optional[PositionData] = None
