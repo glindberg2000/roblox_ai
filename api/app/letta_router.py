@@ -68,6 +68,7 @@ from letta_templates.npc_utils import (
     update_group_status  # Add this!
 )
 from letta_templates import print_agent_details
+from .queue_system import queue_system, ChatQueueItem, SnapshotQueueItem
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -808,23 +809,22 @@ def create_agent_memory(
     return memory
 
 @router.post("/snapshot/game")
-async def handle_game_snapshot(snapshot: GameSnapshot):
+async def process_game_snapshot(snapshot: GameSnapshot):
     try:
+        # Log the incoming snapshot
         logger.info("Received game snapshot")
-        
         logger.info(f"Processing {len(snapshot.clusters)} clusters")
-        for i, cluster in enumerate(snapshot.clusters):
-            logger.info(f"Cluster {i+1}: Members={cluster.members} "
-                       f"(NPCs={cluster.npcs}, Players={cluster.players})")
-            
-        logger.info(f"Processing context for {len(snapshot.humanContext)} entities")
-        for entity_id, context in snapshot.humanContext.items():
-            logger.info(f"Entity {entity_id}: "
-                       f"Group={context.currentGroups.members}")
-            
-        # Add await here
-        await process_snapshot_groups(snapshot.humanContext)
         
+        # Create and enqueue the snapshot
+        snapshot_item = SnapshotQueueItem(
+            clusters=snapshot.clusters,
+            human_context=snapshot.humanContext,
+            timestamp=time.time()
+        )
+        await queue_system.enqueue_snapshot(snapshot_item)
+        
+        # Process entities...
+
         return {"status": "success"}
         
     except Exception as e:
@@ -1207,4 +1207,86 @@ def run_group_health_check(client, members: Tuple[str, ...]) -> bool:
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")
         return False
+
+@router.post("/chat/v4")
+async def chat_with_npc_v4(request: ChatRequest):
+    """Queue chat requests and return ticket"""
+    try:
+        ticket = str(uuid.uuid4())
+        logger.info(f"[CHAT_V4] Creating ticket: {ticket}")
+        
+        # Create queue item
+        queue_item = ChatQueueItem(
+            npc_id=request.npc_id,
+            message=request.message,
+            timestamp=time.time(),
+            context=request.dict(),
+            cluster_id=None  # Optional: Add cluster tracking later
+        )
+        
+        # Add to queue
+        await queue_system.enqueue_chat(queue_item)
+        logger.info(f"[CHAT_V4] Queued message with ticket: {ticket}")
+        
+        return {
+            "status": "queued",
+            "ticket": ticket
+        }
+    except Exception as e:
+        logger.error(f"[CHAT_V4] Queue error: {str(e)}")
+        raise
+
+@router.get("/v4/queue")
+async def get_queue_status():
+    """Get current queue status"""
+    try:
+        status = queue_system.get_queue_sizes()
+        
+        # Get last 3 snapshots safely
+        snapshot_queue = queue_system.snapshot_queue._queue
+        last_snapshots = []
+        for i in range(max(0, len(snapshot_queue)-3), len(snapshot_queue)):
+            if i < len(snapshot_queue):
+                item = snapshot_queue[i]
+                last_snapshots.append({
+                    "cluster_count": len(item.clusters),
+                    "entities": sum(len(c.members) for c in item.clusters),
+                    "age": f"{time.time() - item.timestamp:.1f}s ago"
+                })
+        
+        summary = {
+            "overview": {
+                "chats_queued": status["total_chats"],
+                "snapshots_queued": status["total_snapshots"],
+                "snapshot_rate": f"{status['current_snapshot_rate']}/sec",
+                "queue_age": f"{status['queue_age_seconds']:.1f} seconds",
+                "processing_status": "Active" if status["current_snapshot_rate"] > 0 else "Idle"
+            },
+            "chat_queue": [
+                {
+                    "npc": item.npc_id.split('-')[0],
+                    "message": item.message[:50] + "..." if len(item.message) > 50 else item.message,
+                    "age": f"{time.time() - item.timestamp:.1f}s ago",
+                    "context": {
+                        "cluster_id": item.cluster_id,
+                        "participant": item.context.get("participant_id", "unknown")
+                    }
+                }
+                for item in queue_system.chat_queue._queue
+            ],
+            "snapshot_queue": {
+                "total": len(snapshot_queue),
+                "last_snapshots": last_snapshots,
+                "processing_rate": f"{status['current_snapshot_rate']:.1f} snapshots/sec"
+            }
+        }
+        
+        logger.info(f"[QUEUE] Status: {json.dumps(summary['overview'], indent=2)}")
+        logger.info(f"[QUEUE] Active chats: {len(summary['chat_queue'])}")
+        logger.info(f"[QUEUE] Recent snapshots: {json.dumps(summary['snapshot_queue']['last_snapshots'], indent=2)}")
+        
+        return summary
+    except Exception as e:
+        logger.error(f"[CHAT_V4] Queue status error: {str(e)}")
+        raise
 
