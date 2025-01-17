@@ -1,0 +1,53 @@
+# Check current branch and status
+git status
+
+# Create a checkpoint branch from current state
+git checkout -b checkpoint/pre-conversation-manager
+
+# Now create our working branch
+git checkout -b feature/conversation-manager-v2
+
+# Create the directory if it doesn't exist
+mkdir -p games/sandbox-v1/src/shared
+
+# Create the new file
+touch games/sandbox-v1/src/shared/ConversationManagerV2.lua 
+
+# Add the new file
+git add games/sandbox-v1/src/shared/ConversationManagerV2.lua
+
+# Commit the changes
+git commit -m "feat: Add ConversationManagerV2 initial implementation"
+
+# Push the new branch to remote
+git push -u origin feature/conversation-manager-v2
+
+
+
+
+# Start a new conversation
+curl -X POST http://localhost:7777/v4/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Hello",
+    "initiator_id": "npc1",
+    "target_id": "player123",
+    "conversation_type": "npc_user",
+    "system_prompt": "You are a friendly NPC",
+    "context": {
+      "initiator_name": "NPC 1",
+      "target_name": "Player 123"
+    }
+  }'
+
+# Continue conversation
+curl -X POST http://localhost:7777/v4/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "previous_conversation_id",
+    "message": "How are you?",
+    "initiator_id": "player123",
+    "target_id": "npc1",
+    "conversation_type": "npc_user",
+    "system_prompt": "You are a friendly NPC"
+  }'

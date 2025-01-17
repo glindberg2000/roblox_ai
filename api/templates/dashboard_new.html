@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roblox Asset Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        dark: {
+                            50: '#f9fafb',
+                            100: '#f3f4f6',
+                            200: '#e5e7eb',
+                            300: '#d1d5db',
+                            400: '#9ca3af',
+                            500: '#6b7280',
+                            600: '#4b5563',
+                            700: '#374151',
+                            800: '#1f2937',
+                            900: '#111827',
+                        },
+                    },
+                },
+            },
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .modal-content {
+            background-color: #1f2937;
+            margin: 2rem auto;
+            padding: 2rem;
+            border: 1px solid #374151;
+            width: 90%;
+            max-width: 600px;
+            border-radius: 1rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            max-height: calc(100vh - 4rem);
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .modal-header {
+            position: sticky;
+            top: -2rem;
+            background-color: #1f2937;
+            padding: 1rem 0;
+            margin: -1rem 0;
+            z-index: 10;
+        }
+
+        .modal-footer {
+            position: sticky;
+            bottom: -2rem;
+            background-color: #1f2937;
+            padding: 1rem 0;
+            margin: -1rem 0;
+            z-index: 10;
+        }
+
+        .notification {
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        /* Modern scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+    </style>
+    <!-- <script src="/static/js/games.js" defer></script> -->
+</head>
+
+<body class="bg-dark-900 text-gray-100 min-h-screen font-sans">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-4xl font-bold mb-6 text-blue-400">Roblox Asset Manager (New Version)</h1>
+            <div class="mb-6 bg-dark-800 p-4 rounded-xl shadow-xl">
+                <div id="currentGameDisplay" class="text-xl font-semibold text-gray-300">
+                    <!-- Will be populated by JS -->
+                </div>
+            </div>
+            <nav class="flex space-x-4 mb-6">
+                <button id="nav-games"
+                    class="px-4 py-2 rounded-lg bg-dark-700 text-gray-100 hover:bg-dark-600 transition-colors">
+                    Games
+                </button>
+                <button id="nav-assets"
+                    class="px-4 py-2 rounded-lg bg-dark-700 text-gray-400 hover:bg-dark-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled>
+                    Assets
+                </button>
+                <button id="nav-npcs"
+                    class="px-4 py-2 rounded-lg bg-dark-700 text-gray-400 hover:bg-dark-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled>
+                    NPCs
+                </button>
+                <button id="nav-players"
+                    class="px-4 py-2 rounded-lg bg-dark-700 text-gray-400 hover:bg-dark-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled>
+                    Players
+                </button>
+            </nav>
+        </div>
+
+        <!-- Asset Tab -->
+        <div id="assetsTab" class="tab-content hidden">
+            <div class="mb-8 bg-dark-800 p-6 rounded-xl shadow-xl">
+                <h2 class="text-2xl font-bold mb-4 text-blue-400">Add New Asset</h2>
+                <form id="assetForm" class="space-y-4" enctype="multipart/form-data" onsubmit="createAsset(event)">
+                    <input type="hidden" name="game_id" id="assetFormGameId">
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Asset ID:</label>
+                        <input type="text" name="asset_id" required
+                            class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Name:</label>
+                        <input type="text" name="name" required
+                            class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Type:</label>
+                        <select name="type" required class="w-full p-3 bg-dark-700 text-gray-200 rounded-lg">
+                            <option value="Model">Model</option>
+                            <option value="Mesh">Mesh</option>
+                            <option value="Decal">Decal</option>
+                            <option value="Animation">Animation</option>
+                            <option value="Plugin">Plugin</option>
+                            <option value="Sound">Sound</option>
+                            <option value="Texture">Texture</option>
+                            <option value="Clothing">Clothing</option>
+                            <option value="Package">Package</option>
+                            <option value="Badge">Badge</option>
+                            <option value="GamePass">GamePass</option>
+                            <option value="Font">Font</option>
+                            <option value="Script">Script</option>
+                            <option value="MaterialVariant">MaterialVariant</option>
+                            <option value="MeshPart">MeshPart</option>
+                            <option value="SurfaceAppearance">SurfaceAppearance</option>
+                            <option value="NPC">NPC</option>
+                            <option value="Vehicle">Vehicle</option>
+                            <option value="Building">Building</option>
+                            <option value="Prop">Prop</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Asset File (.rbxm):</label>
+                        <input type="file" name="file" accept=".rbxm,.rbxmx" required
+                            class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                    </div>
+
+                    <button type="submit" id="submitAssetBtn"
+                        class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        Add Asset
+                    </button>
+                </form>
+            </div>
+
+            <div>
+                <h2 class="text-2xl font-bold mb-4 text-blue-400">Asset List</h2>
+                <div id="assetList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Assets will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- NPCs Tab -->
+        <div id="npcsTab" class="tab-content hidden">
+            <div class="mb-8 bg-dark-800 p-6 rounded-xl shadow-xl">
+                <h2 class="text-2xl font-bold mb-4 text-blue-400">Add New NPC</h2>
+                <form id="createNPCForm" method="POST" action="/api/npcs" class="space-y-6"
+                    onsubmit="return createNPC(event)">
+                    <input type="hidden" name="game_id" id="createNpcGameId">
+
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium mb-2 text-gray-300">Display Name</label>
+                        <input type="text" name="displayName" required
+                            class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium mb-2 text-gray-300">Asset</label>
+                        <select id="assetSelect" name="assetID" required
+                            class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                            <option value="">Select a model...</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium mb-2 text-gray-300">System Prompt</label>
+                        <textarea name="system_prompt" required rows="4"
+                            class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Enter NPC's personality and behavior description"></textarea>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <label class="text-xs text-gray-400">X</label>
+                            <input type="number" name="spawnX" value="0" step="0.1" required
+                                class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400">Y</label>
+                            <input type="number" name="spawnY" value="5" step="0.1" required
+                                class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400">Z</label>
+                            <input type="number" name="spawnZ" value="0" step="0.1" required
+                                class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium mb-2 text-gray-300">Abilities</label>
+                        <div id="createAbilitiesContainer" class="grid grid-cols-2 gap-2 bg-dark-700 p-4 rounded-lg">
+                            <!-- Will be populated via JavaScript -->
+                        </div>
+                    </div>
+
+                    <button type="submit"
+                        class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-lg">
+                        Add NPC
+                    </button>
+                </form>
+            </div>
+
+            <div>
+                <h2 class="text-2xl font-bold mb-4 text-blue-400">NPC List</h2>
+                <div id="npcList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- NPCs will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Players Tab -->
+        <div id="playersTab" class="tab-content hidden">
+            <h2 class="text-2xl font-bold mb-4 text-blue-400">Players</h2>
+            <div id="playerList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Players will be loaded here -->
+            </div>
+        </div>
+
+        <!-- Games Tab -->
+        <div id="gamesTab" class="tab-content">
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold mb-4 text-blue-400">Game List</h2>
+                <div id="games-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Games will be loaded here -->
+                </div>
+            </div>
+
+            <div class="bg-dark-800 p-6 rounded-xl shadow-xl">
+                <h2 class="text-2xl font-bold mb-4 text-blue-400">Add New Game</h2>
+                <form id="gameForm" onsubmit="return handleGameSubmit(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Game Title:</label>
+                        <input type="text" name="title" required
+                            class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Description:</label>
+                        <textarea name="description" required rows="4"
+                            class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100"
+                            placeholder="Enter game description..."></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Clone From:</label>
+                        <select name="cloneFrom" id="cloneFromSelect"
+                            class="w-full p-3 bg-dark-700 text-gray-200 rounded-lg">
+                            <option value="">Empty Game (No Assets)</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        Add Game
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <h2 class="text-xl font-bold mb-4 text-blue-400">Edit Description</h2>
+            <form id="editForm" onsubmit="saveEdit(event)" class="space-y-4">
+                <input type="hidden" id="editItemId">
+                <input type="hidden" id="editItemType">
+                <textarea id="editDescription"
+                    class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    rows="6"></textarea>
+                <div class="flex justify-end space-x-4">
+                    <button type="button" onclick="closeEditModal()"
+                        class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors duration-200">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200">
+                        Save
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- NPC Edit Modal -->
+    <div id="npcEditModal" class="modal">
+        <div class="modal-content max-w-2xl">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-blue-400">Edit NPC</h2>
+                <button onclick="closeNPCEditModal()"
+                    class="text-gray-400 hover:text-gray-200 text-2xl">&times;</button>
+            </div>
+            <form id="npcEditForm" onsubmit="saveNPCEdit(event)" class="space-y-6">
+                <input type="hidden" id="editNpcId">
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Display Name:</label>
+                    <input type="text" id="editNpcDisplayName" required
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Model:</label>
+                    <select id="editNpcModel" required
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                        <!-- Will be populated dynamically -->
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Response Radius:</label>
+                    <input type="number" id="editNpcRadius" required min="1" max="100"
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Personality:</label>
+                    <textarea id="editNpcPrompt" required rows="4"
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Abilities:</label>
+                    <div id="editAbilitiesCheckboxes" class="grid grid-cols-2 gap-2 bg-dark-700 p-4 rounded-lg">
+                        <!-- Checkboxes will be populated via JavaScript -->
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-4 pt-4">
+                    <button type="button" onclick="closeNPCEditModal()"
+                        class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Asset Edit Modal -->
+    <div id="assetEditModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-xl font-bold text-blue-400">Edit Asset</h2>
+                    <button onclick="closeAssetEditModal()"
+                        class="text-gray-400 hover:text-gray-200 text-2xl">&times;</button>
+                </div>
+            </div>
+
+            <form id="assetEditForm" onsubmit="saveAssetEdit(event)" class="space-y-6">
+                <input type="hidden" id="editAssetId">
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Name:</label>
+                    <input type="text" id="editAssetName" required
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                </div>
+
+                <!-- Add Type Selector -->
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Type:</label>
+                    <select id="editAssetType" required
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                        <option value="Model">Model</option>
+                        <option value="Mesh">Mesh</option>
+                        <option value="Prop">Prop</option>
+                        <option value="Building">Building</option>
+                        <option value="Vehicle">Vehicle</option>
+                        <option value="NPC">NPC</option>
+                        <option value="Clothing">Clothing</option>
+                        <option value="object">Object</option>
+                    </select>
+                </div>
+
+                <!-- Add Location Fields -->
+                <div>
+                    <label class="flex items-center space-x-2 text-sm font-medium mb-2 text-gray-300">
+                        <input type="checkbox" id="editAssetIsLocation" class="form-checkbox bg-dark-700">
+                        <span>Is this a location?</span>
+                    </label>
+                </div>
+
+                <div id="editLocationFields" class="space-y-4" style="display: none;">
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Position:</label>
+                        <div class="grid grid-cols-3 gap-4">
+                            <div>
+                                <label class="text-xs text-gray-400">X</label>
+                                <input type="number" id="editPositionX" step="0.001"
+                                    class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400">Y</label>
+                                <input type="number" id="editPositionY" step="0.001"
+                                    class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400">Z</label>
+                                <input type="number" id="editPositionZ" step="0.001"
+                                    class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Aliases (comma-separated):</label>
+                        <input type="text" id="editAliases"
+                            class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100"
+                            placeholder="stand, merchant stand, pete's stand">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Location Details:</label>
+                        <div class="space-y-4 bg-dark-700 p-4 rounded-lg">
+                            <div>
+                                <label class="text-sm text-gray-400">Area</label>
+                                <select id="editLocationArea" onchange="toggleCustomArea()"
+                                    class="w-full p-2 bg-dark-600 rounded text-gray-100">
+                                    <!-- Core Areas -->
+                                    <optgroup label="Core Areas">
+                                        <option value="spawn_area">Spawn Area</option>
+                                        <option value="downtown">Downtown</option>
+                                        <option value="market_district">Market District</option>
+                                        <option value="town_center">Town Center</option>
+                                    </optgroup>
+
+                                    <!-- Residential -->
+                                    <optgroup label="Residential">
+                                        <option value="residential">Residential District</option>
+                                        <option value="suburbs">Suburbs</option>
+                                        <option value="hills">The Hills</option>
+                                        <option value="apartments">Apartment Complex</option>
+                                    </optgroup>
+
+                                    <!-- Infrastructure -->
+                                    <optgroup label="Infrastructure">
+                                        <option value="train_station">Train Station</option>
+                                        <option value="train_tracks">Train Tracks</option>
+                                        <option value="bus_terminal">Bus Terminal</option>
+                                        <option value="parking_lot">Parking Lot</option>
+                                    </optgroup>
+
+                                    <!-- Special Areas -->
+                                    <optgroup label="Special Areas">
+                                        <option value="cemetery">Cemetery</option>
+                                        <option value="crematorium">Crematorium</option>
+                                        <option value="park">Central Park</option>
+                                        <option value="plaza">Town Plaza</option>
+                                    </optgroup>
+
+                                    <!-- Commercial -->
+                                    <optgroup label="Commercial">
+                                        <option value="shopping_center">Shopping Center</option>
+                                        <option value="strip_mall">Strip Mall</option>
+                                        <option value="food_court">Food Court</option>
+                                    </optgroup>
+
+                                    <!-- Industrial -->
+                                    <optgroup label="Industrial">
+                                        <option value="warehouse_district">Warehouse District</option>
+                                        <option value="factory_zone">Factory Zone</option>
+                                        <option value="loading_docks">Loading Docks</option>
+                                    </optgroup>
+
+                                    <!-- Underground/Utility Areas -->
+                                    <optgroup label="Underground/Utility">
+                                        <option value="sewer_main">Main Sewer Line</option>
+                                        <option value="sewer_east">East Sewer Network</option>
+                                        <option value="sewer_west">West Sewer Network</option>
+                                        <option value="sewer_junction">Sewer Junction</option>
+                                        <option value="maintenance_tunnels">Maintenance Tunnels</option>
+                                        <option value="utility_room">Utility Room</option>
+                                        <option value="underground_storage">Underground Storage</option>
+                                        <option value="drainage_system">Drainage System</option>
+                                        <option value="water_treatment">Water Treatment Facility</option>
+                                        <option value="electrical_substation">Electrical Substation</option>
+                                    </optgroup>
+
+                                    <!-- Custom -->
+                                    <optgroup label="Other">
+                                        <option value="other">Other...</option>
+                                    </optgroup>
+                                </select>
+
+                                <!-- Custom area input (hidden by default) -->
+                                <input type="text" id="editLocationAreaCustom"
+                                    class="w-full p-2 mt-2 bg-dark-600 rounded text-gray-100 hidden"
+                                    placeholder="Enter custom area name">
+                            </div>
+
+                            <div>
+                                <label class="text-sm text-gray-400">Location Type</label>
+                                <select id="editLocationType" class="w-full p-2 bg-dark-600 rounded text-gray-100">
+                                    <option value="shop">Shop</option>
+                                    <option value="landmark">Landmark</option>
+                                    <option value="building">Building</option>
+                                    <option value="service">Service Point</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="text-sm text-gray-400">Owner/Manager</label>
+                                <input type="text" id="editLocationOwner"
+                                    class="w-full p-2 bg-dark-600 rounded text-gray-100"
+                                    placeholder="Who owns or manages this location?">
+                            </div>
+
+                            <div class="flex items-center space-x-2">
+                                <input type="checkbox" id="editLocationInteractable" class="form-checkbox bg-dark-600">
+                                <label class="text-sm text-gray-400">
+                                    Players can interact with this location
+                                </label>
+                            </div>
+
+                            <div>
+                                <label class="text-sm text-gray-400">Tags (comma-separated)</label>
+                                <input type="text" id="editLocationTags"
+                                    class="w-full p-2 bg-dark-600 rounded text-gray-100"
+                                    placeholder="shop, merchant, retail">
+                                <small class="text-gray-500 mt-1 block">Optional: Add tags to help categorize this
+                                    location</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-300">Description:</label>
+                    <textarea id="editAssetDescription" required rows="4"
+                        class="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-100"></textarea>
+                </div>
+
+                <div class="modal-footer">
+                    <div class="flex justify-end space-x-4">
+                        <button type="button" onclick="closeAssetEditModal()"
+                            class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                            Save Changes
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add game management modal -->
+    <div id="gameModal" class="modal">
+        <div class="modal-content">
+            <h2>Create New Game</h2>
+            <form id="gameForm">
+                <input type="text" name="name" placeholder="Game Name" required>
+                <input type="text" name="slug" placeholder="URL Slug" required>
+                <textarea name="description" placeholder="Description"></textarea>
+                <button type="submit">Create Game</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/js/dashboard_new/abilityConfig.js"></script>
+    <script type="module" src="/static/js/dashboard_new/utils.js"></script>
+    <script type="module" src="/static/js/dashboard_new/ui.js"></script>
+    <script type="module" src="/static/js/dashboard_new/state.js"></script>
+    <script type="module" src="/static/js/dashboard_new/games.js"></script>
+    <script type="module" src="/static/js/dashboard_new/assets.js"></script>
+    <script type="module" src="/static/js/dashboard_new/npc.js"></script>
+    <script type="module" src="/static/js/dashboard_new/index.js?v=2023-11-22-A"></script>
+
+    <!-- Add JavaScript to handle location fields toggle -->
+    <script>
+        document.getElementById('editAssetIsLocation').addEventListener('change', function () {
+            document.getElementById('editLocationFields').style.display = this.checked ? 'block' : 'none';
+        });
+    </script>
+</body>
+
+</html>

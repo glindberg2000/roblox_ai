@@ -1,0 +1,40 @@
+<div class="form-group">
+    <label>
+        <input type="checkbox" name="is_location" id="is_location" {% if asset.is_location %}checked{% endif %}>
+        Is this a location?
+    </label>
+</div>
+
+<div id="location_fields" style="display: {% if asset.is_location %}block{% else %}none{% endif %}">
+    <div class="form-group">
+        <label>Position</label>
+        <div class="input-group">
+            <input type="number" step="0.001" name="position_x" placeholder="X" value="{{ asset.position_x or '' }}"
+                class="form-control">
+            <input type="number" step="0.001" name="position_y" placeholder="Y" value="{{ asset.position_y or '' }}"
+                class="form-control">
+            <input type="number" step="0.001" name="position_z" placeholder="Z" value="{{ asset.position_z or '' }}"
+                class="form-control">
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>Aliases (comma-separated)</label>
+        <input type="text" name="aliases" class="form-control"
+            value="{{ asset.aliases|from_json|join(', ') if asset.aliases else '' }}"
+            placeholder="stand, merchant stand, pete's stand">
+    </div>
+
+    <div class="form-group">
+        <label>Location Data</label>
+        <textarea name="location_data" class="form-control"
+            rows="4">{{ asset.location_data|from_json|tojson(indent=2) if asset.location_data else '' }}</textarea>
+        <small class="text-muted">JSON format: area, type, owner, etc.</small>
+    </div>
+</div>
+
+<script>
+    document.getElementById('is_location').addEventListener('change', function () {
+        document.getElementById('location_fields').style.display = this.checked ? 'block' : 'none';
+    });
+</script>

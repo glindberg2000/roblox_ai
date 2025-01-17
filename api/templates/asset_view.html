@@ -1,0 +1,21 @@
+<!-- Add to existing asset info section -->
+{% if asset.is_location %}
+<div class="location-info">
+    <h3>Location Details</h3>
+    <div class="coordinates">
+        <label>Position:</label>
+        <span>X: {{ asset.position_x|round(2) }}</span>
+        <span>Y: {{ asset.position_y|round(2) }}</span>
+        <span>Z: {{ asset.position_z|round(2) }}</span>
+    </div>
+    
+    <div class="aliases">
+        <label>Aliases:</label>
+        <ul>
+        {% for alias in asset.aliases %}
+            <li>{{ alias }}</li>
+        {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endif %} 
