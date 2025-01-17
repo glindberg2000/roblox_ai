@@ -44,6 +44,9 @@
         "$className": "StarterPlayerScripts",
         "NPCClientChatHandler": {
           "$path": "src/client/NPCClientChatHandler.lua"
+        },
+        "NPCClientHandler": {
+          "$path": "src/client/NPCClientHandler.client.lua"
         }
       }
     }
