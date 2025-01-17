@@ -97,9 +97,8 @@ function AnimationManager:applyAnimations(humanoid)
     
     -- Connect to state changes for animation updates
     humanoid.StateChanged:Connect(function(_, new_state)
-        if (new_state == Enum.HumanoidStateType.Running or 
-            new_state == Enum.HumanoidStateType.Walking) and 
-            isMoving(humanoid) then
+        -- Check only if the humanoid is actually moving using velocity
+        if isMoving(humanoid) then
             -- Only play walk/run if actually moving
             local speed = humanoid.WalkSpeed
             self:playAnimation(humanoid, speed > 8 and "run" or "walk")
