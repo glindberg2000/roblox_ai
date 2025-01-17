@@ -1,0 +1,19 @@
+{
+    "assets": [
+        {
+            "assetId": "15571098041",
+            "model": "tesla_cybertruck",
+            "name": "Tesla Cybertruck",
+            "description": "This vehicle features a flat metal, futuristic, angular vehicle reminiscent of a cybertruck. It has a sleek, gray body with distinct sharp edges and minimalistic design. Prominent characteristics include a wide, illuminated front strip, large wheel wells, and a spacious, open cabin. The overall appearance suggests a robust, modern aesthetic.",
+            "imageUrl": "https://tr.rbxcdn.com/180DAY-e30fdf43661440a435b6e64373fb3850/420/420/Model/Png/noFilter",
+            "type": "vehicle",
+            "tags": [
+                "futuristic",
+                "angular",
+                "modern",
+                "car",
+                "electric"
+            ]
+        }
+    ]
+}

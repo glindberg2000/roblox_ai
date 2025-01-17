@@ -5,7 +5,7 @@ import logging
 from PIL import Image
 from io import BytesIO
 from fastapi import HTTPException
-from typing import Tuple
+from typing import Tuple, Optional
 from pathlib import Path
 from .config import AVATARS_DIR, THUMBNAILS_DIR
 from openai import OpenAI, OpenAIError
@@ -112,3 +112,16 @@ async def get_asset_description(asset_id: str, name: str) -> dict:
     except Exception as e:
         logger.error(f"Error processing asset description request: {e}")
         return {"error": f"Failed to process request: {str(e)}"}
+
+async def get_roblox_display_name(user_id: str) -> Optional[str]:
+    """Get user's display name from Roblox API"""
+    try:
+        user_response = requests.get(f"https://users.roblox.com/v1/users/{user_id}")
+        if user_response.status_code == 200:
+            user_data = user_response.json()
+            return user_data.get('displayName')
+        logger.error(f"Failed to get display name for {user_id}, status: {user_response.status_code}")
+        return None
+    except Exception as e:
+        logger.error(f"Error getting Roblox display name: {e}")
+        return None

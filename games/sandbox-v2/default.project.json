@@ -1,0 +1,54 @@
+{
+  "name": "Sandbox V2",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "Shared": {
+        "$className": "Folder",
+        "NPCSystem": {
+          "$path": "src/shared/NPCSystem"
+        }
+      },
+      "Data": {
+        "$path": "src/data"
+      }
+    },
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "Assets": {
+        "$className": "Folder",
+        "npcs": {
+          "$path": "src/assets/npcs"
+        }
+      }
+    },
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "MainNPCScript": {
+        "$path": "src/server/MainNPCScript.server.lua"
+      },
+      "PlayerJoinHandler": {
+        "$path": "src/server/PlayerJoinHandler.server.lua"
+      },
+      "InteractionController": {
+        "$path": "src/server/InteractionController.lua"
+      },
+      "AssetInitializer": {
+        "$path": "src/server/AssetInitializer.server.lua"
+      }
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "NPCClientChatHandler": {
+          "$path": "src/client/NPCClientChatHandler.lua"
+        },
+        "NPCClientHandler": {
+          "$path": "src/client/NPCClientHandler.client.lua"
+        }
+      }
+    }
+  }
+}

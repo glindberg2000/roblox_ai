@@ -1,0 +1,28 @@
+.nav-button-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    position: relative;
+}
+
+.nav-button-enabled {
+    transition: transform 0.1s ease-in-out;
+}
+
+.nav-button-enabled:hover {
+    transform: translateY(-1px);
+}
+
+[title]:not([title=""]):hover:after {
+    content: attr(title);
+    position: absolute;
+    bottom: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 5px 10px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 100;
+} 

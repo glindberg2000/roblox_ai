@@ -1,0 +1,105 @@
+{
+    "info": {
+        "name": "Location API",
+        "description": "API endpoints for managing and searching game locations",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "List Locations",
+            "request": {
+                "method": "GET",
+                "url": {
+                    "raw": "{{baseUrl}}/api/locations?game_id=61&area=spawn_area",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "locations"
+                    ],
+                    "query": [
+                        {
+                            "key": "game_id",
+                            "value": "61"
+                        },
+                        {
+                            "key": "area",
+                            "value": "spawn_area"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Semantic Search",
+            "request": {
+                "method": "GET",
+                "url": {
+                    "raw": "{{baseUrl}}/api/locations/semantic-search?game_id=61&query=where can i find pete's shop&threshold=0.8",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "locations",
+                        "semantic-search"
+                    ],
+                    "query": [
+                        {
+                            "key": "game_id",
+                            "value": "61"
+                        },
+                        {
+                            "key": "query",
+                            "value": "where can i find pete's shop"
+                        },
+                        {
+                            "key": "threshold",
+                            "value": "0.8"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Search By Position",
+            "request": {
+                "method": "GET",
+                "url": {
+                    "raw": "{{baseUrl}}/api/locations/search?game_id=61&x=5&y=3&z=3&radius=10",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "locations",
+                        "search"
+                    ],
+                    "query": [
+                        {
+                            "key": "game_id",
+                            "value": "61"
+                        },
+                        {
+                            "key": "x",
+                            "value": "5"
+                        },
+                        {
+                            "key": "y",
+                            "value": "3"
+                        },
+                        {
+                            "key": "z",
+                            "value": "3"
+                        },
+                        {
+                            "key": "radius",
+                            "value": "10"
+                        }
+                    ]
+                }
+            }
+        }
+    ]
+}
