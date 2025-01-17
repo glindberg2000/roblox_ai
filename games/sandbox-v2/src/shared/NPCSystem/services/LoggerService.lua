@@ -7,32 +7,58 @@ export type LogCategory = "SYSTEM" | "NPC" | "CHAT" | "INTERACTION" | "MOVEMENT"
 
 local config = {
     enabled = true,
-    minLevel = "DEBUG",
+    minLevel = "INFO",
     enabledCategories = {
-        SYSTEM = true,
-        NPC = true,
+        SYSTEM = {
+            debug = false,
+            info = true,
+            warn = true,
+            error = true
+        },
+        NPC = {
+            debug = false,
+            info = false,
+            warn = true,
+            error = true
+        },
         CHAT = {
-            debug = true,
-            info = true,
+            debug = false,
+            info = false,
             warn = true,
             error = true
         },
-        INTERACTION = true,
-        MOVEMENT = true,
+        INTERACTION = {
+            debug = false,
+            info = false,
+            warn = true,
+            error = true
+        },
+        MOVEMENT = false,
         ANIMATION = false,
-        DATABASE = true,
-        API = true,
-        PROXIMITY_MATRIX = true,
-        SNAPSHOT = {
-            debug = true,
-            info = true,
+        DATABASE = {
+            debug = false,
+            info = false,
             warn = true,
             error = true
         },
-        ACTION = false,
-        ACTION_SERVICE = false,
-        NAVIGATION = false,
-        PATH_FINDING = false
+        API = {
+            debug = false,
+            info = false,
+            warn = true,
+            error = true
+        },
+        PROXIMITY_MATRIX = {
+            debug = false,
+            info = false,
+            warn = true,
+            error = true
+        },
+        SNAPSHOT = {
+            debug = false,
+            info = false,
+            warn = true,
+            error = true
+        }
     },
     timeFormat = "%Y-%m-%d %H:%M:%S",
     outputToFile = false,
