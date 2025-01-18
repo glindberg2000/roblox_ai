@@ -809,27 +809,42 @@ def create_agent_memory(
     return memory
 
 @router.post("/snapshot/game")
-async def process_game_snapshot(snapshot: GameSnapshot):
+async def process_game_snapshot(request: Request):
     try:
-        # Log the incoming snapshot
-        logger.info("Received game snapshot")
-        logger.info(f"Processing {len(snapshot.clusters)} clusters")
+        # Log raw request first
+        raw_body = await request.body()
+        logger.info(f"Raw request received: {raw_body}")
         
-        # Create and enqueue the snapshot
-        snapshot_item = SnapshotQueueItem(
-            clusters=snapshot.clusters,
-            human_context=snapshot.humanContext,
-            timestamp=time.time()
-        )
-        await queue_system.enqueue_snapshot(snapshot_item)
-        
-        # Process entities...
-
-        return {"status": "success"}
-        
+        try:
+            # Try to parse as JSON
+            data = await request.json()
+            logger.info(f"Parsed JSON data: {data}")
+            
+            # Then try to parse as GameSnapshot
+            snapshot = GameSnapshot(**data)
+            logger.info(f"Successfully parsed as GameSnapshot with {len(snapshot.clusters)} clusters")
+            
+            # Create and enqueue the snapshot
+            snapshot_item = SnapshotQueueItem(
+                clusters=snapshot.clusters,
+                human_context=snapshot.humanContext,
+                timestamp=time.time()
+            )
+            await queue_system.enqueue_snapshot(snapshot_item)
+            
+            return {"status": "success"}
+            
+        except json.JSONDecodeError as je:
+            logger.error(f"Failed to parse JSON: {je}")
+            return JSONResponse(
+                status_code=400, 
+                content={"error": "Invalid JSON"}
+            )
+            
     except Exception as e:
         logger.error(f"Error processing game snapshot: {str(e)}")
-        raise
+        logger.exception(e)  # This logs the full stack trace
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/chat/v3", response_model=ChatResponse)
 async def chat_with_npc_v3(request: ChatRequest):
