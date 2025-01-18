@@ -1,110 +1,97 @@
 print("LoggerService loaded")
 
-local LoggerService = {}
-
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
-export type LogCategory = "SYSTEM" | "NPC" | "CHAT" | "INTERACTION" | "MOVEMENT" | "ANIMATION" | "DATABASE" | "API" | "SNAPSHOT"
+export type LogCategory = "SYSTEM" | "NPC" | "CHAT" | "INTERACTION" | "MOVEMENT" | "ANIMATION" | "DATABASE" | "API" | "SNAPSHOT" | "RANGE"
 
-local config = {
-    enabled = true,
-    minLevel = "INFO",
-    enabledCategories = {
+local LoggerService = {
+    isDebugEnabled = true,
+    
+    -- Define categories and their log levels
+    categories = {
+        SNAPSHOT = {
+            enabled = true,
+            minLevel = "DEBUG"
+        },
         SYSTEM = {
-            debug = true,
-            info = true,
-            warn = true,
-            error = true
+            enabled = true,
+            minLevel = "INFO"
         },
-        NPC = {
-            debug = false,
-            info = false,
-            warn = true,
-            error = true
+        RANGE = {
+            enabled = true,
+            minLevel = "WARN"
         },
-        CHAT = {
-            debug = false,
-            info = false,
-            warn = true,
-            error = true
+        ANIMATION = {
+            enabled = true,
+            minLevel = "WARN"
         },
-        INTERACTION = {
-            debug = false,
-            info = false,
-            warn = true,
-            error = true
-        },
-        MOVEMENT = {
-            debug = false,
-            info = false,
-            warn = true,
-            error = true
-        },
-        ANIMATION = false,
-        DATABASE = {
-            debug = false,
-            info = false,
-            warn = true,
-            error = true
-        },
-        API = {
-            debug = false,
-            info = false,
-            warn = true,
-            error = true
+        MODEL = {
+            enabled = true,
+            minLevel = "INFO"
         },
         PROXIMITY_MATRIX = {
-            debug = false,
-            info = false,
-            warn = true,
-            error = true
+            enabled = true,
+            minLevel = "WARN"
         },
-        SNAPSHOT = {
-            debug = true,
-            info = true,
-            warn = true,
-            error = true
+        NPC = {
+            enabled = true,
+            minLevel = "INFO"
+        },
+        CHAT = {
+            enabled = true,
+            minLevel = "INFO"
+        },
+        DATABASE = {
+            enabled = true,
+            minLevel = "INFO"
+        },
+        API = {
+            enabled = true,
+            minLevel = "INFO"
         }
     },
-    timeFormat = "%Y-%m-%d %H:%M:%S",
-    outputToFile = false,
-    outputPath = "logs/"
+    
+    config = {
+        timeFormat = "%Y-%m-%d %H:%M:%S",
+        outputToFile = false,
+        outputPath = "logs/"
+    }
 }
 
-local levelPriority = {
+local LOG_LEVELS = {
     DEBUG = 1,
     INFO = 2,
     WARN = 3,
     ERROR = 4
 }
 
-function LoggerService:shouldLog(level: LogLevel, category: LogCategory): boolean
-    if not config.enabled then return false end
-    
-    if type(config.enabledCategories[category]) == "table" then
-        return config.enabledCategories[category][string.lower(level)] or false
+function LoggerService:shouldLog(category: LogCategory, level: LogLevel): boolean
+    -- Always allow if no category config exists
+    if not self.categories[category] then
+        return true
     end
     
-    if not config.enabledCategories[category] then return false end
-    return levelPriority[level] >= levelPriority[config.minLevel]
+    local categoryConfig = self.categories[category]
+    if not categoryConfig.enabled then return false end
+    
+    return LOG_LEVELS[level] >= LOG_LEVELS[categoryConfig.minLevel]
 end
 
 function LoggerService:formatMessage(level: LogLevel, category: LogCategory, message: string): string
-    local timestamp = os.date(config.timeFormat)
-    return string.format("[%s] [%s] [%s] %s", timestamp, level, category, message)
+    local timestamp = os.date(self.config.timeFormat)
+    return string.format("[%s] [%s] [%s] %s", timestamp, level, category, tostring(message))
 end
 
 function LoggerService:log(level: LogLevel, category: LogCategory, message: string)
-    if not self:shouldLog(level, category) then return end
+    if not self:shouldLog(category, level) then return end
     
     local formattedMessage = self:formatMessage(level, category, message)
     print(formattedMessage)
     
-    if config.outputToFile then
+    if self.config.outputToFile then
         -- TODO: Implement file output
     end
 end
 
--- Convenience methods
 function LoggerService:debug(category: LogCategory, message: string)
     self:log("DEBUG", category, message)
 end
@@ -121,17 +108,22 @@ function LoggerService:error(category: LogCategory, message: string)
     self:log("ERROR", category, message)
 end
 
--- Configuration methods
-function LoggerService:setMinLevel(level: LogLevel)
-    config.minLevel = level
+function LoggerService:setMinLevel(category: LogCategory, level: LogLevel)
+    if self.categories[category] then
+        self.categories[category].minLevel = level
+    end
 end
 
 function LoggerService:enableCategory(category: LogCategory)
-    config.enabledCategories[category] = true
+    if self.categories[category] then
+        self.categories[category].enabled = true
+    end
 end
 
 function LoggerService:disableCategory(category: LogCategory)
-    config.enabledCategories[category] = false
+    if self.categories[category] then
+        self.categories[category].enabled = false
+    end
 end
 
 return LoggerService 

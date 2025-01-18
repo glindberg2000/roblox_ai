@@ -28,6 +28,9 @@ local CONFIG = {
 
 LoggerService:info("SNAPSHOT", "Setting up heartbeat...")
 
+-- Add constants at the top
+local MOVEMENT_THRESHOLD = 0.1 -- Only log movements greater than 0.1 studs
+
 function GameStateService.init(config)
     if not config then
         config = {
@@ -91,23 +94,71 @@ function GameStateService:getEntityPosition(member)
     return existing and existing.position or {x = 0, y = 0, z = 0}
 end
 
+function GameStateService:getEntityHealth(member)
+    -- Try multiple ways to find the character
+    local character = game.Workspace:FindFirstChild(member)
+    if not character then
+        local npcFolder = game.Workspace:FindFirstChild("NPCs")
+        if npcFolder then
+            character = npcFolder:FindFirstChild(member)
+        end
+    end
+    
+    if character then
+        local humanoid = character:FindFirstChild("Humanoid")
+        if humanoid then
+            return {
+                current = humanoid.Health,
+                max = humanoid.MaxHealth,
+                state = humanoid:GetState().Name
+            }
+        end
+    end
+    
+    -- Return default health if not found
+    return {
+        current = 100,
+        max = 100,
+        state = "Unknown"
+    }
+end
+
+function GameStateService:hasPositionChanged(oldPos, newPos)
+    if not oldPos or not newPos then return false end
+    
+    -- Check if positions are actually different
+    return math.abs(oldPos.x - newPos.x) > MOVEMENT_THRESHOLD or
+           math.abs(oldPos.y - newPos.y) > MOVEMENT_THRESHOLD or
+           math.abs(oldPos.z - newPos.z) > MOVEMENT_THRESHOLD
+end
+
 function GameStateService:updateHumanContext(cluster)
     -- Track changes for efficient logging
     local changes = {}
     
     for _, member in ipairs(cluster.members) do
         local positionData = self:getEntityPosition(member)
-        local location = "Unknown"  -- Named location can be added later
+        local healthData = self:getEntityHealth(member)
+        local location = "Unknown"
         
-        -- Only log position changes
+        -- Only log position/health changes
         local existing = gameState.humanContext[member]
-        if not existing or 
-           existing.position.x ~= positionData.x or
-           existing.position.y ~= positionData.y or
-           existing.position.z ~= positionData.z then
+        local positionChanged = existing and self:hasPositionChanged(existing.position, positionData)
+        local healthChanged = existing and (
+            existing.health.current ~= healthData.current or
+            existing.health.state ~= healthData.state
+        )
+        
+        if not existing or positionChanged or healthChanged then
             changes[member] = {
-                old = existing and existing.position,
-                new = positionData
+                old = existing and {
+                    position = existing.position,
+                    health = existing.health
+                },
+                new = {
+                    position = positionData,
+                    health = healthData
+                }
             }
         end
         
@@ -119,11 +170,13 @@ function GameStateService:updateHumanContext(cluster)
                 recentInteractions = {},
                 lastSeen = os.time(),
                 location = location,
-                position = positionData
+                position = positionData,
+                health = healthData
             }
         else
             existing.location = location
             existing.position = positionData
+            existing.health = healthData
             existing.lastSeen = os.time()
         end
         
@@ -136,22 +189,36 @@ function GameStateService:updateHumanContext(cluster)
         }
     end
     
-    -- Log position changes in batch
+    -- Log changes in batch
     if next(changes) and LoggerService.isDebugEnabled then
-        LoggerService:debug("SNAPSHOT", "\n=== Position Updates ===")
+        LoggerService:debug("SNAPSHOT", "\n=== Entity Updates ===")
         for entity, change in pairs(changes) do
             if change.old then
-                LoggerService:debug("SNAPSHOT", string.format(
-                    "%s moved: (%.1f, %.1f, %.1f) -> (%.1f, %.1f, %.1f)",
-                    entity,
-                    change.old.x, change.old.y, change.old.z,
-                    change.new.x, change.new.y, change.new.z
-                ))
+                -- Log position changes
+                if change.old.position then
+                    LoggerService:debug("SNAPSHOT", string.format(
+                        "%s moved: (%.1f, %.1f, %.1f) -> (%.1f, %.1f, %.1f)",
+                        entity,
+                        change.old.position.x, change.old.position.y, change.old.position.z,
+                        change.new.position.x, change.new.position.y, change.new.position.z
+                    ))
+                end
+                
+                -- Log health changes
+                if change.old.health then
+                    LoggerService:debug("SNAPSHOT", string.format(
+                        "%s health: %d/%d [%s] -> %d/%d [%s]",
+                        entity,
+                        change.old.health.current, change.old.health.max, change.old.health.state,
+                        change.new.health.current, change.new.health.max, change.new.health.state
+                    ))
+                end
             else
                 LoggerService:debug("SNAPSHOT", string.format(
-                    "%s appeared at: (%.1f, %.1f, %.1f)",
+                    "%s appeared: (%.1f, %.1f, %.1f) [Health: %d/%d %s]",
                     entity,
-                    change.new.x, change.new.y, change.new.z
+                    change.new.position.x, change.new.position.y, change.new.position.z,
+                    change.new.health.current, change.new.health.max, change.new.health.state
                 ))
             end
         end
@@ -190,7 +257,7 @@ function GameStateService:syncWithBackend()
     
     -- Only log detailed positions in debug mode
     if LoggerService.isDebugEnabled then
-        LoggerService:debug("SNAPSHOT", "\n=== Entity Groups & Positions ===")
+        LoggerService:info("SNAPSHOT", "\n=== Entity Groups & Positions ===")
         
         -- Group entities by cluster for cleaner logging
         local clusterGroups = {}
@@ -200,27 +267,30 @@ function GameStateService:syncWithBackend()
             table.insert(clusterGroups[groupId], {
                 name = name,
                 pos = context.position,
+                health = context.health,
                 isPlayer = context.currentGroups.players and context.currentGroups.players > 0
             })
         end
         
         -- Log each cluster group
         for groupId, members in pairs(clusterGroups) do
-            LoggerService:debug("SNAPSHOT", string.format(
+            LoggerService:info("SNAPSHOT", string.format(
                 "\nGroup %d:", 
                 groupId
             ))
             for _, member in ipairs(members) do
                 local pos = member.pos
-                LoggerService:debug("SNAPSHOT", string.format(
-                    "  %s%s: (%.1f, %.1f, %.1f)",
+                local health = member.health
+                LoggerService:info("SNAPSHOT", string.format(
+                    "  %s%s: (%.1f, %.1f, %.1f) [Health: %d/%d %s]",
                     member.name,
                     member.isPlayer and " [PLAYER]" or "",
-                    pos.x, pos.y, pos.z
+                    pos.x, pos.y, pos.z,
+                    health.current, health.max, health.state
                 ))
             end
         end
-        LoggerService:debug("SNAPSHOT", "\n===========================")
+        LoggerService:info("SNAPSHOT", "\n===========================")
     end
 
     local payload = {
@@ -320,5 +390,32 @@ game:GetService("RunService").Heartbeat:Connect(function()
 end)
 
 LoggerService:info("SYSTEM", "GameStateService heartbeat initialized")
+
+function GameStateService:hasEntityMoved(oldPos, newPos)
+    if not oldPos or not newPos then return false end
+    
+    local xDiff = math.abs(oldPos.X - newPos.X)
+    local yDiff = math.abs(oldPos.Y - newPos.Y)
+    local zDiff = math.abs(oldPos.Z - newPos.Z)
+    
+    return xDiff > MOVEMENT_THRESHOLD or 
+           yDiff > MOVEMENT_THRESHOLD or 
+           zDiff > MOVEMENT_THRESHOLD
+end
+
+function GameStateService:compareEntityStates(oldState, newState)
+    local changes = {}
+    
+    if self:hasEntityMoved(oldState.position, newState.position) then
+        changes.moved = {
+            from = oldState.position,
+            to = newState.position
+        }
+    end
+    
+    -- Rest of comparison logic...
+    
+    return changes
+end
 
 return GameStateService 
