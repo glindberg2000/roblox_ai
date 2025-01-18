@@ -23,6 +23,7 @@ local InteractionService = require(services:WaitForChild("InteractionService"))
 local LoggerService = require(services:WaitForChild("LoggerService"))
 local ModelLoader = require(script.Parent.services.ModelLoader)
 local AnimationService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.AnimationService)
+local GameStateService = require(script.Parent.services.GameStateService)
 
 ModelLoader.init()
 LoggerService:info("SYSTEM", string.format("Using ModelLoader v%s", ModelLoader.Version))
@@ -157,11 +158,26 @@ end
 -- Replace .new() with modified version
 function NPCManagerV3.new()
     local manager = NPCManagerV3.getInstance()
+    
     -- Ensure database is loaded
     if not manager.databaseLoaded then
         manager:loadNPCDatabase()
         manager.databaseLoaded = true
     end
+    
+    -- Initialize GameStateService with logging
+    LoggerService:info("SYSTEM", "Starting GameStateService initialization...")
+    local success = GameStateService.init({
+        enableBackendSync = true,
+        snapshotInterval = 5
+    })
+    
+    if success then
+        LoggerService:info("SYSTEM", "GameStateService initialized successfully")
+    else
+        LoggerService:error("SYSTEM", "Failed to initialize GameStateService")
+    end
+    
     return manager
 end
 

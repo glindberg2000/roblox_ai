@@ -10,7 +10,7 @@ local config = {
     minLevel = "INFO",
     enabledCategories = {
         SYSTEM = {
-            debug = false,
+            debug = true,
             info = true,
             warn = true,
             error = true
@@ -33,7 +33,12 @@ local config = {
             warn = true,
             error = true
         },
-        MOVEMENT = false,
+        MOVEMENT = {
+            debug = false,
+            info = false,
+            warn = true,
+            error = true
+        },
         ANIMATION = false,
         DATABASE = {
             debug = false,
@@ -54,8 +59,8 @@ local config = {
             error = true
         },
         SNAPSHOT = {
-            debug = false,
-            info = false,
+            debug = true,
+            info = true,
             warn = true,
             error = true
         }
