@@ -6,7 +6,7 @@ BACKUP_DIR=/media/sf_letta_backups/roblox_backups
 DATE=$(date +%Y%m%d_%H%M%S)
 MAX_BACKUPS=7  # Keep a week's worth of backups
 EMAIL="realcryptoplato@gmail.com"
-DISCORD_WEBHOOK="***REMOVED***"
+DISCORD_WEBHOOK="https://discord.com/api/webhooks/1324609509280452730/N-jxjPk7XxD8JYoLZmjw65fa_cmT82KT8Tn7IHB4uJ6-4HhIjxhsAfz7Aa6GEAsQp5a_"
 
 
 # Notification function

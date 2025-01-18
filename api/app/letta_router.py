@@ -61,7 +61,7 @@ from letta_templates import (
     chat_with_agent,
     update_group_status
 )
-from .cache import get_npc_id_from_name, get_npc_description, get_agent_id  # Add import
+from .cache import get_npc_id_from_name, get_npc_description, get_agent_id  # Remove init_static_cache
 from letta_templates.npc_utils import (
     get_memory_block,
     update_memory_block,
@@ -69,6 +69,7 @@ from letta_templates.npc_utils import (
 )
 from letta_templates import print_agent_details
 from .queue_system import queue_system, ChatQueueItem, SnapshotQueueItem
+from .snapshot_processor import enrich_snapshot_with_context
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -809,41 +810,31 @@ def create_agent_memory(
     return memory
 
 @router.post("/snapshot/game")
-async def process_game_snapshot(request: Request):
+async def process_game_snapshot(snapshot: GameSnapshot):
     try:
-        # Log raw request first
-        raw_body = await request.body()
-        logger.info(f"Raw request received: {raw_body}")
+        logger.debug("Processing snapshot with our new processor...")
         
-        try:
-            # Try to parse as JSON
-            data = await request.json()
-            logger.info(f"Parsed JSON data: {data}")
-            
-            # Then try to parse as GameSnapshot
-            snapshot = GameSnapshot(**data)
-            logger.info(f"Successfully parsed as GameSnapshot with {len(snapshot.clusters)} clusters")
-            
-            # Create and enqueue the snapshot
-            snapshot_item = SnapshotQueueItem(
-                clusters=snapshot.clusters,
-                human_context=snapshot.humanContext,
-                timestamp=time.time()
-            )
-            await queue_system.enqueue_snapshot(snapshot_item)
-            
-            return {"status": "success"}
-            
-        except json.JSONDecodeError as je:
-            logger.error(f"Failed to parse JSON: {je}")
-            return JSONResponse(
-                status_code=400, 
-                content={"error": "Invalid JSON"}
-            )
-            
+        # Enrich snapshot with location and other context
+        enriched_snapshot = enrich_snapshot_with_context(snapshot)
+        
+        # Log interesting changes
+        for entity_id, context in enriched_snapshot.humanContext.items():
+            if context.recentInteractions:
+                latest = context.recentInteractions[-1]
+                logger.info(f"Entity {entity_id}: {latest['narrative']}")
+        
+        # Create and enqueue the snapshot
+        snapshot_item = SnapshotQueueItem(
+            clusters=snapshot.clusters,
+            human_context=snapshot.humanContext,
+            timestamp=time.time()
+        )
+        await queue_system.enqueue_snapshot(snapshot_item)
+        
+        return {"status": "success", "data": enriched_snapshot}
+        
     except Exception as e:
-        logger.error(f"Error processing game snapshot: {str(e)}")
-        logger.exception(e)  # This logs the full stack trace
+        logger.error(f"Error processing snapshot: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/chat/v3", response_model=ChatResponse)
