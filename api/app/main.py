@@ -89,8 +89,9 @@ async def serve_dashboard(request: Request, allowed_ips=Depends(check_allowed_ip
 
 @app.on_event("startup")
 async def startup_event():
+    """Initialize on server startup"""
     logger.info("Starting Roblox API server...")
-    init_static_cache()
+    init_static_cache()  # Initialize caches once on startup
     logger.info("Static caches initialized")
 
 @app.on_event("shutdown")

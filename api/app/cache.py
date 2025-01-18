@@ -1,15 +1,14 @@
 """In-memory cache for static game data"""
 import logging
-import os
 from typing import Dict
-from .database import get_db
+from .database import get_db, get_all_locations
 
 logger = logging.getLogger("roblox_app")
 
 # Global caches
-NPC_CACHE: Dict[str, dict] = {}  # display_name -> npc data
-LOCATION_CACHE: Dict[str, dict] = {}  # slug -> location data
-AGENT_ID_CACHE: Dict[str, str] = {}  # npc_id -> agent_id
+NPC_CACHE: Dict[str, dict] = {}
+LOCATION_CACHE: Dict[str, dict] = {}
+AGENT_ID_CACHE: Dict[str, str] = {}
 
 def init_static_cache():
     """Initialize static data caches on server boot"""
@@ -62,23 +61,18 @@ def refresh_npc_cache():
 def refresh_location_cache():
     """Refresh location cache"""
     try:
-        with get_db() as db:
-            cursor = db.execute("""
-                SELECT name, description, position_x, position_y, position_z, slug 
-                FROM assets WHERE is_location = TRUE
-            """)
-            locations = cursor.fetchall()
-            
-            LOCATION_CACHE.clear()
-            LOCATION_CACHE.update({
-                loc['slug']: {
-                    'name': loc['name'],
-                    'description': loc['description'],
-                    'coordinates': [loc['position_x'], loc['position_y'], loc['position_z']]
-                }
-                for loc in locations
-            })
-            logger.info(f"Loaded {len(LOCATION_CACHE)} locations into cache")
+        # Use get_all_locations instead of direct DB query
+        locations = get_all_locations()
+        
+        LOCATION_CACHE.clear()
+        for loc in locations:
+            LOCATION_CACHE[loc['slug']] = {
+                'name': loc['name'],
+                'description': loc['description'],
+                'coordinates': loc['coordinates']
+            }
+        logger.info(f"Loaded {len(LOCATION_CACHE)} locations into cache")
+        
     except Exception as e:
         logger.error(f"Error refreshing location cache: {str(e)}")
         raise

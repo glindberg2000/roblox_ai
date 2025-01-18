@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List, Literal, Set
 from datetime import datetime, timedelta
 import logging
+from .location_utils import find_nearest_location
 
 logger = logging.getLogger(__name__)
 
@@ -134,34 +135,9 @@ class PositionData(BaseModel):
         super().__init__(**data)
 
     def get_nearest_location(self) -> str:
-        """Calculate nearest known location from cache"""
-        try:
-            if not LOCATION_CACHE:
-                return "Unknown Area"
-
-            min_distance = float('inf')
-            nearest = "Unknown Area"
-
-            for slug, loc_data in LOCATION_CACHE.items():
-                # Get coordinates from location data
-                loc_x, loc_y, loc_z = loc_data["coordinates"]
-                
-                distance = (
-                    (self.x - loc_x)**2 + 
-                    (self.y - loc_y)**2 + 
-                    (self.z - loc_z)**2
-                )**0.5
-
-                if distance < min_distance:
-                    min_distance = distance
-                    nearest = loc_data["name"]  # Use name from location data
-
-            # Only return location name if reasonably close
-            return nearest if min_distance <= 15 else "Unknown Area"
-
-        except Exception as e:
-            logger.error(f"Error calculating nearest location: {str(e)}")
-            return "Unknown Area"
+        """Calculate nearest known location"""
+        from .cache import LOCATION_CACHE  # Import here to avoid circular import
+        return find_nearest_location(self.x, self.y, self.z, LOCATION_CACHE)
 
     def get_location_narrative(self) -> str:
         """Generate narrative description of position relative to known locations"""
@@ -224,6 +200,8 @@ class HumanContextData(BaseModel):
     lastSeen: int
     position: Optional[PositionData] = None
     location: Optional[str] = None
+    health: Optional[Dict] = None
+    velocity: Optional[List[float]] = None  # [x, y, z] velocity components
 
 class GameSnapshot(BaseModel):
     timestamp: int
