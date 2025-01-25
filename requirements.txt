@@ -1,10 +1,14 @@
-fastapi==0.115.6
-uvicorn==0.34.0
-python-dotenv==1.0.1
-requests==2.32.3
-letta==0.6.6
-letta-templates @ git+https://github.com/glindberg2000/letta-templates.git@v0.9.3
-python-multipart==0.0.9
-pydantic==2.9.2
-SQLAlchemy==2.0.37
-aiohttp==3.11.11
+fastapi
+uvicorn
+python-dotenv
+requests
+python-multipart
+pydantic
+aiohttp
+openai
+Pillow
+python-slugify
+numpy
+scipy
+jinja2
+letta-templates @ git+https://github.com/glindberg2000/letta-templates.git@v0.9.7

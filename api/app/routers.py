@@ -6,8 +6,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from openai import OpenAI, OpenAIError
-from app.conversation_manager import ConversationManager
-from app.config import (
+from .conversation_manager import ConversationManager
+from .config import (
     NPC_SYSTEM_PROMPT_ADDITION,
     STORAGE_DIR, 
     ASSETS_DIR, 

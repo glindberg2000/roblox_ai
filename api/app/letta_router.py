@@ -1,21 +1,44 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
-from letta import (
-    ChatMemory, 
-    LLMConfig, 
-    EmbeddingConfig, 
-    create_client,
-    BasicBlockMemory
-)
-from datetime import datetime
-from letta.prompts import gpt_system
-from letta_roblox.client import LettaRobloxClient
 from typing import Dict, Any, Optional, List, Tuple, Set
 from pydantic import BaseModel
+from datetime import datetime
+import logging
+import json
+import uuid
+import time
+import requests
+import httpx
+
+# Core agent and tools
+from letta_templates.npc_tools import (
+    create_personalized_agent_v3,
+    create_letta_client,
+    TOOL_INSTRUCTIONS,
+    TOOL_REGISTRY,
+    navigate_to,
+    navigate_to_coordinates,
+    perform_action,
+    examine_object
+)
+
+# Memory management functions
+from letta_templates.npc_utils_v2 import (
+    get_memory_block,
+    update_memory_block,
+    update_location_status,
+    update_group_members_v2,
+    get_location_history,
+    get_group_history
+)
+
+from letta_templates.npc_test_data import DEMO_BLOCKS
+
+# Keep all local imports
 from .database import (
-    get_npc_context, 
-    create_agent_mapping, 
-    get_agent_mapping, 
-    get_db, 
+    get_npc_context,
+    create_agent_mapping,
+    get_agent_mapping,
+    get_db,
     get_player_info,
     get_location_coordinates,
     get_all_locations,
@@ -34,40 +57,8 @@ from .models import (
     ClusterData,
     HumanContextData
 )
-import logging
-import json
-import uuid
-import time
 from .letta_utils import extract_tool_results
 from pathlib import Path
-from letta.schemas.message import (
-    ToolCallMessage, 
-    ToolReturnMessage, 
-    ReasoningMessage, 
-    Message
-)
-from letta_templates.npc_tools import (
-    TOOL_INSTRUCTIONS,  # Use official instructions
-    TOOL_REGISTRY,
-    navigate_to,
-    navigate_to_coordinates,
-    perform_action,
-    examine_object
-)
-import requests
-import httpx
-from letta_templates import (
-    create_personalized_agent,
-    chat_with_agent,
-    update_group_status
-)
-from .cache import get_npc_id_from_name, get_npc_description, get_agent_id  # Remove init_static_cache
-from letta_templates.npc_utils import (
-    get_memory_block,
-    update_memory_block,
-    update_group_status  # Add this!
-)
-from letta_templates import print_agent_details
 from .queue_system import queue_system, ChatQueueItem, SnapshotQueueItem
 from .snapshot_processor import enrich_snapshot_with_context
 from .main import LETTA_CONFIG
@@ -90,70 +81,14 @@ logger.setLevel(logging.DEBUG)  # Set to DEBUG to see all logs
 # Add a debug message to verify level
 logger.debug("=== LOGGER DEBUG TEST ===")
 
-def create_roblox_agent(
-    client, 
-    name: str,
-    memory: ChatMemory,
-    system: str,
-    embedding_config: Optional[EmbeddingConfig] = None,
-    llm_type: str = None,
-    tools_section: str = TOOL_INSTRUCTIONS
-):
-    """Create a Letta agent configured for Roblox NPCs"""
-    # Debug logging
-    logger.info(f"Creating agent with llm_type: {llm_type}")
-    logger.info(f"Default LLM from config: {DEFAULT_LLM}")
-    
-    # Use config default if no llm_type specified
-    llm_type = llm_type or DEFAULT_LLM
-    logger.info(f"Final llm_type selected: {llm_type}")
-    
-    # Get the config dictionary
-    llm_config_dict = LLM_CONFIGS[llm_type]
-    logger.info(f"Using LLM config: {llm_config_dict}")
-    
-    # Create LLMConfig object once
-    llm_config = LLMConfig(**llm_config_dict)
-    
-    # Add debug logging to see the final config object
-    logger.info(f"Created LLMConfig object: {llm_config}")
-    logger.info(f"LLMConfig model_endpoint: {llm_config.model_endpoint}")
-    
-    # Use provided embedding config or default from config
-    if not embedding_config:
-        embedding_config = EmbeddingConfig(**EMBEDDING_CONFIGS[DEFAULT_EMBEDDING])
-    
-    # Start with the provided system prompt
-    system_prompt = system
-
-    # Add our tools section
-    system_prompt = system_prompt.replace(
-        "Base instructions finished.",
-        TOOL_INSTRUCTIONS + "\nBase instructions finished."
-    )
-
-    logger.info(f"Created system prompt with tools section")
-
-    # Get tool IDs
-    tool_ids = register_base_tools(client)
-    
-    return client.create_agent(
-        name=name,
-        embedding_config=embedding_config,
-        llm_config=llm_config,
-        memory=memory,
-        system=system_prompt,
-        include_base_tools=True,
-        tool_ids=tool_ids,
-        description="A Roblox NPC"
-    )
-
 # Initialize router and client
 router = APIRouter(prefix="/letta/v1", tags=["letta"])
-letta_client = LettaRobloxClient(LETTA_CONFIG['base_url'])
+
+# Initialize client
+client = create_letta_client()  # Now uses env vars for configuration
 
 # Initialize direct SDK client
-direct_client = create_client(base_url=LETTA_CONFIG['base_url'])
+direct_client = client  # Use the same client instance
 
 """
 Letta AI Integration Router
@@ -764,7 +699,7 @@ def create_agent_memory(
     direct_client: Any,
     npc_details: Dict,
     human_description: str
-) -> BasicBlockMemory:
+) -> Dict[str, Any]:
     """Create agent memory blocks including locations per LettaDev spec"""
     # Get locations from database
     known_locations = get_all_locations()
@@ -805,7 +740,11 @@ def create_agent_memory(
     )
     logger.info(f"Created locations block: {locations_block}")
     
-    memory = BasicBlockMemory(blocks=[persona_block, human_block, locations_block])
+    memory = {
+        "persona": persona_block,
+        "human": human_block,
+        "locations": locations_block
+    }
     logger.info(f"Created memory with blocks: {memory}")
     
     return memory
@@ -856,7 +795,7 @@ async def chat_with_npc_v3(request: ChatRequest):
             npc_details = get_npc_context(request.npc_id)
             
             # Create agent with required memory blocks
-            agent = create_personalized_agent(
+            agent = create_personalized_agent_v3(
                 name=npc_details['display_name'],  # Just use NPC name
                 client=direct_client,
                 minimal_prompt=True,
@@ -1038,26 +977,31 @@ async def process_snapshot_groups(human_context):
                                     if get_agent_id(get_npc_id_from_name(name)) == agent_id)
                     location = data['locations'].get(member_name, "Unknown")
                     
-                    logger.debug(f"\nUpdating agent {agent_id} ({member_name})")
-                    logger.debug(f"Location to set: {location}")
-                    
-                    # Get pre-update state
-                    pre_status = get_memory_block(direct_client, agent_id, "status")
-                    logger.debug(f"Pre-update status: {json.dumps(pre_status, indent=2)}")
-                    
-                    update_group_status(
+                    # Update location with new function
+                    status = update_location_status(
                         client=direct_client,
                         agent_id=agent_id,
-                        nearby_players=nearby_players,
-                        current_location=location,  # This will now be the narrative
+                        current_location=location,
                         current_action="idle"
                     )
                     
-                    # Verify update
-                    post_status = get_memory_block(direct_client, agent_id, "status")
-                    logger.debug(f"Post-update status: {json.dumps(post_status, indent=2)}")
+                    # Update group with new function
+                    group = update_group_members_v2(
+                        client=direct_client,
+                        agent_id=agent_id,
+                        nearby_players=[{
+                            "id": p["id"],
+                            "name": p["name"],
+                            "location": p.get("location", "Unknown"),
+                            "appearance": p.get("appearance", "")
+                        } for p in nearby_players]
+                    )
                     
-                    logger.info(f"Updated group status for agent {agent_id} at {location}")
+                    # Get histories for logging
+                    location_history = get_location_history(direct_client, agent_id)
+                    group_history = get_group_history(direct_client, agent_id)
+                    logger.debug(f"Location history: {json.dumps(location_history, indent=2)}")
+                    logger.debug(f"Group history: {json.dumps(group_history, indent=2)}")
                     
                 except Exception as e:
                     logger.error(f"Failed to update agent {agent_id}: {str(e)}")
@@ -1069,76 +1013,7 @@ async def process_snapshot_groups(human_context):
         logger.error(f"Error in process_snapshot_groups: {str(e)}")
         raise
 
-def update_group_status(client, agent_id: str, nearby_players: list, 
-                       current_location: str, current_action: str = "idle"):
-    """Update group and status blocks together"""
-    try:
-        # Get current blocks
-        status = get_memory_block(client, agent_id, "status")
-        group = get_memory_block(client, agent_id, "group_members")
-        
-        # Track group changes
-        current_members = set(group.get("members", {}).keys())
-        new_members = set(p["id"] for p in nearby_players)
-        
-        # Calculate who joined and left
-        joined = new_members - current_members
-        left = current_members - new_members
-        
-        updates = []
-        if joined:
-            joined_names = [p["name"] for p in nearby_players if p["id"] in joined]
-            updates.append(f"{', '.join(joined_names)} joined the group")
-        if left:
-            left_names = [group["members"][pid]["name"] for pid in left]
-            updates.append(f"{', '.join(left_names)} left the group")
-        
-        # Update status (preserve existing fields including coordinates)
-        existing_status = status.copy()  # Make a copy
-        existing_status.update({
-            "current_location": current_location,
-            "previous_location": status.get("current_location"),
-            "current_action": current_action,
-            "movement_state": "stationary" if current_action == "idle" else "moving"
-        })
-        status = existing_status  # Use updated copy
-        
-        # Update group (simplified structure)
-        members = {}
-        for player in nearby_players:
-            members[player.get("id")] = {
-                "name": player["name"],
-                "appearance": player.get("appearance", ""),
-                "notes": player.get("notes", "")
-            }
-        
-        # Keep last 10 group change updates
-        MAX_UPDATES = 10
-        existing_updates = group.get("updates", [])
-        new_updates = updates + existing_updates
-        if len(new_updates) > MAX_UPDATES:
-            new_updates = new_updates[:MAX_UPDATES]
-        
-        group.update({
-            "members": members,
-            "summary": f"Current members: {', '.join(p['name'] for p in nearby_players)}",
-            "updates": new_updates,
-            "last_updated": datetime.now().isoformat()
-        })
-        
-        # Save updates (not async)
-        update_memory_block(client, agent_id, "status", status)
-        update_memory_block(client, agent_id, "group_members", group)
-        
-        logger.debug(f"Updated blocks for agent {agent_id}:")
-        logger.debug(f"Status: {json.dumps(status, indent=2)}")
-        logger.debug(f"Group: {json.dumps(group, indent=2)}")
-        
-    except Exception as e:
-        logger.error(f"Failed to update group status for {agent_id}: {str(e)}")
-        raise
-
-def verify_group_state(client, agent_ids: List[str], snapshot_data: Dict):
+def verify_group_state(client, agent_ids: List[str], snapshot_data: Dict[str, Any]):
     """Debug helper to check group state consistency"""
     logger.info("\nSnapshot vs Memory State Check:")
     
