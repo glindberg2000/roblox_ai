@@ -1,17 +1,10 @@
-fastapi>=0.68.0
-uvicorn>=0.15.0
-pydantic>=1.8.0
-python-dotenv>=0.19.0
-httpx>=0.23.0
-requests>=2.26.0
-pytest>=6.2.5
-pytest-asyncio>=0.16.0
-black>=21.7b0
-isort>=5.9.3
-flake8>=3.9.2
-mkdocs>=1.2.3
-mkdocs-material>=8.0.0
-pathlib>=1.0.1
-typing-extensions>=4.0.0
-python-json-logger>=2.0.2
-git+ssh://git@github.com/glindberg2000/letta-roblox-client.git@main#egg=letta_roblox&subdirectory=src
+fastapi==0.115.6
+uvicorn==0.34.0
+python-dotenv==1.0.1
+requests==2.32.3
+letta==0.6.6
+letta-templates @ git+https://github.com/glindberg2000/letta-templates.git@v0.9.3
+python-multipart==0.0.9
+pydantic==2.9.2
+SQLAlchemy==2.0.37
+aiohttp==3.11.11
