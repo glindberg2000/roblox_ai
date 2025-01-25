@@ -70,6 +70,7 @@ from letta_templates.npc_utils import (
 from letta_templates import print_agent_details
 from .queue_system import queue_system, ChatQueueItem, SnapshotQueueItem
 from .snapshot_processor import enrich_snapshot_with_context
+from .main import LETTA_CONFIG
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -149,10 +150,10 @@ def create_roblox_agent(
 
 # Initialize router and client
 router = APIRouter(prefix="/letta/v1", tags=["letta"])
-letta_client = LettaRobloxClient("http://localhost:8283")
+letta_client = LettaRobloxClient(LETTA_CONFIG['base_url'])
 
-# Initialize direct SDK client (keeping old client for backwards compatibility)
-direct_client = create_client(base_url="http://localhost:8283")
+# Initialize direct SDK client
+direct_client = create_client(base_url=LETTA_CONFIG['base_url'])
 
 """
 Letta AI Integration Router

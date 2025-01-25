@@ -8,22 +8,30 @@ from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
 import logging
 from .cache import init_static_cache
+import requests
+from requests.exceptions import RequestException
 
-# Configure logging
+# Configure logging first
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler()  # Log to console
-    ]
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-
-# Create logger for our app
 logger = logging.getLogger("roblox_app")
-logger.setLevel(logging.INFO)
 
 # Load environment variables
 load_dotenv()
+
+# Get Letta configuration from environment
+LETTA_CONFIG = {
+    'host': os.getenv('LETTA_SERVER_HOST', 'localhost'),
+    'port': int(os.getenv('LETTA_SERVER_PORT', '8283')),
+    'base_url': os.getenv('LETTA_BASE_URL', 'http://localhost:8283')
+}
+
+logger.info("Letta Server Configuration:")
+logger.info(f"Base URL: {LETTA_CONFIG['base_url']}")
+logger.info(f"Host: {LETTA_CONFIG['host']}")
+logger.info(f"Port: {LETTA_CONFIG['port']}")
 
 # Import after logging setup
 from .config import BASE_DIR
@@ -91,7 +99,27 @@ async def serve_dashboard(request: Request, allowed_ips=Depends(check_allowed_ip
 async def startup_event():
     """Initialize on server startup"""
     logger.info("Starting Roblox API server...")
-    init_static_cache()  # Initialize caches once on startup
+    
+    # Test Letta connection
+    try:
+        logger.info(f"Testing connection to Letta server at {LETTA_CONFIG['base_url']}")
+        # Just test the base URL since we know it works
+        response = requests.get(LETTA_CONFIG['base_url'], timeout=10)  # Increased timeout
+        if response.ok:
+            logger.info("Successfully connected to Letta server")
+            # Try to get version info
+            try:
+                version_response = requests.get(f"{LETTA_CONFIG['base_url']}/api/version")
+                if version_response.ok:
+                    logger.info(f"Letta server version: {version_response.json()}")
+            except:
+                pass  # Version check is optional
+        else:
+            logger.warning(f"Letta server returned status {response.status_code}")
+    except RequestException as e:
+        logger.error(f"Failed to connect to Letta server: {str(e)}")
+    
+    init_static_cache()
     logger.info("Static caches initialized")
 
 @app.on_event("shutdown")
