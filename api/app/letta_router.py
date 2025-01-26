@@ -8,6 +8,7 @@ import uuid
 import time
 import requests
 import httpx
+import inspect
 
 # Core agent and tools
 from letta_templates.npc_tools import (
@@ -28,7 +29,8 @@ from letta_templates.npc_utils_v2 import (
     update_location_status,
     update_group_members_v2,
     get_location_history,
-    get_group_history
+    get_group_history,
+    extract_agent_response
 )
 
 from letta_templates.npc_test_data import DEMO_BLOCKS
@@ -89,6 +91,9 @@ client = create_letta_client()  # Now uses env vars for configuration
 
 # Initialize direct SDK client
 direct_client = client  # Use the same client instance
+
+print("\nDEBUG - Message API Signature:")
+print(inspect.signature(direct_client.agents.messages.create))
 
 """
 Letta AI Integration Router
@@ -421,38 +426,36 @@ Description: {player_info['description']}"""
             logger.info(f"  message: {request.message}")
             logger.info(f"  speaker_name: {speaker_name}")
             
-            response = direct_client.send_message(
-                agent_id=mapping.letta_agent_id,
-                role=message_role,
-                message=request.message,
-                name=speaker_name
-            )
-            
-            logger.info(f"Response type: {type(response)}")
-            logger.info(f"Response content: {response}")
-            
-        except Exception as e:
-            logger.error(f"Error sending message to Letta: {str(e)}")
-            logger.error(f"Error type: {type(e)}")
-            logger.error(f"Error details: {e.__dict__}")
-            raise
-        
-        # Extract tool results
-        results = extract_tool_results(response)
-        logger.info("Successfully extracted tool results")
-        
-        # Use process_tool_results instead of inline processing
-        message, action = process_tool_results(results)
-        
-        # Return simplified response
-        logger.info(f"Sending response - Message: {message}, Action: {action}")
-        return ChatResponse(
-            message=message,
-            action=action,
-            metadata={
-                "debug": "Simplified response for testing"
+            # Send message using new API format
+            letta_request = {
+                "agent_id": mapping.letta_agent_id,
+                "messages": [{
+                    "content": request.message,
+                    "role": message_role,
+                    "name": speaker_name
+                }]
             }
-        )
+            
+            response = direct_client.agents.messages.create(**letta_request)
+            
+            # Use our existing response handling
+            result = extract_agent_response(response)
+            return ChatResponse(
+                message=result["message"],
+                action=result.get("action", {"type": "none"}),
+                metadata={
+                    "tool_calls": result["tool_calls"],
+                    "reasoning": result.get("reasoning", "")
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
+            return ChatResponse(
+                message="Something went wrong!",
+                action={"type": "none"},
+                metadata={"error": str(e)}
+            )
 
     except Exception as e:
         logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
@@ -794,41 +797,14 @@ async def chat_with_npc_v3(request: ChatRequest):
             # Get NPC details
             npc_details = get_npc_context(request.npc_id)
             
-            # Create agent with required memory blocks
+            # Create new agent with updated blocks
+            blocks = create_memory_blocks(npc_details)
             agent = create_personalized_agent_v3(
-                name=npc_details['display_name'],  # Just use NPC name
-                client=direct_client,
-                minimal_prompt=True,
-                memory_blocks={
-                    # Keep existing memory blocks structure
-                    "persona": {
-                        "name": npc_details['display_name'],
-                        "personality": npc_details.get('system_prompt', ''),
-                        "interests": [],
-                        "journal": []
-                    },
-                    "status": {
-                        "current_location": request.context.get('npc_location', 'Unknown'),
-                        "current_action": f"Just spawned at {datetime.now().isoformat()}",
-                        "movement_state": "stationary"
-                    },
-                    "group_members": {
-                        "members": {},
-                        "summary": "No players nearby",
-                        "updates": [],
-                        "last_updated": datetime.now().isoformat()
-                    },
-                    "locations": {
-                        "known_locations": [
-                            {
-                                "name": loc["name"],
-                                "coordinates": loc["coordinates"],
-                                "slug": loc["slug"]
-                            }
-                            for loc in get_all_locations()
-                        ]
-                    }
-                }
+                name=f"npc_{npc_details['display_name']}",
+                memory_blocks=blocks,
+                llm_type="openai",
+                with_custom_tools=True,
+                prompt_version="FULL"  # Case sensitive
             )
 
             # Create mapping using v3 function
@@ -850,38 +826,36 @@ async def chat_with_npc_v3(request: ChatRequest):
             logger.info(f"  message: {request.message}")
             logger.info(f"  speaker_name: {speaker_name}")
             
-            response = direct_client.send_message(
-                agent_id=mapping.letta_agent_id,
-                role=message_role,
-                message=request.message,
-                name=speaker_name
-            )
-            
-            logger.info(f"Response type: {type(response)}")
-            logger.info(f"Response content: {response}")
-            
-        except Exception as e:
-            logger.error(f"Error sending message to Letta: {str(e)}")
-            logger.error(f"Error type: {type(e)}")
-            logger.error(f"Error details: {e.__dict__}")
-            raise
-        
-        # Extract tool results (using existing v2 code)
-        results = extract_tool_results(response)
-        logger.info("Successfully extracted tool results")
-        
-        # Use process_tool_results instead of inline processing
-        message, action = process_tool_results(results)
-        
-        # Return simplified response
-        logger.info(f"Sending response - Message: {message}, Action: {action}")
-        return ChatResponse(
-            message=message,
-            action=action,
-            metadata={
-                "debug": "Simplified response for testing"
+            # Send message using new API format
+            letta_request = {
+                "agent_id": mapping.letta_agent_id,
+                "messages": [{
+                    "content": request.message,
+                    "role": message_role,
+                    "name": speaker_name
+                }]
             }
-        )
+            
+            response = direct_client.agents.messages.create(**letta_request)
+            
+            # Use our existing response handling
+            result = extract_agent_response(response)
+            return ChatResponse(
+                message=result["message"],
+                action=result.get("action", {"type": "none"}),
+                metadata={
+                    "tool_calls": result["tool_calls"],
+                    "reasoning": result.get("reasoning", "")
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
+            return ChatResponse(
+                message="Something went wrong!",
+                action={"type": "none"},
+                metadata={"error": str(e)}
+            )
 
     except Exception as e:
         logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
@@ -1171,4 +1145,24 @@ async def get_queue_status():
     except Exception as e:
         logger.error(f"[CHAT_V4] Queue status error: {str(e)}")
         raise
+
+def create_memory_blocks(npc_details: dict) -> dict:
+    """Create standardized memory blocks for NPC"""
+    return {
+        "locations": {
+            "known_locations": [loc["name"] for loc in get_all_locations()],
+            "visited_locations": [],
+            "favorite_spots": []
+        },
+        "status": "Ready to interact with visitors",
+        "group_members": {
+            "members": {},
+            "summary": "No current group members",
+            "updates": [],
+            "last_updated": ""
+        },
+        "persona": f"""I am {npc_details['display_name']}.
+{npc_details['system_prompt']}""",
+        "journal": "[]"  # New required block
+    }
 
