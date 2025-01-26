@@ -64,6 +64,8 @@ from pathlib import Path
 from .queue_system import queue_system, ChatQueueItem, SnapshotQueueItem
 from .snapshot_processor import enrich_snapshot_with_context
 from .main import LETTA_CONFIG
+from .group_manager import GroupMembershipManager
+from letta_templates.npc_prompts import PLAYER_JOIN_MESSAGE, PLAYER_LEAVE_MESSAGE
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -755,65 +757,87 @@ def create_agent_memory(
 @router.post("/snapshot/game")
 async def process_game_snapshot(snapshot: GameSnapshot):
     try:
-        logger.debug("Processing snapshot with our new processor...")
+        logger.info("=== Processing New Game Snapshot ===")
+        logger.debug(f"Raw snapshot data: {json.dumps(snapshot.dict(), indent=2)}")
         
-        # Enrich snapshot with location and other context
         enriched_snapshot = enrich_snapshot_with_context(snapshot)
+        logger.info("Snapshot enriched with context")
         
-        # Log interesting changes
+        group_manager = GroupMembershipManager()
+        logger.info(f"Group Manager State - Pending Removals: {group_manager.pending_removals}")
+        
+        # Process each entity
         for entity_id, context in enriched_snapshot.humanContext.items():
-            if context.recentInteractions:
-                latest = context.recentInteractions[-1]
-                logger.info(f"Entity {entity_id}: {latest['narrative']}")
-        
-        # Create and enqueue the snapshot for analysis
-        snapshot_item = SnapshotQueueItem(
-            clusters=snapshot.clusters,
-            human_context=snapshot.humanContext,
-            timestamp=time.time()
-        )
-        await queue_system.enqueue_snapshot(snapshot_item)
-        
-        # Now update NPC states using the enriched data
-        for cluster in enriched_snapshot.clusters:
-            npc_members = [m for m in cluster.members if m in NPC_CACHE]
+            if entity_id not in NPC_CACHE:
+                continue
+                
+            logger.info(f"\n=== Processing NPC: {entity_id} ===")
+            prev_state = get_entity_previous_state(entity_id) or {}
+            agent_id = get_agent_id(get_npc_id_from_name(entity_id))
             
-            for npc_name in npc_members:
-                npc_id = get_npc_id_from_name(npc_name)
-                agent_id = get_agent_id(npc_id)
+            if not agent_id:
+                logger.warning(f"No agent found for NPC {entity_id}, skipping")
+                continue
+            
+            # Group Changes
+            if context.currentGroups:
+                current_members = set(context.currentGroups.members)
+                prev_members = set(prev_state.get('currentGroups', {}).get('members', []))
                 
-                if not agent_id:
-                    logger.warning(f"No agent found for NPC {npc_name}")
-                    continue
+                # Log group state
+                logger.info(f"Group state for {entity_id}:")
+                logger.info(f"- Current members: {current_members}")
+                logger.info(f"- Previous members: {prev_members}")
                 
-                # Get enriched context with narrative
-                npc_context = enriched_snapshot.humanContext.get(npc_name, {})
-                latest_interaction = npc_context.recentInteractions[-1] if npc_context.recentInteractions else None
+                # New members
+                new_members = current_members - prev_members
+                if new_members:
+                    logger.info(f"New members detected: {new_members}")
+                    for member in new_members:
+                        player_info = get_player_info(member)
+                        logger.debug(f"Player info for {member}: {player_info}")
+                        
+                        await direct_client.agents.messages.create(
+                            agent_id=agent_id,
+                            message=PLAYER_JOIN_MESSAGE.format(
+                                name=member,
+                                player_id=member,
+                                appearance=player_info.get('avatar_description', '')
+                            ),
+                            role="system"
+                        )
+                        logger.info(f"Sent join message for {member}")
                 
-                # Update location status using enriched narrative
-                if latest_interaction:
-                    status = update_location_status(
-                        client=direct_client,
-                        agent_id=agent_id,
-                        current_location=npc_context.location,
-                        current_action=latest_interaction.narrative
-                    )
+                # Departing members
+                departed = prev_members - current_members
+                if departed:
+                    logger.info(f"Departing members detected: {departed}")
+                    for member in departed:
+                        group_manager.queue_removal(member)
+                        await direct_client.agents.messages.create(
+                            agent_id=agent_id,
+                            message=PLAYER_LEAVE_MESSAGE.format(
+                                name=member,
+                                player_id=member
+                            ),
+                            role="system"
+                        )
+                        logger.info(f"Sent leave message for {member}")
                 
-                # Update group using cluster data
-                group = update_group_members_v2(
-                    client=direct_client,
-                    agent_id=agent_id,
-                    nearby_players=[{
-                        "id": m,
-                        "name": m,
-                        "location": enriched_snapshot.humanContext.get(m, {}).get("location", "Unknown")
-                    } for m in cluster.members if m != npc_name]
-                )
+                # Check expired removals
+                expired = group_manager.get_expired_removals()
+                if expired:
+                    logger.info(f"Processing expired removals: {expired}")
+            
+            # Status Updates
+            logger.info("Processing status updates...")
+            await update_status_block(entity_id, context, enriched_snapshot)
         
-        return {"status": "success", "data": enriched_snapshot}
+        logger.info("=== Snapshot Processing Complete ===")
+        return {"status": "success"}
         
     except Exception as e:
-        logger.error(f"Error processing snapshot: {str(e)}")
+        logger.error(f"Error processing snapshot: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/chat/v3", response_model=ChatResponse)
