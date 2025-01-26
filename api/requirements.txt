@@ -9,3 +9,11 @@ pillow
 python-slugify
 letta>=0.5.5
 git+ssh://git@github.com/glindberg2000/letta-roblox-client.git@main#egg=letta_roblox&subdirectory=src
+pydantic
+aiohttp
+openai
+Pillow
+numpy
+scipy
+letta-templates @ git+https://github.com/glindberg2000/letta-templates.git@v0.9.7
+pytest==7.4.3

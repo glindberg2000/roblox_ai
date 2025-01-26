@@ -766,13 +766,49 @@ async def process_game_snapshot(snapshot: GameSnapshot):
                 latest = context.recentInteractions[-1]
                 logger.info(f"Entity {entity_id}: {latest['narrative']}")
         
-        # Create and enqueue the snapshot
+        # Create and enqueue the snapshot for analysis
         snapshot_item = SnapshotQueueItem(
             clusters=snapshot.clusters,
             human_context=snapshot.humanContext,
             timestamp=time.time()
         )
         await queue_system.enqueue_snapshot(snapshot_item)
+        
+        # Now update NPC states using the enriched data
+        for cluster in enriched_snapshot.clusters:
+            npc_members = [m for m in cluster.members if m in NPC_CACHE]
+            
+            for npc_name in npc_members:
+                npc_id = get_npc_id_from_name(npc_name)
+                agent_id = get_agent_id(npc_id)
+                
+                if not agent_id:
+                    logger.warning(f"No agent found for NPC {npc_name}")
+                    continue
+                
+                # Get enriched context with narrative
+                npc_context = enriched_snapshot.humanContext.get(npc_name, {})
+                latest_interaction = npc_context.recentInteractions[-1] if npc_context.recentInteractions else None
+                
+                # Update location status using enriched narrative
+                if latest_interaction:
+                    status = update_location_status(
+                        client=direct_client,
+                        agent_id=agent_id,
+                        current_location=npc_context.location,
+                        current_action=latest_interaction.narrative
+                    )
+                
+                # Update group using cluster data
+                group = update_group_members_v2(
+                    client=direct_client,
+                    agent_id=agent_id,
+                    nearby_players=[{
+                        "id": m,
+                        "name": m,
+                        "location": enriched_snapshot.humanContext.get(m, {}).get("location", "Unknown")
+                    } for m in cluster.members if m != npc_name]
+                )
         
         return {"status": "success", "data": enriched_snapshot}
         
@@ -797,14 +833,14 @@ async def chat_with_npc_v3(request: ChatRequest):
             # Get NPC details
             npc_details = get_npc_context(request.npc_id)
             
-            # Create new agent with updated blocks
+            # Create new agent with display name
             blocks = create_memory_blocks(npc_details)
             agent = create_personalized_agent_v3(
-                name=f"npc_{npc_details['display_name']}",
+                name=npc_details['display_name'],  # Just use display_name directly
                 memory_blocks=blocks,
                 llm_type="openai",
                 with_custom_tools=True,
-                prompt_version="FULL"  # Case sensitive
+                prompt_version="FULL"
             )
 
             # Create mapping using v3 function

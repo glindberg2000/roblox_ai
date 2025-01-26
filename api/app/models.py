@@ -121,6 +121,7 @@ class GroupData(BaseModel):
     npcs: int
     players: int
     formed: int
+    updates: List[str] = []
 
 class PositionData(BaseModel):
     x: float
@@ -142,7 +143,6 @@ class PositionData(BaseModel):
     def get_location_narrative(self) -> str:
         """Generate narrative description of position relative to known locations"""
         try:
-            # Import cache here to avoid circular imports
             from .cache import LOCATION_CACHE
             
             logger.debug(f"Generating location narrative for position ({self.x}, {self.y}, {self.z})")
@@ -156,13 +156,12 @@ class PositionData(BaseModel):
 
             for slug, loc_data in LOCATION_CACHE.items():
                 loc_x, loc_y, loc_z = loc_data["coordinates"]
-                distance = (
-                    (self.x - loc_x)**2 + 
-                    (self.y - loc_y)**2 + 
-                    (self.z - loc_z)**2
-                )**0.5
+                # Calculate distance the same way as test
+                distance = ((self.x - loc_x)**2 + 
+                           (self.y - loc_y)**2 + 
+                           (self.z - loc_z)**2)**0.5
                 
-                logger.debug(f"Distance to {loc_data['name']}: {distance}")
+                logger.debug(f"Distance to {loc_data['name']}: {distance:.1f}")
 
                 if distance < min_distance:
                     min_distance = distance
@@ -181,17 +180,21 @@ class PositionData(BaseModel):
 
     def _get_distance_description(self, distance: float, location_name: str) -> str:
         """Helper to generate distance-based description"""
-        if distance <= 5:
-            return f"at the entrance to {location_name}"
-        elif distance <= 15:
-            return f"right outside {location_name}"
-        elif distance <= 30:
-            return f"near {location_name}"
-        elif distance <= 50:
-            return f"in the vicinity of {location_name}"
+        logger.debug(f"Calculating description for distance {distance:.1f} to {location_name}")
+        
+        if distance < 5:
+            desc = f"at the entrance to {location_name}"
+        elif distance < 15:
+            desc = f"right outside {location_name}"
+        elif distance < 30:
+            desc = f"near {location_name}"
+        elif distance < 50:
+            desc = f"in the vicinity of {location_name}"
         else:
-            # For very far locations, let's just use coordinates
-            return f"at ({self.x}, {self.y}, {self.z})"
+            desc = f"at ({self.x}, {self.y}, {self.z})"
+        
+        logger.debug(f"Generated description: {desc} (distance: {distance:.1f})")
+        return desc
 
 class HumanContextData(BaseModel):
     relationships: List[Any] = []
@@ -204,7 +207,7 @@ class HumanContextData(BaseModel):
     velocity: Optional[List[float]] = None  # [x, y, z] velocity components
 
 class GameSnapshot(BaseModel):
-    timestamp: int
-    clusters: List[ClusterData]
-    events: List[Any]
-    humanContext: Dict[str, HumanContextData]
+    timestamp: int  # Required
+    events: List[Dict[str, Any]]  # Required
+    clusters: List[Dict[str, Any]]
+    humanContext: Dict[str, Any]

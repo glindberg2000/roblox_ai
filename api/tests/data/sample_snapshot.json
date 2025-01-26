@@ -1,0 +1,43 @@
+{
+    "timestamp": 1737874917,
+    "events": [],
+    "clusters": [
+        {
+            "members": ["Kaiden", "Goldie", "Oscar", "Noobster", "Diamond"],
+            "npcs": 5,
+            "players": 0
+        },
+        {
+            "members": ["Pete"],
+            "npcs": 1,
+            "players": 0
+        }
+    ],
+    "humanContext": {
+        "Diamond": {
+            "relationships": [],
+            "currentGroups": {
+                "members": ["Kaiden", "Goldie", "Oscar", "Noobster", "Diamond"],
+                "npcs": 5,
+                "players": 0,
+                "formed": 1737874916
+            },
+            "recentInteractions": [
+                {
+                    "timestamp": 1737874917,
+                    "narrative": "Standing | in the vicinity of Chipotle | With Kaiden, Goldie, Oscar, Noobster"
+                }
+            ],
+            "lastSeen": 1737874916,
+            "position": {"x": 7.87, "y": 3.0, "z": -12.006},
+            "location": "Unknown Area",
+            "health": {
+                "state": "Running",
+                "current": 100,
+                "max": 100,
+                "velocity": 0,
+                "isMoving": false
+            }
+        }
+    }
+} 
