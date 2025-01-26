@@ -1,7 +1,7 @@
 """In-memory cache for static game data"""
 import logging
-from typing import Dict
-from .database import get_db, get_all_locations
+from typing import Dict, Optional
+from .database import get_db, get_all_locations, get_player_info as db_get_player_info
 
 logger = logging.getLogger("roblox_app")
 
@@ -9,6 +9,7 @@ logger = logging.getLogger("roblox_app")
 NPC_CACHE: Dict[str, dict] = {}
 LOCATION_CACHE: Dict[str, dict] = {}
 AGENT_ID_CACHE: Dict[str, str] = {}
+PLAYER_CACHE: Dict[str, Dict] = {}  # New player info cache
 
 def init_static_cache():
     """Initialize static data caches on server boot"""
@@ -90,3 +91,23 @@ def get_npc_description(display_name: str) -> str:
 def get_agent_id(npc_id: str) -> str:
     """Get agent ID from NPC ID using cache"""
     return AGENT_ID_CACHE.get(npc_id) 
+
+def get_player_info(player_id: str) -> Optional[Dict]:
+    """Get player info from cache or database"""
+    if player_id in PLAYER_CACHE:
+        logger.debug(f"Cache hit for player {player_id}")
+        return PLAYER_CACHE[player_id]
+        
+    # Cache miss - get from DB and cache it
+    logger.debug(f"Cache miss for player {player_id}, fetching from DB")
+    player_info = db_get_player_info(player_id)
+    if player_info:
+        PLAYER_CACHE[player_id] = player_info
+        
+    return player_info
+
+def invalidate_player_cache(player_id: str) -> None:
+    """Remove player from cache (e.g., when description updates)"""
+    if player_id in PLAYER_CACHE:
+        del PLAYER_CACHE[player_id]
+        logger.info(f"Invalidated cache for player {player_id}") 

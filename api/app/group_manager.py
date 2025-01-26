@@ -2,10 +2,12 @@ from typing import Dict, Set
 import time
 import logging
 from .models import HumanContextData
-from .database import get_player_info  # For avatar descriptions
-from .letta_client import direct_client
-from .letta_utils import extract_tool_results
-from .npc_cache import get_npc_id_from_name, get_agent_id
+from .cache import (  # Use cache instead of direct DB calls
+    get_player_info,
+    get_npc_id_from_name,
+    get_agent_id,
+    NPC_CACHE
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,8 +101,7 @@ class GroupMembershipManager:
                         f"any important details about them."
             
             # Let the NPC process the new members through its own tools
-            await direct_client.agents.messages.create(
-                agent_id=agent_id,
+            await agent_id.messages.create(
                 role="system",
                 content=system_msg
             )
@@ -133,8 +134,7 @@ class GroupMembershipManager:
                 try:
                     # Final notification about member removal
                     system_msg = f"[SYSTEM] {member} has been removed from your group."
-                    await direct_client.agents.messages.create(
-                        agent_id=agent_id,
+                    await agent_id.messages.create(
                         role="system",
                         content=system_msg
                     )
