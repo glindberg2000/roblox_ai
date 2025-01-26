@@ -13,8 +13,24 @@ logger = logging.getLogger(__name__)
 
 class GroupMembershipManager:
     def __init__(self):
-        self.pending_removals: Dict[str, float] = {}  # {member_id: timestamp}
-        self.removal_timeout = 300  # 5 minutes
+        self.pending_removals: Dict[str, float] = {}  # For future use
+    
+    async def handle_group_change(self, npc_id: str, context: HumanContextData, prev_state: Dict):
+        """Handle immediate group membership changes"""
+        if not context.currentGroups:
+            return
+            
+        current_members = set(context.currentGroups.members)
+        prev_members = set(prev_state.get('currentGroups', {}).get('members', []))
+        
+        # Log changes
+        if current_members != prev_members:
+            added = current_members - prev_members
+            removed = prev_members - current_members
+            if added:
+                logger.info(f"Members added to {npc_id}'s group: {added}")
+            if removed:
+                logger.info(f"Members removed from {npc_id}'s group: {removed}")
     
     def cancel_pending_removal(self, member_id: str):
         """Cancel pending removal if member returns"""
@@ -39,27 +55,6 @@ class GroupMembershipManager:
             del self.pending_removals[member]
         return expired
 
-    async def handle_group_change(self, npc_id: str, context: HumanContextData, prev_state: Dict):
-        """Handle group membership changes with delayed removal"""
-        if not context.currentGroups:
-            return
-            
-        current_members = set(context.currentGroups.members)
-        prev_members = set(prev_state.get('currentGroups', {}).get('members', []))
-        
-        # Handle new members
-        new_members = current_members - prev_members
-        if new_members:
-            await self._handle_new_members(npc_id, new_members)
-        
-        # Handle departing members
-        departed = prev_members - current_members
-        if departed:
-            await self._handle_departing_members(npc_id, departed)
-        
-        # Process any pending removals
-        await self._process_pending_removals(npc_id)
-    
     async def _handle_new_members(self, npc_id: str, new_members: Set[str]):
         """Process new group members"""
         agent_id = get_agent_id(npc_id)

@@ -116,12 +116,9 @@ class ClusterData(BaseModel):
     npcs: int
     players: int
 
-class GroupData(BaseModel):
-    members: List[str]
-    npcs: int
-    players: int
-    formed: int
-    updates: List[str] = []
+class InteractionData(BaseModel):
+    timestamp: int
+    narrative: str
 
 class PositionData(BaseModel):
     x: float
@@ -196,15 +193,22 @@ class PositionData(BaseModel):
         logger.debug(f"Generated description: {desc} (distance: {distance:.1f})")
         return desc
 
+class GroupData(BaseModel):
+    members: List[str]
+    npcs: int
+    players: int
+    formed: int
+    updates: List[str] = []
+
 class HumanContextData(BaseModel):
-    relationships: List[Any] = []
-    currentGroups: GroupData
-    recentInteractions: List[Any] = []
+    relationships: List[Dict] = []
+    currentGroups: Optional[GroupData] = None
+    recentInteractions: List[InteractionData] = []
     lastSeen: int
     position: Optional[PositionData] = None
     location: Optional[str] = None
     health: Optional[Dict] = None
-    velocity: Optional[List[float]] = None  # [x, y, z] velocity components
+    velocity: Optional[Dict] = None
 
 class GameSnapshot(BaseModel):
     timestamp: int  # Required

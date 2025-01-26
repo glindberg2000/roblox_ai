@@ -6,7 +6,15 @@ from app.snapshot_processor import (
     generate_health_context,
     generate_activity_context
 )
-from app.models import GameSnapshot
+from app.models import (
+    GameSnapshot,
+    HumanContextData,
+    ClusterData
+)
+from unittest.mock import AsyncMock, patch
+from app.cache import NPC_CACHE, AGENT_ID_CACHE
+from app.status_manager import update_status_block
+import time
 
 def load_sample_snapshot():
     """Load sample snapshot from JSON file"""
@@ -38,6 +46,13 @@ def setup_location_cache():
     yield
     LOCATION_CACHE.clear()
 
+@pytest.fixture(autouse=True)
+def cleanup_caches():
+    """Clean up test entries from caches"""
+    yield
+    NPC_CACHE.clear()
+    AGENT_ID_CACHE.clear()
+
 def test_snapshot_enrichment():
     """Test snapshot enrichment with real data"""
     snapshot = load_sample_snapshot()
@@ -47,22 +62,21 @@ def test_snapshot_enrichment():
     diamond = enriched.humanContext['Diamond']
     
     # 1. Test location enrichment
-    assert diamond['location'] == 'Chipotle'  # Should match nearest location
+    assert diamond.location == 'Chipotle'  # Use dot notation
     
     # 2. Test narrative generation
-    latest = diamond['recentInteractions'][-1]
-    # Diamond is very close to Chipotle
-    assert 'at the entrance to Chipotle' in latest['narrative']
+    latest = diamond.recentInteractions[-1]  # Access model attributes
+    assert 'at the entrance to Chipotle' in latest.narrative
     
     # 3. Test group data preservation
-    group = diamond['currentGroups']
-    assert len(group['members']) == 5
-    assert all(m in group['members'] for m in ['Kaiden', 'Goldie', 'Oscar', 'Noobster', 'Diamond'])
+    group = diamond.currentGroups
+    assert len(group.members) == 5
+    assert all(m in group.members for m in ['Kaiden', 'Goldie', 'Oscar', 'Noobster', 'Diamond'])
     
     # 4. Test position data preservation
-    assert abs(diamond['position']['x'] - 7.87) < 0.01
-    assert diamond['position']['y'] == 3.0
-    assert abs(diamond['position']['z'] - (-12.006)) < 0.01
+    assert abs(diamond.position.x - 7.87) < 0.01
+    assert diamond.position.y == 3.0
+    assert abs(diamond.position.z - (-12.006)) < 0.01
 
 def calculate_distance(pos1, pos2):
     """Calculate 3D distance between two positions"""
@@ -143,7 +157,7 @@ def test_location_narratives():
         )
         
         enriched = enrich_snapshot_with_context(snapshot)
-        narrative = enriched.humanContext['TestNPC']['recentInteractions'][-1]['narrative']
+        narrative = enriched.humanContext['TestNPC'].recentInteractions[-1].narrative  # Use dot notation
         print(f"Got: {narrative}")
         
         assert case['expected'] in narrative
@@ -244,36 +258,21 @@ def test_group_updates():
         
         # Check group updates
         diamond_context = enriched_new.humanContext['Diamond']
-        group = diamond_context['currentGroups']
+        group = diamond_context.currentGroups
         
         print(f"Old members: {case['old_members']}")
         print(f"New members: {case['new_members']}")
-        print(f"Updates: {group.get('updates', [])}")
+        print(f"Updates: {group.updates}")
         
         # Verify group state
-        assert set(group['members']) == set(case['new_members'])
+        assert set(group.members) == set(case['new_members'])
         
         # Verify updates
         if 'expected_update' in case:
-            # Handle both joins and leaves
-            if 'joined the group' in case['expected_update']:
-                expected_names = sorted([n.strip() for n in case['expected_update'].split('joined')[0].split(',')])
-                expected = f"{', '.join(expected_names)} joined the group"
-            else:  # left the group
-                expected_names = sorted([n.strip() for n in case['expected_update'].split('left')[0].split(',')])
-                expected = f"{', '.join(expected_names)} left the group"
-            
-            assert any(expected == update for update in group.get('updates', []))
-        elif 'expected_updates' in case:
+            assert case['expected_update'] in group.updates[0]
+        else:
             for expected in case['expected_updates']:
-                if 'joined the group' in expected:
-                    names = sorted([n.strip() for n in expected.split('joined')[0].split(',')])
-                    expected = f"{', '.join(names)} joined the group"
-                else:  # left the group
-                    names = sorted([n.strip() for n in expected.split('left')[0].split(',')])
-                    expected = f"{', '.join(names)} left the group"
-                
-                assert any(expected == update for update in group.get('updates', []))
+                assert any(expected in update for update in group.updates)
 
 def test_health_updates():
     """Test health status changes and narratives"""
@@ -442,6 +441,132 @@ def test_group_member_states():
     for case in test_cases:
         print(f"\nTesting {case['name']}")
         # Create and process snapshots...
+
+@pytest.mark.asyncio
+async def test_status_and_group_updates():
+    """Test status block updates and group member handling"""
+    npc_id = "test_npc"
+    agent_id = "test_agent"
+    current_time = int(time.time())  # Integer timestamp
+    
+    # Mock cache entries
+    NPC_CACHE[npc_id] = {"id": npc_id}
+    AGENT_ID_CACHE[npc_id] = agent_id
+    
+    # Create test snapshot with health, location, group
+    snapshot = GameSnapshot(
+        timestamp=current_time,  # Required field
+        events=[],              # Required field
+        clusters=[],            # Required field
+        humanContext={
+            npc_id: HumanContextData(
+                health={"current": 50, "max": 100},
+                location="Town Square",
+                currentGroups={
+                    "members": ["player1", "player2"],
+                    "npcs": 0,
+                    "players": 2,
+                    "formed": current_time  # Use integer timestamp
+                },
+                currentActivity="Standing",
+                lastSeen=current_time,  # Use integer timestamp
+                recentInteractions=[],
+                relationships=[]
+            )
+        }
+    )
+    
+    # Mock the client calls - update patch paths
+    with patch('app.status_manager.update_location_status', new_callable=AsyncMock) as mock_status_update, \
+         patch('app.status_manager.update_group_members_v2', new_callable=AsyncMock) as mock_group_update:
+        
+        # Process snapshot
+        enriched = enrich_snapshot_with_context(snapshot)
+        await update_status_block(npc_id, enriched.humanContext[npc_id], enriched)
+        
+        # Verify status update was called with correct data
+        mock_status_update.assert_called_once()
+        status_call = mock_status_update.call_args[1]
+        assert status_call['current_location'] == "Town Square"
+        assert "Status: Injured" in status_call['current_action']
+        assert "Group: With 2 others" in status_call['current_action']
+        
+        # Verify group update was called with correct members
+        mock_group_update.assert_called_once()
+        group_call = mock_group_update.call_args[1]
+        assert len(group_call['nearby_players']) == 2
+        assert all(p['id'] in ['player1', 'player2'] for p in group_call['nearby_players'])
+
+@pytest.mark.asyncio
+async def test_status_updates_with_missing_data():
+    """Test status updates with partial or missing data"""
+    npc_id = "test_npc"
+    agent_id = "test_agent"
+    
+    # Mock cache entries
+    NPC_CACHE[npc_id] = {"id": npc_id}
+    AGENT_ID_CACHE[npc_id] = agent_id
+    
+    test_cases = [
+        {
+            'name': 'missing_health',
+            'context': HumanContextData(
+                location="Town Square",
+                currentGroups={"members": [], "npcs": 0, "players": 0, "formed": int(time.time())},
+                lastSeen=int(time.time()),
+                recentInteractions=[],
+                relationships=[]
+            ),
+            'expected_updates': ["Location: Town Square", "Group: Alone"]
+        },
+        {
+            'name': 'partial_group_data',
+            'context': HumanContextData(
+                location="Town Square",
+                health={"current": 50, "max": 100},
+                currentGroups={"members": ["invalid_player"], "npcs": 0, "players": 1, "formed": int(time.time())},
+                lastSeen=int(time.time()),
+                recentInteractions=[],
+                relationships=[]
+            ),
+            'expected_updates': ["Location: Town Square", "Status: Injured", "Group: Alone"]
+        },
+        {
+            'name': 'minimal_data',
+            'context': HumanContextData(
+                location="Unknown",
+                currentGroups={"members": [], "npcs": 0, "players": 0, "formed": int(time.time())},
+                lastSeen=int(time.time()),
+                recentInteractions=[],
+                relationships=[]
+            ),
+            'expected_updates': ["Location: Unknown", "Group: Alone"]
+        }
+    ]
+    
+    current_time = int(time.time())
+    
+    for case in test_cases:
+        print(f"\nTesting {case['name']}")
+        
+        snapshot = GameSnapshot(
+            timestamp=current_time,
+            events=[],
+            clusters=[],
+            humanContext={npc_id: case['context']}
+        )
+        
+        with patch('app.status_manager.update_location_status', new_callable=AsyncMock) as mock_status_update:
+            await update_status_block(npc_id, case['context'], snapshot)
+            
+            # Verify status update was called with expected data
+            mock_status_update.assert_called_once()
+            status_call = mock_status_update.call_args[1]
+            
+            # Check that all expected updates are in the status text
+            status_text = status_call['current_action']
+            for expected in case['expected_updates']:
+                assert expected in status_text, f"Missing {expected} in status: {status_text}"
 
 if __name__ == "__main__":
     # Run test directly

@@ -2,7 +2,7 @@ from typing import Dict, Optional, List
 import math
 import logging
 from .cache import LOCATION_CACHE
-from .models import GameSnapshot, PositionData, HumanContextData, GroupData
+from .models import GameSnapshot, PositionData, HumanContextData, GroupData, InteractionData
 import json
 
 logger = logging.getLogger(__name__)
@@ -128,15 +128,16 @@ def _generate_group_updates(old_members: List[str], new_members: List[str]) -> L
     # Check for joins
     joined = new_set - old_set
     if joined:
-        # Sort alphabetically for consistent order
-        sorted_joined = sorted(joined)
-        updates.append(f"{', '.join(sorted_joined)} joined the group")
+        # Keep original order from new_members list
+        joined_ordered = [m for m in new_members if m in joined]
+        updates.append(f"{', '.join(joined_ordered)} joined the group")
     
     # Check for leaves
     left = old_set - new_set
     if left:
-        sorted_left = sorted(left)
-        updates.append(f"{', '.join(sorted_left)} left the group")
+        # Keep original order from old_members list
+        left_ordered = [m for m in old_members if m in left]
+        updates.append(f"{', '.join(left_ordered)} left the group")
     
     return updates
 
@@ -150,9 +151,26 @@ def enrich_snapshot_with_context(snapshot: GameSnapshot) -> GameSnapshot:
     for entity_id, context_dict in snapshot.humanContext.items():
         logger.debug(f"\nProcessing entity: {entity_id}")
         
-        # Convert raw dict to HumanContextData model
-        context = HumanContextData(**context_dict)
-        logger.debug(f"Raw context data: {context.model_dump()}")
+        # Convert all nested structures to models
+        if isinstance(context_dict, dict):
+            # Convert position to model if exists
+            if 'position' in context_dict and isinstance(context_dict['position'], dict):
+                context_dict['position'] = PositionData(**context_dict['position'])
+            
+            # Convert interactions to models
+            if 'recentInteractions' in context_dict:
+                context_dict['recentInteractions'] = [
+                    InteractionData(**interaction) 
+                    for interaction in context_dict['recentInteractions']
+                ]
+            
+            # Convert groups to model
+            if 'currentGroups' in context_dict:
+                context_dict['currentGroups'] = GroupData(**context_dict['currentGroups'])
+            
+            context = HumanContextData(**context_dict)
+        else:
+            context = context_dict
         
         # Process position if available
         if context.position:
@@ -165,7 +183,10 @@ def enrich_snapshot_with_context(snapshot: GameSnapshot) -> GameSnapshot:
             
             # Add narrative to recent interactions
             if context.recentInteractions:
-                context.recentInteractions[-1]["narrative"] = location_narrative
+                context.recentInteractions[-1] = InteractionData(
+                    timestamp=context.recentInteractions[-1].timestamp,
+                    narrative=location_narrative
+                )
         
         # Process group changes if we have previous state
         if previous_state and entity_id in previous_state:
@@ -186,7 +207,7 @@ def enrich_snapshot_with_context(snapshot: GameSnapshot) -> GameSnapshot:
                     )
         
         # Update the snapshot with enriched context
-        snapshot.humanContext[entity_id] = context.model_dump()
+        snapshot.humanContext[entity_id] = context
     
     # Store current state for next comparison
     update_previous_state(snapshot)

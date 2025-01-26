@@ -1226,3 +1226,68 @@ def create_memory_blocks(npc_details: dict) -> dict:
         "journal": "[]"  # New required block
     }
 
+async def update_status_block(entity_id: str, context: HumanContextData, enriched_snapshot: GameSnapshot):
+    """Update NPC status with enriched context and group info"""
+    try:
+        agent_id = get_agent_id(get_npc_id_from_name(entity_id))
+        if not agent_id:
+            logger.warning(f"No agent found for NPC {entity_id}")
+            return
+
+        updates = []
+        
+        # Location updates
+        if context.location:
+            updates.append(f"Location: {context.location}")
+        
+        # Health status
+        if context.health:
+            if context.health.get('state') == 'Dead':
+                updates.append("Status: Dead")
+            elif context.health.get('current') < context.health.get('max', 100) * 0.3:
+                updates.append("Status: Severely injured")
+            elif context.health.get('current') < context.health.get('max', 100) * 0.7:
+                updates.append("Status: Injured")
+        
+        # Activity state
+        if context.currentActivity:
+            updates.append(f"Activity: {context.currentActivity}")
+        
+        # Group status - immediate updates
+        if context.currentGroups and context.currentGroups.members:
+            member_info = []
+            for member in context.currentGroups.members:
+                player_info = get_player_info(member)
+                member_info.append({
+                    "id": member,
+                    "name": member,
+                    "location": enriched_snapshot.humanContext.get(member, {}).get('location', 'Unknown')
+                })
+            
+            # Update group members immediately
+            await update_group_members_v2(
+                client=direct_client,
+                agent_id=agent_id,
+                nearby_players=member_info
+            )
+            
+            # Add group summary to status
+            updates.append(f"Group: With {len(context.currentGroups.members)} others")
+        else:
+            updates.append("Group: Alone")
+        
+        # Update status if we have changes
+        if updates:
+            status_text = " | ".join(updates)
+            logger.info(f"Updating status for {entity_id}: {status_text}")
+            
+            await update_location_status(
+                client=direct_client,
+                agent_id=agent_id,
+                current_location=context.location,
+                current_action=status_text
+            )
+            
+    except Exception as e:
+        logger.error(f"Error updating status block: {e}", exc_info=True)
+
