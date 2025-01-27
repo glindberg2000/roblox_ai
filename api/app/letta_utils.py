@@ -1,6 +1,10 @@
 """Utilities for handling Letta responses"""
 import json
-from typing import Dict, Any
+import logging
+from typing import Dict, Any, List
+from .cache import LOCATION_CACHE  # Import the cache
+
+logger = logging.getLogger(__name__)
 
 def extract_action_result(response) -> Dict[str, Any]:
     """
@@ -101,3 +105,89 @@ def extract_tool_results(response):
             result['internal_thoughts'].append(msg.internal_monologue)
     
     return result
+
+def convert_tool_calls_to_action(tool_calls: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Convert Letta tool calls to Roblox action format
+    
+    Expected Roblox format:
+    {
+        type = "navigate"|"follow"|"unfollow"|"emote"|"end_conversation",
+        data = {
+            # For navigate:
+            coordinates = {x: float, y: float, z: float}
+            
+            # For follow:
+            target = str  # player name
+            
+            # For emote:
+            emote_type = str  # wave|laugh|dance|cheer|point|sit
+            target = str  # Optional target name
+        }
+    }
+    """
+    if not tool_calls:
+        return {"type": "none"}
+        
+    # Get first tool call
+    tool = tool_calls[0]
+    logger.debug(f"Converting tool to action: {tool}")
+    
+    if tool["tool"] == "perform_action":
+        args = tool["args"]
+        action_type = args.get("action")
+        
+        if action_type == "follow":
+            return {
+                "type": "follow",
+                "data": {
+                    "target": args.get("target")
+                }
+            }
+        elif action_type == "unfollow":
+            return {
+                "type": "unfollow",
+                "data": {}
+            }
+        elif action_type == "emote":
+            data = {
+                "emote_type": args.get("type")
+            }
+            if args.get("target"):
+                data["target"] = args["target"]
+            return {
+                "type": "emote",
+                "data": data
+            }
+            
+    elif tool["tool"] == "navigate_to":
+        # Get coordinates directly from cache
+        slug = tool["args"].get("destination_slug")
+        if slug and slug in LOCATION_CACHE:
+            location = LOCATION_CACHE[slug]
+            return {
+                "type": "navigate",
+                "data": {
+                    "coordinates": {
+                        "x": location["coordinates"][0],
+                        "y": location["coordinates"][1],
+                        "z": location["coordinates"][2]
+                    }
+                }
+            }
+            
+    elif tool["tool"] == "navigate_to_coordinates":
+        # Handle direct coordinate navigation
+        args = tool["args"]
+        return {
+            "type": "navigate",
+            "data": {
+                "coordinates": {
+                    "x": float(args.get("x", 0)),
+                    "y": float(args.get("y", 0)),
+                    "z": float(args.get("z", 0))
+                }
+            }
+        }
+        
+    logger.debug(f"Unknown tool type: {tool['tool']}")
+    return {"type": "none"}

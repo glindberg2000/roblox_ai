@@ -74,23 +74,32 @@ def refresh_npc_cache():
         raise
 
 def refresh_location_cache():
-    """Refresh location cache"""
+    """Refresh location cache from database"""
+    global LOCATION_CACHE
+    
     try:
-        # Use get_all_locations instead of direct DB query
-        locations = get_all_locations()
-        
-        LOCATION_CACHE.clear()
-        for loc in locations:
-            LOCATION_CACHE[loc['slug']] = {
-                'name': loc['name'],
-                'description': loc['description'],
-                'coordinates': loc['coordinates']
-            }
-        logger.info(f"Loaded {len(LOCATION_CACHE)} locations into cache")
-        
+        with get_db() as db:
+            cursor = db.execute("""
+                SELECT name, slug, position_x, position_y, position_z 
+                FROM assets 
+                WHERE is_location = 1
+            """)
+            locations = cursor.fetchall()
+            
+            LOCATION_CACHE.clear()
+            for loc in locations:
+                LOCATION_CACHE[loc['slug']] = {
+                    'name': loc['name'],
+                    'coordinates': [loc['position_x'], loc['position_y'], loc['position_z']]
+                }
+                
+            logger.debug("=== Location Cache ===")
+            logger.debug(f"Cached {len(LOCATION_CACHE)} locations:")
+            for slug, data in LOCATION_CACHE.items():
+                logger.debug(f"  {slug}: {data}")
+                
     except Exception as e:
-        logger.error(f"Error refreshing location cache: {str(e)}")
-        raise
+        logger.error(f"Error refreshing location cache: {e}")
 
 def get_npc_id_from_name(display_name: str) -> str:
     """Get NPC ID from display name using cache"""
@@ -128,3 +137,15 @@ def invalidate_player_cache(player_id: str) -> None:
     if player_id in PLAYER_CACHE:
         del PLAYER_CACHE[player_id]
         logger.info(f"Invalidated cache for player {player_id}") 
+
+# Current format needed:
+LOCATION_CACHE = {
+    'petes_stand': {  # Slug as key
+        'name': "Pete's Merch Stand",
+        'coordinates': [-6.8, 3.0, -115.0]
+    },
+    'chipotle': {
+        'name': 'Chipotle',
+        'coordinates': [8.0, 3.0, -12.0]
+    }
+} 

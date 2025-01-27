@@ -55,7 +55,8 @@ from .cache import (
     AGENT_ID_CACHE,   # Maps NPCs to agents
     get_npc_id_from_name,  # Cache lookup helpers
     get_agent_id,
-    get_npc_description
+    get_npc_description,
+    LOCATION_CACHE    # Add this import
 )
 from .mock_player import MockPlayer
 from .config import (
@@ -69,7 +70,7 @@ from .models import (
     ClusterData,
     HumanContextData
 )
-from .letta_utils import extract_tool_results
+from .letta_utils import extract_tool_results, convert_tool_calls_to_action
 from pathlib import Path
 from .queue_system import queue_system, ChatQueueItem, SnapshotQueueItem
 from .snapshot_processor import enrich_snapshot_with_context
@@ -452,9 +453,17 @@ Description: {player_info['description']}"""
             
             # Use our existing response handling
             result = extract_agent_response(response)
+            logger.debug("=== Letta Response ===")
+            logger.debug(f"Message: {result['message']}")
+            logger.debug(f"Tool calls: {result['tool_calls']}")
+            
+            # Convert tool calls to action
+            action = convert_tool_calls_to_action(result["tool_calls"])
+            logger.debug(f"Converted action: {action}")
+            
             return ChatResponse(
                 message=result["message"],
-                action=result.get("action", {"type": "none"}),
+                action=action,
                 metadata={
                     "tool_calls": result["tool_calls"],
                     "reasoning": result.get("reasoning", "")
@@ -714,7 +723,14 @@ def create_memory_blocks(npc_details: dict) -> dict:
     """Create standardized memory blocks for NPC"""
     return {
         "locations": {
-            "known_locations": [loc["name"] for loc in get_all_locations()],
+            "known_locations": [
+                {
+                    "name": data['name'],
+                    "slug": slug,
+                    "coordinates": data['coordinates']
+                }
+                for slug, data in LOCATION_CACHE.items()
+            ],
             "visited_locations": [],
             "favorite_spots": []
         },
@@ -825,11 +841,19 @@ async def chat_with_npc_v3(request: ChatRequest):
             
             response = direct_client.agents.messages.create(**letta_request)
             
-            # Use our existing response handling
+            # Extract tool calls and convert to action
             result = extract_agent_response(response)
+            logger.debug("=== Letta Response ===")
+            logger.debug(f"Message: {result['message']}")
+            logger.debug(f"Tool calls: {result['tool_calls']}")
+            
+            # Convert tool calls to proper Roblox action format
+            action = convert_tool_calls_to_action(result["tool_calls"])
+            logger.debug(f"Converted action: {action}")
+            
             return ChatResponse(
                 message=result["message"],
-                action=result.get("action", {"type": "none"}),
+                action=action,  # Now using our converted action
                 metadata={
                     "tool_calls": result["tool_calls"],
                     "reasoning": result.get("reasoning", "")
