@@ -209,6 +209,7 @@ class HumanContextData(BaseModel):
     location: Optional[str] = None
     health: Optional[Dict] = None
     velocity: Optional[Dict] = None
+    currentActivity: Optional[str] = None
 
 class GameSnapshot(BaseModel):
     timestamp: int  # Required

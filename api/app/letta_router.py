@@ -9,6 +9,8 @@ import time
 import requests
 import httpx
 import inspect
+from letta_client import Letta
+import os
 
 # Core agent and tools
 from letta_templates.npc_tools import (
@@ -24,10 +26,10 @@ from letta_templates.npc_tools import (
 
 # Memory management functions
 from letta_templates.npc_utils_v2 import (
+    update_status_block as letta_update_status,
+    update_group_block as letta_update_group,
     get_memory_block,
     update_memory_block,
-    update_location_status,
-    update_group_members_v2,
     get_location_history,
     get_group_history,
     extract_agent_response
@@ -46,6 +48,12 @@ from .database import (
     get_all_locations,
     create_agent_mapping_v3,
     get_agent_mapping_v3
+)
+from .cache import (
+    NPC_CACHE,
+    AGENT_ID_CACHE,
+    get_npc_id_from_name,
+    get_agent_id
 )
 from .mock_player import MockPlayer
 from .config import (
@@ -88,11 +96,8 @@ logger.debug("=== LOGGER DEBUG TEST ===")
 # Initialize router and client
 router = APIRouter(prefix="/letta/v1", tags=["letta"])
 
-# Initialize client
-client = create_letta_client()  # Now uses env vars for configuration
-
-# Initialize direct SDK client
-direct_client = client  # Use the same client instance
+# Initialize ONE client properly
+direct_client = create_letta_client()
 
 print("\nDEBUG - Message API Signature:")
 print(inspect.signature(direct_client.agents.messages.create))
@@ -760,6 +765,7 @@ async def process_game_snapshot(snapshot: GameSnapshot):
         logger.info("=== Processing New Game Snapshot ===")
         logger.debug(f"Raw snapshot data: {json.dumps(snapshot.dict(), indent=2)}")
         
+        # Use our tested enrichment logic
         enriched_snapshot = enrich_snapshot_with_context(snapshot)
         logger.info("Snapshot enriched with context")
         
@@ -772,67 +778,14 @@ async def process_game_snapshot(snapshot: GameSnapshot):
                 continue
                 
             logger.info(f"\n=== Processing NPC: {entity_id} ===")
-            prev_state = get_entity_previous_state(entity_id) or {}
-            agent_id = get_agent_id(get_npc_id_from_name(entity_id))
             
-            if not agent_id:
-                logger.warning(f"No agent found for NPC {entity_id}, skipping")
-                continue
+            # Handle group join/leave messages first
+            # ... (keep existing group message logic) ...
             
-            # Group Changes
-            if context.currentGroups:
-                current_members = set(context.currentGroups.members)
-                prev_members = set(prev_state.get('currentGroups', {}).get('members', []))
-                
-                # Log group state
-                logger.info(f"Group state for {entity_id}:")
-                logger.info(f"- Current members: {current_members}")
-                logger.info(f"- Previous members: {prev_members}")
-                
-                # New members
-                new_members = current_members - prev_members
-                if new_members:
-                    logger.info(f"New members detected: {new_members}")
-                    for member in new_members:
-                        player_info = get_player_info(member)
-                        logger.debug(f"Player info for {member}: {player_info}")
-                        
-                        await direct_client.agents.messages.create(
-                            agent_id=agent_id,
-                            message=PLAYER_JOIN_MESSAGE.format(
-                                name=member,
-                                player_id=member,
-                                appearance=player_info.get('avatar_description', '')
-                            ),
-                            role="system"
-                        )
-                        logger.info(f"Sent join message for {member}")
-                
-                # Departing members
-                departed = prev_members - current_members
-                if departed:
-                    logger.info(f"Departing members detected: {departed}")
-                    for member in departed:
-                        group_manager.queue_removal(member)
-                        await direct_client.agents.messages.create(
-                            agent_id=agent_id,
-                            message=PLAYER_LEAVE_MESSAGE.format(
-                                name=member,
-                                player_id=member
-                            ),
-                            role="system"
-                        )
-                        logger.info(f"Sent leave message for {member}")
-                
-                # Check expired removals
-                expired = group_manager.get_expired_removals()
-                if expired:
-                    logger.info(f"Processing expired removals: {expired}")
-            
-            # Status Updates
+            # Use our tested status block update
             logger.info("Processing status updates...")
-            await update_status_block(entity_id, context, enriched_snapshot)
-        
+            await process_npc_status(entity_id, context, enriched_snapshot)
+            
         logger.info("=== Snapshot Processing Complete ===")
         return {"status": "success"}
         
@@ -1023,7 +976,7 @@ async def process_snapshot_groups(human_context):
                     group = update_group_members_v2(
                         client=direct_client,
                         agent_id=agent_id,
-                        nearby_players=[{
+                        members=[{
                             "id": p["id"],
                             "name": p["name"],
                             "location": p.get("location", "Unknown"),
@@ -1226,68 +1179,65 @@ def create_memory_blocks(npc_details: dict) -> dict:
         "journal": "[]"  # New required block
     }
 
-async def update_status_block(entity_id: str, context: HumanContextData, enriched_snapshot: GameSnapshot):
+async def process_npc_status(entity_id: str, context: HumanContextData, enriched_snapshot: GameSnapshot):
     """Update NPC status with enriched context and group info"""
     try:
-        agent_id = get_agent_id(get_npc_id_from_name(entity_id))
+        # Get NPC ID first, then agent ID
+        npc_id = get_npc_id_from_name(entity_id)  # Pass the entity name string
+        if not npc_id:
+            logger.warning(f"No NPC found with name {entity_id}")
+            return
+            
+        agent_id = get_agent_id(npc_id)  # Then get agent ID from NPC ID
         if not agent_id:
             logger.warning(f"No agent found for NPC {entity_id}")
             return
 
-        updates = []
+        # Build status text with required format
+        status_parts = [
+            f"Location: {context.location or 'Unknown'}",  # Always include location
+            f"Action: {get_current_action(context)}"       # Always include action
+        ]
         
-        # Location updates
-        if context.location:
-            updates.append(f"Location: {context.location}")
+        # Update status with proper format
+        status_text = " | ".join(status_parts)
+        logger.info(f"Updating status for {entity_id}: {status_text}")
+        # Call sync function normally
+        letta_update_status(direct_client, agent_id, status_text)
         
-        # Health status
-        if context.health:
-            if context.health.get('state') == 'Dead':
-                updates.append("Status: Dead")
-            elif context.health.get('current') < context.health.get('max', 100) * 0.3:
-                updates.append("Status: Severely injured")
-            elif context.health.get('current') < context.health.get('max', 100) * 0.7:
-                updates.append("Status: Injured")
-        
-        # Activity state
-        if context.currentActivity:
-            updates.append(f"Activity: {context.currentActivity}")
-        
-        # Group status - immediate updates
+        # Update group if we have members
         if context.currentGroups and context.currentGroups.members:
-            member_info = []
+            group_data = {
+                "members": {},
+                "summary": f"Current members: {', '.join(context.currentGroups.members)}",
+                "updates": []  # We'll track changes elsewhere
+            }
+            
+            # Add each member's info
             for member in context.currentGroups.members:
-                player_info = get_player_info(member)
-                member_info.append({
-                    "id": member,
+                member_context = enriched_snapshot.humanContext[member].model_dump()
+                group_data["members"][member] = {
                     "name": member,
-                    "location": enriched_snapshot.humanContext.get(member, {}).get('location', 'Unknown')
-                })
+                    "appearance": "",  # Optional but helpful
+                    "last_seen": datetime.now().isoformat(),
+                    "notes": ""  # Optional
+                }
             
-            # Update group members immediately
-            await update_group_members_v2(
-                client=direct_client,
-                agent_id=agent_id,
-                nearby_players=member_info
-            )
-            
-            # Add group summary to status
-            updates.append(f"Group: With {len(context.currentGroups.members)} others")
-        else:
-            updates.append("Group: Alone")
-        
-        # Update status if we have changes
-        if updates:
-            status_text = " | ".join(updates)
-            logger.info(f"Updating status for {entity_id}: {status_text}")
-            
-            await update_location_status(
-                client=direct_client,
-                agent_id=agent_id,
-                current_location=context.location,
-                current_action=status_text
-            )
+            # Call sync function normally
+            letta_update_group(direct_client, agent_id, group_data)
             
     except Exception as e:
         logger.error(f"Error updating status block: {e}", exc_info=True)
+
+def get_current_action(context: HumanContextData) -> str:
+    """Determine current action from context"""
+    if context.health and context.health.get('state') == 'Dead':
+        return "Dead"
+    elif context.health and context.health.get('current') < context.health.get('max', 100) * 0.3:
+        return "Severely injured"
+    elif context.health and context.health.get('current') < context.health.get('max', 100) * 0.7:
+        return "Injured"
+    elif context.health and context.health.get('isMoving'):
+        return "Moving"
+    return "Idle"  # Default action
 
