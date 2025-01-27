@@ -22,19 +22,27 @@ def refresh_npc_cache():
     GAME_ID = 74  # Hardcode for now
     try:
         with get_db() as db:
-            # Load NPCs with asset data and agent IDs for current game
+            # Get agent mappings directly first
+            cursor = db.execute("""
+                SELECT npc_id, letta_agent_id 
+                FROM npc_agents 
+                WHERE participant_id = 'letta_v3'
+            """)
+            agent_mappings = {row['npc_id']: row['letta_agent_id'] for row in cursor.fetchall()}
+            logger.info("=== Agent Mappings from DB ===")
+            for npc_id, agent_id in agent_mappings.items():
+                logger.info(f"{npc_id} -> {agent_id}")
+
+            # Then get NPC data
             cursor = db.execute("""
                 SELECT 
-                    n.id as npc_id,
+                    n.npc_id,
                     n.display_name,
                     n.system_prompt,
-                    a.description as asset_description,
-                    na.letta_agent_id
+                    a.description as asset_description
                 FROM npcs n
-                LEFT JOIN assets a ON n.asset_id = a.id
-                LEFT JOIN npc_agents na ON n.npc_id = na.npc_id 
-                WHERE n.game_id = ? 
-                    AND (na.participant_id = 'letta_v3' OR na.participant_id IS NULL)
+                LEFT JOIN assets a ON n.asset_id = a.asset_id
+                WHERE n.game_id = ?
             """, (GAME_ID,))
             
             npcs = cursor.fetchall()
@@ -44,14 +52,20 @@ def refresh_npc_cache():
             AGENT_ID_CACHE.clear()
             
             # Update both NPC and agent ID caches
+            logger.info("=== Caching NPCs and Agents ===")
             for npc in npcs:
+                logger.info(f"Processing {npc['display_name']}")
+                logger.info(f"  NPC ID: {npc['npc_id']}")
+                logger.info(f"  Has agent: {npc['npc_id'] in agent_mappings}")
+                
                 NPC_CACHE[npc['display_name']] = {
                     'id': npc['npc_id'],
                     'system_prompt': npc['system_prompt'],
                     'description': npc['asset_description']
                 }
-                if npc['letta_agent_id']:  # Only cache if agent exists
-                    AGENT_ID_CACHE[npc['npc_id']] = npc['letta_agent_id']
+                if npc['npc_id'] in agent_mappings:
+                    AGENT_ID_CACHE[npc['npc_id']] = agent_mappings[npc['npc_id']]
+                    logger.info(f"  Cached agent: {agent_mappings[npc['npc_id']]}")
             
             logger.info(f"Loaded {len(NPC_CACHE)} NPCs into cache")
             logger.info(f"Loaded {len(AGENT_ID_CACHE)} agent IDs into cache")
@@ -90,7 +104,10 @@ def get_npc_description(display_name: str) -> str:
 
 def get_agent_id(npc_id: str) -> str:
     """Get agent ID from NPC ID using cache"""
-    return AGENT_ID_CACHE.get(npc_id) 
+    agent_id = AGENT_ID_CACHE.get(npc_id)
+    logger.info(f"Looking up agent for NPC {npc_id}")
+    logger.info(f"  Found in cache: {agent_id}")
+    return agent_id
 
 def get_player_info(player_id: str) -> Optional[Dict]:
     """Get player info from cache or database"""

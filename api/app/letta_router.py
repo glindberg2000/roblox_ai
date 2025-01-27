@@ -220,6 +220,8 @@ Description: {player_info['description']}"""
             print(f"Created new agent mapping: {agent_mapping}")
         else:
             print(f"Using existing agent {agent_mapping.letta_agent_id} for {request.participant_id}")
+            logger.info(f"Chat using agent {agent_mapping.letta_agent_id} for NPC {request.npc_id}")
+            logger.info(f"  This agent is in cache: {agent_mapping.letta_agent_id in AGENT_ID_CACHE.values()}")
         
         # Send message to agent
         logger.info(f"Sending message to agent {agent_mapping.letta_agent_id}")
@@ -772,45 +774,48 @@ async def chat_with_npc_v3(request: ChatRequest):
         message_role = "system" if request.message.startswith("[SYSTEM]") else "user"
         logger.info(f"Determined message role: {message_role} for message: {request.message[:50]}...")
         
-        # Get or create agent mapping (using v3 functions)
-        mapping = get_agent_mapping_v3(request.npc_id)
+        # Use cache first
+        agent_id = get_agent_id(request.npc_id)
         
-        if not mapping:
+        if not agent_id:
+            # Only create new agent if not in cache
+            logger.info(f"No cached agent for NPC {request.npc_id} - creating new one")
+            
             # Get NPC details
             npc_details = get_npc_context(request.npc_id)
             
-            # Create new agent with display name
+            # Create new agent
             blocks = create_memory_blocks(npc_details)
             agent = create_personalized_agent_v3(
-                name=npc_details['display_name'],  # Just use display_name directly
+                name=npc_details['display_name'],
                 memory_blocks=blocks,
                 llm_type="openai",
                 with_custom_tools=True,
                 prompt_version="FULL"
             )
 
-            # Create mapping using v3 function
-            mapping = create_agent_mapping_v3(
-                npc_id=request.npc_id,
-                agent_id=agent.id
-            )
+            # Create mapping and update cache
+            mapping = create_agent_mapping_v3(request.npc_id, agent.id)
+            AGENT_ID_CACHE[request.npc_id] = agent.id
+            logger.info(f"Created new agent {agent.id} and updated cache")
+            agent_id = agent.id
         else:
-            print(f"Using existing agent {mapping.letta_agent_id} for {request.participant_id}")
+            logger.info(f"Using cached agent {agent_id} for NPC {request.npc_id}")
 
-        # Send message to agent (using existing v2 code)
-        logger.info(f"Sending message to agent {mapping.letta_agent_id}")
+        # Send message using cached agent_id
+        logger.info(f"Sending message to agent {agent_id}")
         try:
             # Get name from context
             speaker_name = request.context.get("participant_name")
             logger.info(f"Message details:")
-            logger.info(f"  agent_id: {mapping.letta_agent_id}")
+            logger.info(f"  agent_id: {agent_id}")
             logger.info(f"  role: {message_role}")
             logger.info(f"  message: {request.message}")
             logger.info(f"  speaker_name: {speaker_name}")
             
             # Send message using new API format
             letta_request = {
-                "agent_id": mapping.letta_agent_id,
+                "agent_id": agent_id,
                 "messages": [{
                     "content": request.message,
                     "role": message_role,
@@ -1129,48 +1134,47 @@ async def get_queue_status():
         raise
 
 async def process_npc_status(entity_id: str, context: HumanContextData, enriched_snapshot: GameSnapshot):
-    """Update NPC status with enriched context and group info"""
     try:
-        # Get info directly from cache using display name
-        agent_id = get_agent_id(get_npc_id_from_name(entity_id))  # Use helper functions
+        agent_id = get_agent_id(get_npc_id_from_name(entity_id))
         if not agent_id:
             logger.warning(f"No agent ID found for NPC {entity_id} - skipping status update")
             return
             
-        # Now proceed with updates
-        status_parts = [
-            f"Location: {context.location or 'Unknown'}",
-            f"Action: {get_current_action(context)}"
-        ]
-        
         # Update status if needed
         if hasattr(context, 'needs_status_update') and context.needs_status_update:
-            status_text = " | ".join(status_parts)
+            status_text = f"Location: {context.location or 'Unknown'} | Action: {get_current_action(context)}"
             logger.info(f"Updating status for {entity_id}: {status_text}")
             letta_update_status(direct_client, agent_id, status_text)
         
-        # Update group if we have members
+        # Only update group if members changed
         if context.currentGroups and context.currentGroups.members:
-            group_data = {
-                "members": {},
-                "summary": f"Current members: {', '.join(context.currentGroups.members)}",
-                "updates": []  # We'll track changes elsewhere
-            }
+            # Get current group data
+            current_group = get_memory_block(direct_client, agent_id, "group_members")
+            current_members = set(current_group.get("members", {}).keys()) if current_group else set()
+            new_members = set(context.currentGroups.members)
             
-            # Add each member's info
-            for member in context.currentGroups.members:
-                member_context = enriched_snapshot.humanContext[member].model_dump()
-                appearance = get_npc_description(member) or ''  # Get from cache
-                group_data["members"][member] = {
-                    "name": member,
-                    "appearance": appearance,  # Add appearance from cache
-                    "last_seen": datetime.now().isoformat(),
-                    "notes": ""  # Optional
+            if current_members != new_members:
+                logger.info(f"Group members changed for {entity_id}")
+                logger.info(f"  Old members: {current_members}")
+                logger.info(f"  New members: {new_members}")
+                
+                group_data = {
+                    "members": {},
+                    "summary": f"Current members: {', '.join(new_members)}",
+                    "updates": []
                 }
-            
-            # Call sync function normally
-            letta_update_group(direct_client, agent_id, group_data)
-            
+                
+                for member in new_members:
+                    appearance = get_npc_description(member)
+                    group_data["members"][member] = {
+                        "name": member,
+                        "appearance": appearance or '',
+                        "last_seen": datetime.now().isoformat(),
+                        "notes": ""
+                    }
+                
+                letta_update_group(direct_client, agent_id, group_data)
+
     except Exception as e:
         logger.error(f"Error updating status block: {e}", exc_info=True)
 
