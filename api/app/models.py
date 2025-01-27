@@ -201,15 +201,15 @@ class GroupData(BaseModel):
     updates: List[str] = []
 
 class HumanContextData(BaseModel):
-    relationships: List[Dict] = []
-    currentGroups: Optional[GroupData] = None
-    recentInteractions: List[InteractionData] = []
-    lastSeen: int
+    health: Optional[Dict[str, Any]] = None
     position: Optional[PositionData] = None
+    currentGroups: Optional[GroupData] = None
+    recentInteractions: Optional[List[InteractionData]] = None
+    stateTimestamp: Optional[int] = None
+    lastSeen: Optional[int] = None
+    positionTimestamp: Optional[int] = None
     location: Optional[str] = None
-    health: Optional[Dict] = None
-    velocity: Optional[Dict] = None
-    currentActivity: Optional[str] = None
+    needs_status_update: bool = False
 
 class GameSnapshot(BaseModel):
     timestamp: int  # Required

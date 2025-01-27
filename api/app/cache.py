@@ -6,7 +6,7 @@ from .database import get_db, get_all_locations, get_player_info as db_get_playe
 logger = logging.getLogger("roblox_app")
 
 # Global caches
-NPC_CACHE: Dict[str, dict] = {}
+NPC_CACHE: Dict[str, dict] = {}  # What fields are actually in here?
 LOCATION_CACHE: Dict[str, dict] = {}
 AGENT_ID_CACHE: Dict[str, str] = {}
 PLAYER_CACHE: Dict[str, Dict] = {}  # New player info cache

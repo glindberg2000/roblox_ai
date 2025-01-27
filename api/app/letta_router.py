@@ -50,10 +50,12 @@ from .database import (
     get_agent_mapping_v3
 )
 from .cache import (
-    NPC_CACHE,
-    AGENT_ID_CACHE,
-    get_npc_id_from_name,
-    get_agent_id
+    NPC_CACHE,        # Contains all NPC info including descriptions
+    PLAYER_CACHE,     # Contains all player info
+    AGENT_ID_CACHE,   # Maps NPCs to agents
+    get_npc_id_from_name,  # Cache lookup helpers
+    get_agent_id,
+    get_npc_description
 )
 from .mock_player import MockPlayer
 from .config import (
@@ -74,6 +76,7 @@ from .snapshot_processor import enrich_snapshot_with_context
 from .main import LETTA_CONFIG
 from .group_manager import GroupMembershipManager
 from letta_templates.npc_prompts import PLAYER_JOIN_MESSAGE, PLAYER_LEAVE_MESSAGE
+from .utils import get_current_action  # Import from utils instead
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -705,59 +708,25 @@ def get_coordinates_for_slug(slug: str) -> Optional[Dict]:
         logger.error(f"Error getting coordinates for slug {slug}: {e}")
         return None
 
-def create_agent_memory(
-    direct_client: Any,
-    npc_details: Dict,
-    human_description: str
-) -> Dict[str, Any]:
-    """Create agent memory blocks including locations per LettaDev spec"""
-    # Get locations from database
-    known_locations = get_all_locations()
-    
-    # Simplify to just names and slugs
-    simplified_locations = [
-        {
-            "name": loc["name"],
-            "slug": loc["slug"]
-        } for loc in known_locations
-    ]
-    
-    logger.info(f"Loading {len(simplified_locations)} locations into agent memory")
-    logger.info(f"Simplified location data: {json.dumps(simplified_locations, indent=2)}")
-    
-    # Create memory blocks
-    persona_block = direct_client.create_block(
-        label="persona",
-        value=f"""My name is {npc_details['display_name']}.
-{npc_details['system_prompt']}""".strip(),
-        limit=2000
-    )
-    logger.info(f"Created persona block: {persona_block}")
-    
-    human_block = direct_client.create_block(
-        label="human",
-        value=human_description.strip(),
-        limit=2000
-    )
-    logger.info(f"Created human block: {human_block}")
-    
-    locations_block = direct_client.create_block(
-        label="locations",
-        value=json.dumps({
-            "known_locations": simplified_locations
-        }),
-        limit=5000
-    )
-    logger.info(f"Created locations block: {locations_block}")
-    
-    memory = {
-        "persona": persona_block,
-        "human": human_block,
-        "locations": locations_block
+def create_memory_blocks(npc_details: dict) -> dict:
+    """Create standardized memory blocks for NPC"""
+    return {
+        "locations": {
+            "known_locations": [loc["name"] for loc in get_all_locations()],
+            "visited_locations": [],
+            "favorite_spots": []
+        },
+        "status": "Ready to interact with visitors",
+        "group_members": {
+            "members": {},
+            "summary": "No current group members",
+            "updates": [],
+            "last_updated": ""
+        },
+        "persona": f"""I am {npc_details.get('name', npc_details.get('display_name'))}.
+{npc_details.get('system_prompt', '')}""",
+        "journal": "[]"
     }
-    logger.info(f"Created memory with blocks: {memory}")
-    
-    return memory
 
 @router.post("/snapshot/game")
 async def process_game_snapshot(snapshot: GameSnapshot):
@@ -1159,51 +1128,26 @@ async def get_queue_status():
         logger.error(f"[CHAT_V4] Queue status error: {str(e)}")
         raise
 
-def create_memory_blocks(npc_details: dict) -> dict:
-    """Create standardized memory blocks for NPC"""
-    return {
-        "locations": {
-            "known_locations": [loc["name"] for loc in get_all_locations()],
-            "visited_locations": [],
-            "favorite_spots": []
-        },
-        "status": "Ready to interact with visitors",
-        "group_members": {
-            "members": {},
-            "summary": "No current group members",
-            "updates": [],
-            "last_updated": ""
-        },
-        "persona": f"""I am {npc_details['display_name']}.
-{npc_details['system_prompt']}""",
-        "journal": "[]"  # New required block
-    }
-
 async def process_npc_status(entity_id: str, context: HumanContextData, enriched_snapshot: GameSnapshot):
     """Update NPC status with enriched context and group info"""
     try:
-        # Get NPC ID first, then agent ID
-        npc_id = get_npc_id_from_name(entity_id)  # Pass the entity name string
-        if not npc_id:
-            logger.warning(f"No NPC found with name {entity_id}")
+        # Get info directly from cache using display name
+        agent_id = get_agent_id(get_npc_id_from_name(entity_id))  # Use helper functions
+        if not agent_id:
+            logger.warning(f"No agent ID found for NPC {entity_id} - skipping status update")
             return
             
-        agent_id = get_agent_id(npc_id)  # Then get agent ID from NPC ID
-        if not agent_id:
-            logger.warning(f"No agent found for NPC {entity_id}")
-            return
-
-        # Build status text with required format
+        # Now proceed with updates
         status_parts = [
-            f"Location: {context.location or 'Unknown'}",  # Always include location
-            f"Action: {get_current_action(context)}"       # Always include action
+            f"Location: {context.location or 'Unknown'}",
+            f"Action: {get_current_action(context)}"
         ]
         
-        # Update status with proper format
-        status_text = " | ".join(status_parts)
-        logger.info(f"Updating status for {entity_id}: {status_text}")
-        # Call sync function normally
-        letta_update_status(direct_client, agent_id, status_text)
+        # Update status if needed
+        if hasattr(context, 'needs_status_update') and context.needs_status_update:
+            status_text = " | ".join(status_parts)
+            logger.info(f"Updating status for {entity_id}: {status_text}")
+            letta_update_status(direct_client, agent_id, status_text)
         
         # Update group if we have members
         if context.currentGroups and context.currentGroups.members:
@@ -1216,9 +1160,10 @@ async def process_npc_status(entity_id: str, context: HumanContextData, enriched
             # Add each member's info
             for member in context.currentGroups.members:
                 member_context = enriched_snapshot.humanContext[member].model_dump()
+                appearance = get_npc_description(member) or ''  # Get from cache
                 group_data["members"][member] = {
                     "name": member,
-                    "appearance": "",  # Optional but helpful
+                    "appearance": appearance,  # Add appearance from cache
                     "last_seen": datetime.now().isoformat(),
                     "notes": ""  # Optional
                 }

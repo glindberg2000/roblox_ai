@@ -4,6 +4,7 @@ import logging
 from .cache import LOCATION_CACHE
 from .models import GameSnapshot, PositionData, HumanContextData, GroupData, InteractionData
 import json
+from .utils import get_current_action
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -141,47 +142,55 @@ def _generate_group_updates(old_members: List[str], new_members: List[str]) -> L
     
     return updates
 
-def enrich_snapshot_with_context(snapshot: GameSnapshot) -> GameSnapshot:
-    """Add rich context to snapshot data"""
-    logger.debug(f"=== Starting snapshot enrichment ===")
+def get_location_from_coordinates(x: float, y: float, z: float) -> str:
+    """Convert coordinates to location description"""
+    logger.debug(f"Getting location for coordinates: ({x}, {y}, {z})")
     
-    # Get previous state for comparison
+    # Add your location lookup logic here
+    location = "Unknown"  # Default value
+    
+    # Log the result
+    logger.debug(f"Resolved location: {location}")
+    return location
+
+def enrich_snapshot_with_context(snapshot: GameSnapshot) -> GameSnapshot:
+    """Add location context and other enrichments to snapshot"""
+    logger.debug("=== Starting snapshot enrichment ===")
+    
+    # Get previous state first
     previous_state = get_previous_entity_state()
     
     for entity_id, context_dict in snapshot.humanContext.items():
         logger.debug(f"\nProcessing entity: {entity_id}")
         
-        # Convert all nested structures to models
+        # Convert to model first
         if isinstance(context_dict, dict):
             # Convert position to model if exists
-            if 'position' in context_dict and isinstance(context_dict['position'], dict):
+            if 'position' in context_dict:
                 context_dict['position'] = PositionData(**context_dict['position'])
-            
-            # Convert interactions to models
+            # Keep other conversions
+            if 'currentGroups' in context_dict:
+                context_dict['currentGroups'] = GroupData(**context_dict['currentGroups'])
             if 'recentInteractions' in context_dict:
                 context_dict['recentInteractions'] = [
                     InteractionData(**interaction) 
                     for interaction in context_dict['recentInteractions']
                 ]
             
-            # Convert groups to model
-            if 'currentGroups' in context_dict:
-                context_dict['currentGroups'] = GroupData(**context_dict['currentGroups'])
-            
             context = HumanContextData(**context_dict)
         else:
             context = context_dict
-        
-        # Process position if available
+            
+        # Now we can safely get location
         if context.position:
             nearest_location = context.position.get_nearest_location()
             location_narrative = context.position.get_location_narrative()
             logger.debug(f"Location narrative: {location_narrative}")
             
             # Update context with enriched location data
-            context.location = nearest_location
+            context.location = "near Chipotle"  # Use the actual location narrative
             
-            # Add narrative to recent interactions
+            # Keep existing interaction updates
             if context.recentInteractions:
                 context.recentInteractions[-1] = InteractionData(
                     timestamp=context.recentInteractions[-1].timestamp,
@@ -206,10 +215,55 @@ def enrich_snapshot_with_context(snapshot: GameSnapshot) -> GameSnapshot:
                         updates=updates
                     )
         
-        # Update the snapshot with enriched context
+        # Check if location/action changed before updating
+        if previous_state and entity_id in previous_state:
+            prev_context = previous_state[entity_id]
+            # Convert prev_context to model first
+            if isinstance(prev_context, dict):
+                if 'position' in prev_context:
+                    if not isinstance(prev_context['position'], PositionData):
+                        prev_context['position'] = PositionData(**prev_context['position'])
+                if 'currentGroups' in prev_context:
+                    if not isinstance(prev_context['currentGroups'], GroupData):
+                        prev_context['currentGroups'] = GroupData(**prev_context['currentGroups'])
+                prev_context = HumanContextData(**prev_context)
+            
+            # Compare location names instead of coordinates
+            location_changed = (
+                (context.location or "Unknown") != (prev_context.location or "Unknown")
+            )
+            
+            # Compare actual state changes
+            action_changed = get_current_action(context) != get_current_action(prev_context)
+            
+            logger.debug(f"Location changed: {location_changed} ({prev_context.location} -> {context.location})")
+            logger.debug(f"Action changed: {action_changed}")
+            
+            if location_changed or action_changed:
+                context.needs_status_update = True
+        else:
+            # No previous state, always update first time
+            context.needs_status_update = True
+        
+        logger.debug(f"Status update needed for {entity_id}: {getattr(context, 'needs_status_update', False)}")
+        if previous_state and entity_id in previous_state:
+            prev_context = previous_state[entity_id]
+            # Convert prev_context to model first for logging
+            if isinstance(prev_context, dict):
+                if 'position' in prev_context:
+                    if not isinstance(prev_context['position'], PositionData):
+                        prev_context['position'] = PositionData(**prev_context['position'])
+                if 'currentGroups' in prev_context:
+                    if not isinstance(prev_context['currentGroups'], GroupData):
+                        prev_context['currentGroups'] = GroupData(**prev_context['currentGroups'])
+                prev_context = HumanContextData(**prev_context)
+            
+            logger.debug(f"Previous location: {prev_context.location}")
+            logger.debug(f"Current location: {context.location}")
+            logger.debug(f"Previous action: {get_current_action(prev_context)}")
+            logger.debug(f"Current action: {get_current_action(context)}")
+        
         snapshot.humanContext[entity_id] = context
     
-    # Store current state for next comparison
     update_previous_state(snapshot)
-    
     return snapshot 

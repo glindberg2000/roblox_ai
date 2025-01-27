@@ -8,6 +8,7 @@ import os
 import shutil
 import logging
 from .paths import get_database_paths
+from .models import HumanContextData
 
 # Set up logger
 logger = logging.getLogger("roblox_app")
@@ -315,3 +316,15 @@ def save_databases(game_slug: str, db: sqlite3.Connection) -> None:
     except Exception as e:
         logger.error(f"Error saving databases: {str(e)}")
         raise
+
+def get_current_action(context: HumanContextData) -> str:
+    """Determine current action from context"""
+    if context.health and context.health.get('state') == 'Dead':
+        return "Dead"
+    elif context.health and context.health.get('current') < context.health.get('max', 100) * 0.3:
+        return "Severely injured"
+    elif context.health and context.health.get('current') < context.health.get('max', 100) * 0.7:
+        return "Injured"
+    elif context.health and context.health.get('isMoving'):
+        return "Moving"
+    return "Idle"  # Default action

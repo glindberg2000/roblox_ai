@@ -436,8 +436,9 @@ def fetch_npcs_by_game(game_id: int):
         """, (game_id,))
         return [dict(row) for row in cursor.fetchall()]
 
-def get_npc_context(npc_id: str):
-    """Get complete NPC context including asset info"""
+def get_npc_context(npc_id: str) -> Optional[Dict]:
+    """Get NPC details from database"""
+    # What fields are we selecting?
     print(f"Looking up NPC with ID: {npc_id}")
     with get_db() as db:
         cursor = db.execute("""
