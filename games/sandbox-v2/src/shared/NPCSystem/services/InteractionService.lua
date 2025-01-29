@@ -208,4 +208,9 @@ function InteractionService:getLatestClusters()
     return lastClusters or {}  -- Return cached clusters
 end
 
+function InteractionService:updateProximityMatrix()
+    local positions = self:getEntityPositions()
+    -- ... calculates clusters and stores in lastClusters
+end
+
 return InteractionService 

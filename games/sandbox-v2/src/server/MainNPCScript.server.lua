@@ -3,6 +3,7 @@
 local ServerScriptService = game:GetService("ServerScriptService")
 local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
 local LoggerService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LoggerService)
+local InteractionService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.InteractionService)
 
 local success, result = pcall(function()
 	return require(ServerScriptService:WaitForChild("InteractionController", 5))
@@ -84,8 +85,8 @@ local interactionController = npcManagerV3.interactionController
 LoggerService:info("SYSTEM", "NPC system V3 initialized")
 
 -- Add cooldown tracking
-local greetingCooldowns = {}
-local GREETING_COOLDOWN = 30 -- seconds between greetings
+local GREETING_COOLDOWN = 60 -- 60 seconds between greetings
+local greetingCooldowns = {} -- Track when NPCs last greeted each other
 
 -- Add at the top with other state variables
 local activeConversations = {
@@ -228,62 +229,73 @@ end
 setupChatConnections()
 
 local function checkNPCProximity()
-    for _, npc1 in pairs(npcManagerV3.npcs) do
-        -- Skip if no initiate_chat
-        local hasInitiateAbility = false
-        for _, ability in ipairs(npc1.abilities or {}) do
-            if ability == "initiate_chat" then
-                hasInitiateAbility = true
-                break
+    -- Use existing cluster system
+    local clusters = InteractionService:getLatestClusters()
+    
+    -- Check each cluster for NPC-NPC interactions
+    for _, cluster in ipairs(clusters) do
+        -- Only process clusters with multiple NPCs
+        if cluster.npcs >= 2 then
+            -- Get NPCs in this cluster
+            for i, npc1Name in ipairs(cluster.members) do
+                local npc1 = nil
+                for _, npc in pairs(npcManagerV3.npcs) do
+                    if npc.displayName == npc1Name then
+                        npc1 = npc
+                        break
+                    end
+                end
+                
+                if npc1 and not npc1.isInteracting then
+                    -- Look for another non-interacting NPC in same cluster
+                    for j = i + 1, #cluster.members do
+                        local npc2Name = cluster.members[j]
+                        local npc2 = nil
+                        for _, npc in pairs(npcManagerV3.npcs) do
+                            if npc.displayName == npc2Name then
+                                npc2 = npc
+                                break
+                            end
+                        end
+                        
+                        if npc2 and not npc2.isInteracting and 
+                           not activeConversations.npcToNPC[npc1.id] and
+                           not activeConversations.npcToNPC[npc2.id] then
+                            
+                            -- Check cooldown
+                            local cooldownKey = npc1.id .. "_" .. npc2.id
+                            local lastGreeting = greetingCooldowns[cooldownKey]
+                            if lastGreeting then
+                                local timeSinceLastGreeting = os.time() - lastGreeting
+                                if timeSinceLastGreeting < GREETING_COOLDOWN then
+                                    continue
+                                end
+                            end
+
+                            LoggerService:debug("INTERACTION", string.format(
+                                "NPCs in same cluster can interact: %s <-> %s",
+                                npc1.displayName,
+                                npc2.displayName
+                            ))
+                            
+                            -- Lock conversation
+                            activeConversations.npcToNPC[npc1.id] = {partner = npc2}
+                            activeConversations.npcToNPC[npc2.id] = {partner = npc1}
+                            
+                            -- Create mock participant and initiate
+                            local mockParticipant = npcManagerV3:createMockParticipant(npc2)
+                            local systemMessage = string.format(
+                                "[SYSTEM] Another NPC (%s) has entered your area. You can initiate a conversation if you'd like.",
+                                npc2.displayName
+                            )
+                            npcManagerV3:handleNPCInteraction(npc1, mockParticipant, systemMessage)
+                            greetingCooldowns[cooldownKey] = os.time()
+                            
+                            break -- Only start one interaction per NPC
+                        end
+                    end
+                end
             end
-        end
-        if not hasInitiateAbility then continue end
-
-        -- Scan for other NPCs in range
-        for _, npc2 in pairs(npcManagerV3.npcs) do
-            if npc1 == npc2 or npc2.isInteracting then continue end
-            if not npc2.model or not npc2.model.PrimaryPart then continue end
-
-            local distance = (npc1.model.PrimaryPart.Position - npc2.model.PrimaryPart.Position).Magnitude
-            local isInRange = distance <= npc1.responseRadius
-            
-            LoggerService:debug("RANGE", string.format(
-                "Distance between %s and %s: %.2f studs (Radius: %d, InRange: %s)",
-                npc1.displayName,
-                npc2.displayName,
-                distance,
-                npc1.responseRadius,
-                tostring(isInRange)
-            ))
-
-            -- Only proceed if in range and not already in conversation
-            if not isInRange then continue end
-            if activeConversations.npcToNPC[npc1.id] then continue end
-            if activeConversations.npcToNPC[npc2.id] then continue end
-
-            -- Check cooldown
-            local cooldownKey = npc1.id .. "_" .. npc2.id
-            local lastGreeting = greetingCooldowns[cooldownKey]
-            if lastGreeting then
-                local timeSinceLastGreeting = os.time() - lastGreeting
-                if timeSinceLastGreeting < GREETING_COOLDOWN then continue end
-            end
-
-            LoggerService:info("INTERACTION", string.format("%s sees %s and can initiate chat", 
-                npc1.displayName, npc2.displayName))
-            
-            -- Lock conversation
-            activeConversations.npcToNPC[npc1.id] = {partner = npc2}
-            activeConversations.npcToNPC[npc2.id] = {partner = npc1}
-            
-            -- Create mock participant and initiate
-            local mockParticipant = npcManagerV3:createMockParticipant(npc2)
-            local systemMessage = string.format(
-                "[SYSTEM] Another NPC (%s) has entered your area. You can initiate a conversation if you'd like.",
-                npc2.displayName
-            )
-            npcManagerV3:handleNPCInteraction(npc1, mockParticipant, systemMessage)
-            greetingCooldowns[cooldownKey] = os.time()
         end
     end
 end
@@ -402,3 +414,39 @@ EndInteractionEvent.OnServerEvent:Connect(function(player)
 end)
 
 LoggerService:info("SYSTEM", "NPC system V3 main script running")
+
+local function handleChatRequest(player)
+    local playerPosition = player.Character and player.Character.PrimaryPart
+    if not playerPosition then return end
+
+    -- Use existing cluster system
+    local clusters = InteractionService:getLatestClusters()
+    local playerCluster = nil
+    
+    -- Find which cluster the player is in
+    for _, cluster in ipairs(clusters) do
+        if table.find(cluster.members, player.Name) then
+            playerCluster = cluster
+            break
+        end
+    end
+
+    -- If player isn't in a cluster, they can't interact
+    if not playerCluster then return end
+
+    -- Find closest NPC that's in the same cluster
+    local closestNPC, closestDistance = nil, math.huge
+    for _, npc in pairs(npcManagerV3.npcs) do
+        if npc.model and npc.model.PrimaryPart then
+            -- Check if NPC is in same cluster as player
+            if table.find(playerCluster.members, npc.displayName) then
+                local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
+                if distance < closestDistance and not npc.isInteracting then
+                    closestNPC, closestDistance = npc, distance
+                end
+            end
+        end
+    end
+
+    return closestNPC, closestDistance
+end

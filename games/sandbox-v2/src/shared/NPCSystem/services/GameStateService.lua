@@ -208,15 +208,7 @@ function GameStateService:getContextForNPC(npcName)
     }
 end
 
--- Sync with backend
-function GameStateService:syncWithBackend()
-    if activeSyncCount > MAX_CONCURRENT_SYNCS then
-        LoggerService:warn("SNAPSHOT", "Skipping sync - too many concurrent syncs")
-        return false
-    end
-    
-    LoggerService:info("SNAPSHOT", "Starting backend sync...")
-    
+function GameStateService:getSnapshot()
     -- Build clusters
     local npcClusters = {}
     for _, cluster in ipairs(gameState.clusters) do
@@ -224,102 +216,21 @@ function GameStateService:syncWithBackend()
             table.insert(npcClusters, cluster)
         end
     end
-    
-    -- Only log detailed positions in debug mode
-    if LoggerService.isDebugEnabled then
-        LoggerService:info("SNAPSHOT", "\n=== Entity Groups & Positions ===")
-        
-        -- Group entities by cluster for cleaner logging
-        local clusterGroups = {}
-        for name, context in pairs(gameState.humanContext) do
-            local groupId = context.currentGroups.formed or 0
-            clusterGroups[groupId] = clusterGroups[groupId] or {}
-            table.insert(clusterGroups[groupId], {
-                name = name,
-                pos = context.position,
-                health = context.health,
-                isPlayer = context.currentGroups.players and context.currentGroups.players > 0
-            })
-        end
-        
-        -- Log each cluster group
-        for groupId, members in pairs(clusterGroups) do
-            LoggerService:info("SNAPSHOT", string.format(
-                "\nGroup %d:", 
-                groupId
-            ))
-            for _, member in ipairs(members) do
-                local pos = member.pos
-                local health = member.health
-                LoggerService:info("SNAPSHOT", string.format(
-                    "  %s%s: (%.1f, %.1f, %.1f) [Health: %d/%d %s]",
-                    member.name,
-                    member.isPlayer and " [PLAYER]" or "",
-                    pos.x, pos.y, pos.z,
-                    health.current, health.max, health.state
-                ))
-            end
-        end
-        LoggerService:info("SNAPSHOT", "\n===========================")
-    end
 
-    local payload = {
+    return {
         timestamp = os.time(),
         clusters = npcClusters,
         events = gameState.events,
         humanContext = gameState.humanContext
     }
+end
+
+-- Modify the sync function to disable automatic syncing
+function GameStateService:syncWithBackend()
+    -- Disable automatic syncing for now
+    return false
     
-    -- Log attempt with detailed summary
-    local totalPlayers = 0
-    local totalNPCs = 0
-    for _, cluster in ipairs(npcClusters) do
-        totalPlayers = totalPlayers + cluster.players
-        totalNPCs = totalNPCs + cluster.npcs
-    end
-    
-    LoggerService:info("SNAPSHOT", string.format(
-        "Sending snapshot: %d clusters (%d players, %d NPCs)",
-        #npcClusters,
-        totalPlayers,
-        totalNPCs
-    ))
-    
-    -- Send to Letta snapshot endpoint
-    local success, response = pcall(function()
-        local url = GameConfig.API.BASE_URL .. GameConfig.API.ENDPOINTS.SNAPSHOT
-        
-        -- Add headers
-        local headers = {
-            ["Content-Type"] = "application/json",
-            ["Accept"] = "application/json"
-        }
-        
-        local jsonPayload = HttpService:JSONEncode(payload)
-        
-        LoggerService:debug("SNAPSHOT", "Sending request...")
-        
-        return HttpService:RequestAsync({
-            Url = url,
-            Method = "POST",
-            Headers = headers,
-            Body = jsonPayload
-        })
-    end)
-    
-    if success then
-        if response.Success then
-            LoggerService:info("SNAPSHOT", "Successfully sent snapshot")
-            LoggerService:debug("SNAPSHOT", "Response: " .. HttpService:JSONEncode(response))
-        else
-            LoggerService:error("SNAPSHOT", "API Error: " .. tostring(response.StatusMessage))
-            LoggerService:debug("SNAPSHOT", "Full response: " .. HttpService:JSONEncode(response))
-        end
-    else
-        LoggerService:error("SNAPSHOT", "Failed to send snapshot: " .. tostring(response))
-    end
-    
-    return success
+    -- Rest of existing sync code...
 end
 
 -- Initialize heartbeat
@@ -349,26 +260,8 @@ RunService.Stepped:Connect(function()
         end
     end
     
-    -- Then check if backend sync is needed
-    if now - gameState.lastApiSync >= CONFIG.API_SYNC_INTERVAL and activeSyncCount < MAX_CONCURRENT_SYNCS then
-        LoggerService:info("SNAPSHOT", string.format(
-            "Backend sync triggered (diff=%d >= interval=%d)",
-            now - gameState.lastApiSync,
-            CONFIG.API_SYNC_INTERVAL
-        ))
-        
-        activeSyncCount = activeSyncCount + 1
-        
-        task.spawn(function()
-            local success = GameStateService:syncWithBackend()
-            if success then
-                gameState.lastApiSync = now
-            else
-                LoggerService:error("SNAPSHOT", "Backend sync failed")
-            end
-            activeSyncCount = activeSyncCount - 1
-        end)
-    end
+    -- Remove backend sync check entirely
+    -- if now - gameState.lastApiSync >= CONFIG.API_SYNC_INTERVAL ... 
 end)
 
 LoggerService:info("SYSTEM", "GameStateService heartbeat initialized")
