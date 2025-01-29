@@ -1166,7 +1166,16 @@ async def process_npc_status(entity_id: str, context: HumanContextData, enriched
             
         # Update status if needed
         if hasattr(context, 'needs_status_update') and context.needs_status_update:
-            status_text = f"Location: {context.location or 'Unknown'} | Action: {get_current_action(context)}"
+            # Get current location and action
+            current_location = context.location if hasattr(context, 'location') else "Unknown"
+            current_action = get_current_action(context)
+            
+            # Log the status update trigger
+            logger.info(f"Status update needed for {entity_id}")
+            logger.info(f"  Location: {current_location}")
+            logger.info(f"  Action: {current_action}")
+            
+            status_text = f"Location: {current_location} | Action: {current_action}"
             logger.info(f"Updating status for {entity_id}: {status_text}")
             letta_update_status(direct_client, agent_id, status_text)
         

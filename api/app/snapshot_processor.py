@@ -188,7 +188,7 @@ def enrich_snapshot_with_context(snapshot: GameSnapshot) -> GameSnapshot:
             logger.debug(f"Location narrative: {location_narrative}")
             
             # Update context with enriched location data
-            context.location = "near Chipotle"  # Use the actual location narrative
+            context.location = location_narrative  # Use the actual generated narrative
             
             # Keep existing interaction updates
             if context.recentInteractions:
