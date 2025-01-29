@@ -300,36 +300,6 @@ local function checkNPCProximity()
     end
 end
 
-local function checkOngoingConversations()
-    for npc1Id, conversationData in pairs(activeConversations.npcToNPC) do
-        local npc1 = npcManagerV3.npcs[npc1Id]
-        local npc2 = conversationData.partner
-        
-        if npc1 and npc2 and npc1.model and npc2.model then
-            local distance = (npc1.model.PrimaryPart.Position - npc2.model.PrimaryPart.Position).Magnitude
-            local isInRange = distance <= npc1.responseRadius
-            
-            LoggerService:debug("RANGE", string.format(
-                "[ONGOING] Distance between %s and %s: %.2f studs (Radius: %d, InRange: %s)",
-                npc1.displayName,
-                npc2.displayName,
-                distance,
-                npc1.responseRadius,
-                tostring(isInRange)
-            ))
-
-            if not isInRange then
-                LoggerService:info("INTERACTION", string.format(
-                    "Ending conversation - NPCs out of range (%s <-> %s)",
-                    npc1.displayName,
-                    npc2.displayName
-                ))
-                npcManagerV3:endInteraction(npc1, npc2)
-            end
-        end
-    end
-end
-
 -- Add near the top with other functions
 local function getRandomPosition(origin, radius)
     local angle = math.random() * math.pi * 2
@@ -385,14 +355,13 @@ local function updateNPCMovement()
     end
 end
 
--- Add to the main update loop
+-- Modify the main update loop to remove the call
 local function updateNPCs()
     LoggerService:info("SYSTEM", "Starting NPC update loop")
     spawn(updateNPCMovement) -- Start movement system in parallel
     while true do
         checkPlayerProximity()
         checkNPCProximity()
-        checkOngoingConversations()
         wait(1)
     end
 end
