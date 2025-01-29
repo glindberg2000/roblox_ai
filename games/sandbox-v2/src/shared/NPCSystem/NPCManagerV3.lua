@@ -132,6 +132,7 @@ function NPCManagerV3.getInstance()
         instance.activeConversations = {}
         instance.lastInteractionTime = {}
         instance.conversationCooldowns = {}
+        instance.initializationComplete = false  -- Add this flag
         
         -- Initialize thread manager
         instance:initializeThreadManager()
@@ -150,6 +151,9 @@ function NPCManagerV3.getInstance()
         
         -- Load NPC database
         instance:loadNPCDatabase()
+        
+        -- Set initialization complete
+        instance.initializationComplete = true  -- Set flag after initialization
         
         LoggerService:info("SYSTEM", string.format("NPCManagerV3 %s initialization complete", NPCManagerV3.VERSION))
     end
