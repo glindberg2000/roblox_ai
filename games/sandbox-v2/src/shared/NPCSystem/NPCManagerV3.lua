@@ -90,7 +90,7 @@ local NPCManagerV3 = {}
 NPCManagerV3.VERSION = "v3.1.0-clusters"  -- Add as property, not in initial table
 NPCManagerV3.__index = NPCManagerV3
 
--- Add singleton instance variable
+-- Keep the singleton instance
 local instance = nil
 
 -- Add near the top with other local variables
@@ -139,6 +139,7 @@ function NPCManagerV3.getInstance()
         -- Initialize services
         instance.movementService = MovementService.new()
         instance.interactionController = require(game.ServerScriptService.InteractionController).new()
+        instance.interactionService = InteractionService.new(instance)
         
         -- Start update loop
         game:GetService("RunService").Heartbeat:Connect(function()
@@ -155,30 +156,9 @@ function NPCManagerV3.getInstance()
     return instance
 end
 
--- Replace .new() with modified version
+-- Make new() use getInstance()
 function NPCManagerV3.new()
-    local manager = NPCManagerV3.getInstance()
-    
-    -- Ensure database is loaded
-    if not manager.databaseLoaded then
-        manager:loadNPCDatabase()
-        manager.databaseLoaded = true
-    end
-    
-    -- Initialize GameStateService with logging
-    LoggerService:info("SYSTEM", "Starting GameStateService initialization...")
-    local success = GameStateService.init({
-        enableBackendSync = true,
-        snapshotInterval = 5
-    })
-    
-    if success then
-        LoggerService:info("SYSTEM", "GameStateService initialized successfully")
-    else
-        LoggerService:error("SYSTEM", "Failed to initialize GameStateService")
-    end
-    
-    return manager
+    return NPCManagerV3.getInstance()
 end
 
 local API_URL = "https://roblox.ella-ai-care.com/robloxgpt/v3"

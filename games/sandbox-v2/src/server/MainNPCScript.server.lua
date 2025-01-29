@@ -229,8 +229,9 @@ end
 setupChatConnections()
 
 local function checkNPCProximity()
-    -- Use existing cluster system
+    -- Add debug logging to see what clusters we're getting
     local clusters = InteractionService:getLatestClusters()
+    LoggerService:debug("PROXIMITY", string.format("Got %d clusters from InteractionService", #clusters))
     
     -- Check each cluster for NPC-NPC interactions
     for _, cluster in ipairs(clusters) do

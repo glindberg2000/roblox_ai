@@ -208,9 +208,110 @@ function InteractionService:getLatestClusters()
     return lastClusters or {}  -- Return cached clusters
 end
 
+function InteractionService:calculateClusters()
+    LoggerService:debug("CLUSTER", "Starting cluster calculation")
+    local npcPositions = {}
+    
+    -- Get positions from NPC manager
+    for npcId, npc in pairs(self.npcManager.npcs) do
+        if npc.rootPart then
+            npcPositions[npcId] = npc.rootPart.Position
+            LoggerService:debug("CLUSTER_CALC", string.format(
+                "NPC %s (%s) position: %s",
+                npcId,
+                npc.displayName,
+                tostring(npc.rootPart.Position)
+            ))
+        else
+            LoggerService:warn("CLUSTER", "Missing rootPart for "..npcId)
+        end
+    end
+
+    -- Cluster calculation
+    local clusters = {}
+    local CLUSTER_RADIUS = 20
+    local clusterMap = {}
+
+    for npcId1, pos1 in pairs(npcPositions) do
+        local clusterMembers = {npcId1}
+        
+        for npcId2, pos2 in pairs(npcPositions) do
+            if npcId1 ~= npcId2 and (pos1 - pos2).Magnitude <= CLUSTER_RADIUS then
+                table.insert(clusterMembers, npcId2)
+                LoggerService:debug("CLUSTER_CALC", string.format(
+                    "%s is within %d studs of %s",
+                    self.npcManager.npcs[npcId2].displayName,
+                    CLUSTER_RADIUS,
+                    self.npcManager.npcs[npcId1].displayName
+                ))
+            end
+        end
+        
+        table.sort(clusterMembers)
+        local clusterKey = table.concat(clusterMembers, "|")
+        
+        if not clusterMap[clusterKey] then
+            clusterMap[clusterKey] = {
+                members = clusterMembers,
+                center = pos1
+            }
+            LoggerService:info("CLUSTER_FORMED", string.format(
+                "New cluster: %s (%d members)",
+                clusterKey,
+                #clusterMembers
+            ))
+        end
+    end
+
+    return getMapValues(clusterMap)
+end
+
 function InteractionService:updateProximityMatrix()
-    local positions = self:getEntityPositions()
-    -- ... calculates clusters and stores in lastClusters
+    local newClusters = self:calculateClusters()
+    
+    LoggerService:debug("CLUSTER_UPDATE", string.format(
+        "Cluster state update - Total clusters: %d",
+        #newClusters
+    ))
+    
+    -- Store clusters with timestamps
+    lastClusters = newClusters
+    lastUpdateTime = os.time()
+    
+    -- Log full cluster details
+    for i, cluster in ipairs(newClusters) do
+        LoggerService:info("CLUSTER_DETAIL", string.format(
+            "Cluster %d: %s @ %s",
+            i,
+            table.concat(cluster.members, ", "),
+            tostring(cluster.center)
+        ))
+    end
+    
+    self:handleClusterChanges(lastClusters, newClusters)
+end
+
+function InteractionService.new(npcManager)
+    local self = {}
+    self.npcManager = npcManager
+    
+    LoggerService:debug("CLUSTER", "Creating new InteractionService instance")
+    
+    -- Initialize cluster detection
+    task.spawn(function()
+        LoggerService:debug("CLUSTER", "Starting cluster detection loop")
+        while true do
+            if self.npcManager and self.npcManager.initializationComplete then
+                LoggerService:debug("CLUSTER", "Running cluster detection cycle")
+                self:updateProximityMatrix()
+            else
+                LoggerService:debug("CLUSTER", "Waiting for NPC initialization to complete...")
+            end
+            task.wait(2) -- Check clusters every 2 seconds
+        end
+    end)
+    
+    return setmetatable(self, {__index = InteractionService})
 end
 
 return InteractionService 
