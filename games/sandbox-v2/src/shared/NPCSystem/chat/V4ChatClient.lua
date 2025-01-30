@@ -79,29 +79,13 @@ end
 
 local function handleLettaChat(data)
     LoggerService:debug("CHAT", "V4ChatClient: Attempting Letta chat first...")
-    LoggerService:debug("CHAT", string.format("V4ChatClient: Raw incoming data: %s", HttpService:JSONEncode(data)))
     
-    local participantType = (data.context and data.context.participant_type) or data.participant_type or "player"
-    LoggerService:debug("CHAT", string.format("V4ChatClient: Determined participant type: %s", participantType))
-    
-    local convKey = getConversationKey(data.npc_id, data.participant_id)
-    local history = conversationHistory[convKey] or {}
-    
-    addToHistory(data.npc_id, data.participant_id, data.message, data.context.participant_name)
-    
+    -- Use messages array if provided, otherwise use single message
     local lettaData = {
         npc_id = data.npc_id,
         participant_id = tostring(data.participant_id),
-        message = data.message,
-        participant_type = participantType,
-        context = {
-            participant_type = participantType,
-            participant_name = data.context and data.context.participant_name,
-            interaction_history = history,
-            nearby_players = data.context and data.context.nearby_players or {},
-            npc_location = data.context and data.context.npc_location or "Unknown",
-            is_new_conversation = #history == 1  -- Only new if this is first message
-        }
+        messages = data.messages,  -- Pass through messages array
+        context = data.context
     }
 
     LoggerService:debug("CHAT", string.format("V4ChatClient: Final Letta request: %s", HttpService:JSONEncode(lettaData)))
@@ -167,6 +151,14 @@ end
 
 function V4ChatClient:SendMessage(data)
     LoggerService:debug("CHAT", "V4ChatClient: SendMessage called")
+    -- Add detailed message logging with nil checks
+    LoggerService:debug("CHAT", string.format(
+        "Message details:\n" ..
+        "- Message: %s\n" ..
+        "- Messages: %s",
+        tostring(data.message or "nil"),
+        data.messages and HttpService:JSONEncode(data.messages) or "nil"
+    ))
     LoggerService:info("CHAT", string.format("Sending request to Letta API for NPC %s", data.npc_id))
     LoggerService:info("CHAT", string.format("Letta payload: %s", HttpService:JSONEncode(data)))
     
