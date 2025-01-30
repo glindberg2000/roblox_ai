@@ -1,5 +1,6 @@
 -- InteractionService.lua
 local InteractionService = {}
+InteractionService.__index = InteractionService
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -269,12 +270,23 @@ function InteractionService:calculateClusters(positions, clusterThreshold)
 end
 
 function InteractionService:updateProximityMatrix()
+    -- Add safety check for npcManager
+    if not self.npcManager then
+        LoggerService:error("CLUSTER", "No npcManager found in InteractionService")
+        return {}
+    end
+
+    if not self.npcManager.initializationComplete then
+        LoggerService:debug("CLUSTER", "Waiting for NPC initialization to complete...")
+        return {}
+    end
+
     LoggerService:debug("CLUSTER", "Starting cluster calculation")
     
     -- Get all NPCs and players
     local positions = {}
     
-    -- Add NPCs
+    -- Add NPCs with better logging
     for id, npc in pairs(self.npcManager.npcs) do
         if npc.model and npc.model.PrimaryPart then
             table.insert(positions, {
@@ -283,13 +295,14 @@ function InteractionService:updateProximityMatrix()
                 type = "npc",
                 id = id
             })
+            LoggerService:debug("CLUSTER", string.format("Added NPC to positions: %s", npc.displayName))
         else
             LoggerService:warn("CLUSTER", string.format("Missing rootPart for %s", id))
         end
     end
     
-    -- Add players
-    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+    -- Add players with logging
+    for _, player in ipairs(Players:GetPlayers()) do
         if player.Character and player.Character.PrimaryPart then
             table.insert(positions, {
                 name = player.Name,
@@ -297,11 +310,13 @@ function InteractionService:updateProximityMatrix()
                 type = "player",
                 id = player.UserId
             })
+            LoggerService:debug("CLUSTER", string.format("Added player to positions: %s", player.Name))
         end
     end
     
-    -- Calculate clusters
+    -- Calculate clusters with enhanced logging
     local newClusters = self:calculateClusters(positions, CLUSTER_THRESHOLD)
+    LoggerService:debug("CLUSTER", string.format("Calculated %d clusters", #newClusters))
     
     -- Handle cluster changes
     self:handleClusterChanges(lastClusters, newClusters)
@@ -313,26 +328,19 @@ function InteractionService:updateProximityMatrix()
 end
 
 function InteractionService.new(npcManager)
+    if not npcManager then
+        error("InteractionService.new() requires an npcManager")
+    end
+
     local self = {}
     self.npcManager = npcManager
     
-    LoggerService:debug("CLUSTER", "Creating new InteractionService instance")
+    LoggerService:debug("CLUSTER", string.format(
+        "Creating new InteractionService instance with npcManager (initialized: %s)",
+        tostring(npcManager.initializationComplete)
+    ))
     
-    -- Initialize cluster detection
-    task.spawn(function()
-        LoggerService:debug("CLUSTER", "Starting cluster detection loop")
-        while true do
-            if self.npcManager and self.npcManager.initializationComplete then
-                LoggerService:debug("CLUSTER", "Running cluster detection cycle")
-                self:updateProximityMatrix()
-            else
-                LoggerService:debug("CLUSTER", "Waiting for NPC initialization to complete...")
-            end
-            task.wait(2) -- Check clusters every 2 seconds
-        end
-    end)
-    
-    return setmetatable(self, {__index = InteractionService})
+    return setmetatable(self, InteractionService)
 end
 
 return InteractionService 
