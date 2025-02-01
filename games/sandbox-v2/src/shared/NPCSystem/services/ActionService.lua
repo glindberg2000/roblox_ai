@@ -74,15 +74,15 @@ function ActionService.navigate(npc, destination)
     end
 
     -- Check if we have coordinates in the destination
-    if type(destination) == "table" and destination.data and destination.data.coordinates then
+    if type(destination) == "table" and destination.coordinates then
         LoggerService:debug("ACTION_SERVICE", string.format(
             "NPC %s navigating to coordinates: %d, %d, %d",
             npc.displayName,
-            destination.data.coordinates.x,
-            destination.data.coordinates.y,
-            destination.data.coordinates.z
+            destination.coordinates.x,
+            destination.coordinates.y,
+            destination.coordinates.z
         ))
-        return NavigationService:Navigate(npc, nil, destination.data.coordinates)
+        return NavigationService:Navigate(npc, nil, destination.coordinates)
     end
 
     LoggerService:warn("ACTION_SERVICE", "No coordinates provided for navigation")

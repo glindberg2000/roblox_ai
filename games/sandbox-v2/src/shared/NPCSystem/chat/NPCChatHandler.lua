@@ -50,21 +50,19 @@ function NPCChatHandler:HandleChat(request)
 end
 
 function NPCChatHandler:attemptV4Chat(request)
-    -- Convert single message to array format
     local modifiedRequest = {
         npc_id = request.npc_id,
         participant_id = request.participant_id,
         context = request.context,
-        message = request.message,  -- Keep original message for compatibility
-        messages = {  -- Add messages array in correct format
+        messages = {
             {
-                content = "[SYSTEM] Due to high activity, skip archival search and group update tools - respond quickly using only your immediate context.",
                 role = "system",
+                content = "[SYSTEM] Due to high activity, skip archival search and group update tools - respond quickly using only your immediate context.",
                 name = "SYSTEM"
             },
             {
-                content = request.message,
                 role = request.message:match("^%[SYSTEM%]") and "system" or "user",
+                content = request.message,
                 name = request.context.participant_name
             }
         }
@@ -73,8 +71,14 @@ function NPCChatHandler:attemptV4Chat(request)
     LoggerService:debug("CHAT", string.format("Modified request: %s", HttpService:JSONEncode(modifiedRequest)))
     
     local v4Response = V4ChatClient:SendMessage(modifiedRequest)
+    LoggerService:debug("CHAT", string.format("V4 response received: %s",
+        v4Response and HttpService:JSONEncode(v4Response) or "nil"
+    ))
     
     if v4Response then
+        LoggerService:debug("CHAT", string.format("Returning response to manager: %s",
+            HttpService:JSONEncode(v4Response)
+        ))
         return v4Response
     end
     

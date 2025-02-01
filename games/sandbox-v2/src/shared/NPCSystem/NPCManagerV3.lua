@@ -600,7 +600,6 @@ end
 
 -- And modify processAIResponse to directly use displayMessage
 function NPCManagerV3:processAIResponse(npc, participant, response)
-    -- Ignore should_end metadata
     if response.metadata then
         response.metadata.should_end = false
     end
@@ -609,18 +608,19 @@ function NPCManagerV3:processAIResponse(npc, participant, response)
         self:displayMessage(npc, response.message, participant)
     end
 
-    if response.action then
+    if response.actions then
         LoggerService:debug("ACTION", string.format("Executing action for %s: %s",
             npc.displayName,
-            HttpService:JSONEncode(response.action)
+            HttpService:JSONEncode(response.actions)
         ))
         
-        -- Handle end_conversation action
-        if response.action.type == "end_conversation" then
-            self:endInteraction(npc, participant)
-        else
-            -- Use executeAction for all other actions
-            self:executeAction(npc, participant, response.action)
+        -- Process each action in the array
+        for _, action in ipairs(response.actions) do
+            if action.type == "end_conversation" then
+                self:endInteraction(npc, participant)
+            elseif action.type ~= "none" then
+                self:executeAction(npc, participant, action)
+            end
         end
     end
 

@@ -24,6 +24,8 @@ function ChatUtils:MakeRequest(endpoint, payload, method)
     
     if success and response.Success then
         local decoded = HttpService:JSONDecode(response.Body)
+        LoggerService:debug("API", string.format("Raw API response: %s", response.Body))
+        LoggerService:debug("API", string.format("Decoded response: %s", HttpService:JSONEncode(decoded)))
         if decoded and not decoded.action then
             decoded.action = {
                 type = "none",

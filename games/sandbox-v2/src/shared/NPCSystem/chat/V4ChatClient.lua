@@ -15,7 +15,7 @@ local FALLBACK_VERSION = "v3"
 local LETTA_BASE_URL = LettaConfig.BASE_URL
 local LETTA_ENDPOINT = LettaConfig.ENDPOINTS.CHAT
 local ENDPOINTS = {
-    CHAT = "/v4/chat",
+    CHAT = LETTA_ENDPOINT,
     END_CONVERSATION = "/v4/conversations"
 }
 
@@ -78,44 +78,64 @@ local function adaptV4ToV3Response(v4Response)
 end
 
 local function handleLettaChat(data)
-    LoggerService:debug("CHAT", "V4ChatClient: Attempting Letta chat first...")
-    
-    -- Use messages array if provided, otherwise use single message
     local lettaData = {
         npc_id = data.npc_id,
         participant_id = tostring(data.participant_id),
-        messages = data.messages,  -- Pass through messages array
+        messages = data.messages,
         context = data.context
     }
 
-    LoggerService:debug("CHAT", string.format("V4ChatClient: Final Letta request: %s", HttpService:JSONEncode(lettaData)))
-    
     local success, response = pcall(function()
         local jsonData = HttpService:JSONEncode(lettaData)
         local url = LETTA_BASE_URL .. LETTA_ENDPOINT
-        LoggerService:debug("CHAT", string.format("V4ChatClient: Sending to URL: %s", url))
-        return HttpService:PostAsync(url, jsonData, Enum.HttpContentType.ApplicationJson, false)
+        local result = HttpService:PostAsync(url, jsonData, Enum.HttpContentType.ApplicationJson, false)
+        return result
     end)
-    
+
     if not success then
-        LoggerService:warn("CHAT", string.format("HTTP request failed: %s", response))
+        LoggerService:error("CHAT", string.format("HTTP request failed: %s", response))
         return nil
     end
-    
-    LoggerService:debug("CHAT", string.format("V4ChatClient: Raw Letta response: %s", response))
+
     local success2, decoded = pcall(HttpService.JSONDecode, HttpService, response)
     if not success2 then
-        warn("JSON decode failed:", decoded)
+        LoggerService:error("CHAT", string.format("JSON decode failed: %s", decoded))
         return nil
     end
-    
-    -- Check if the AI response includes an action to end the conversation
-    if decoded.action and decoded.action.type == "end_conversation" then
-        decoded.metadata.should_end = true
-    else
-        decoded.metadata.should_end = false
+
+    -- Log the full API response at INFO level
+    LoggerService:info("API", string.format("Letta response: %s", response))
+
+    -- Process actions array if present
+    if decoded.action and decoded.action.actions then
+        local ActionService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.ActionService)
+        local NPCManagerV3 = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.NPCManagerV3)
+        
+        for _, action in ipairs(decoded.action.actions) do
+            if action.type and action.data then
+                -- Get the manager instance
+                local manager = NPCManagerV3.getInstance()
+                -- Get NPC using the manager's method for getting NPCs
+                local npc = manager.npcs[data.npc_id]
+                
+                if npc then
+                    -- Call existing ActionService methods
+                    if ActionService[action.type] then
+                        LoggerService:debug("ACTION", string.format("Executing action: %s for NPC %s", action.type, npc.displayName))
+                        ActionService[action.type](npc, action.data)
+                    else
+                        LoggerService:warn("ACTION", string.format("Unknown action type '%s' - available actions: %s", 
+                            action.type,
+                            table.concat(table.keys(ActionService), ", ")
+                        ))
+                    end
+                else
+                    LoggerService:warn("ACTION", string.format("Could not find NPC with id %s", data.npc_id))
+                end
+            end
+        end
     end
-    
+
     return decoded
 end
 
@@ -150,17 +170,7 @@ function V4ChatClient:SendMessageV4(originalRequest)
 end
 
 function V4ChatClient:SendMessage(data)
-    LoggerService:debug("CHAT", "V4ChatClient: SendMessage called")
-    -- Add detailed message logging with nil checks
-    LoggerService:debug("CHAT", string.format(
-        "Message details:\n" ..
-        "- Message: %s\n" ..
-        "- Messages: %s",
-        tostring(data.message or "nil"),
-        data.messages and HttpService:JSONEncode(data.messages) or "nil"
-    ))
-    LoggerService:info("CHAT", string.format("Sending request to Letta API for NPC %s", data.npc_id))
-    LoggerService:info("CHAT", string.format("Letta payload: %s", HttpService:JSONEncode(data)))
+    LoggerService:info("CHAT", string.format("Chat request from %s to %s", data.context.speaker_name, data.context.participant_name))
     
     -- Try Letta first
     local lettaResponse = handleLettaChat(data)
@@ -168,7 +178,7 @@ function V4ChatClient:SendMessage(data)
         return lettaResponse
     end
 
-    LoggerService:debug("CHAT", "Letta failed - returning nil")
+    LoggerService:warn("CHAT", "Letta chat attempt failed")
     return nil
 end
 

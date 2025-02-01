@@ -3,6 +3,8 @@ print("LoggerService loaded")
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
 export type LogCategory = "SYSTEM" | "NPC" | "CHAT" | "INTERACTION" | "MOVEMENT" | "ANIMATION" | "DATABASE" | "API" | "SNAPSHOT" | "RANGE"
 
+local SHOW_CLUSTER_LOGS = false -- Set to true to see cluster debug logs
+
 local LoggerService = {
     isDebugEnabled = true,
     
@@ -93,6 +95,9 @@ function LoggerService:log(level: LogLevel, category: LogCategory, message: stri
 end
 
 function LoggerService:debug(category: LogCategory, message: string)
+    if not SHOW_CLUSTER_LOGS and category == "CLUSTER" then
+        return
+    end
     self:log("DEBUG", category, message)
 end
 
