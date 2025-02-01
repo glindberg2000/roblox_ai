@@ -134,9 +134,9 @@ Example Usage:
 class ChatRequest(BaseModel):
     npc_id: str  # Using UUID string from database
     participant_id: str
-    message: str
-    system_prompt: Optional[str] = None
+    messages: List[Dict[str, str]]  # Array of {content, role, name}
     context: Optional[Dict[str, Any]] = None
+    system_prompt: Optional[str] = None
 
 class ChatResponse(BaseModel):
     message: str
@@ -784,11 +784,6 @@ async def process_game_snapshot(snapshot: GameSnapshot):
 async def chat_with_npc_v3(request: ChatRequest):
     try:
         logger.info(f"Processing chat request for NPC {request.npc_id}")
-        logger.info(f"Processing chat request with context: {request.context}")
-        
-        # Determine message role
-        message_role = "system" if request.message.startswith("[SYSTEM]") else "user"
-        logger.info(f"Determined message role: {message_role} for message: {request.message[:50]}...")
         
         # Use cache first
         agent_id = get_agent_id(request.npc_id)
@@ -821,22 +816,10 @@ async def chat_with_npc_v3(request: ChatRequest):
         # Send message using cached agent_id
         logger.info(f"Sending message to agent {agent_id}")
         try:
-            # Get name from context
-            speaker_name = request.context.get("participant_name")
-            logger.info(f"Message details:")
-            logger.info(f"  agent_id: {agent_id}")
-            logger.info(f"  role: {message_role}")
-            logger.info(f"  message: {request.message}")
-            logger.info(f"  speaker_name: {speaker_name}")
-            
             # Send message using new API format
             letta_request = {
                 "agent_id": agent_id,
-                "messages": [{
-                    "content": request.message,
-                    "role": message_role,
-                    "name": speaker_name
-                }]
+                "messages": request.messages
             }
             
             response = direct_client.agents.messages.create(**letta_request)

@@ -111,7 +111,23 @@ def convert_tool_calls_to_action(tool_calls: List[Dict[str, Any]]) -> Dict[str, 
     
     Expected Roblox format:
     {
-        type = "navigate"|"follow"|"unfollow"|"emote"|"end_conversation",
+        actions = [
+            {
+                type = "navigate"|"follow"|"unfollow"|"emote"|"end_conversation",
+                data = {
+                    # For navigate:
+                    coordinates = {x: float, y: float, z: float}
+                    
+                    # For follow:
+                    target = str  # player name
+                    
+                    # For emote:
+                    emote_type = str  # wave|laugh|dance|cheer|point|sit
+                    target = str  # Optional target name
+                }
+            },
+            ...
+        ],
         data = {
             # For navigate:
             coordinates = {x: float, y: float, z: float}
@@ -126,68 +142,70 @@ def convert_tool_calls_to_action(tool_calls: List[Dict[str, Any]]) -> Dict[str, 
     }
     """
     if not tool_calls:
-        return {"type": "none"}
+        return {"actions": [{"type": "none"}]}
         
-    # Get first tool call
-    tool = tool_calls[0]
-    logger.debug(f"Converting tool to action: {tool}")
-    
-    if tool["tool"] == "perform_action":
-        args = tool["args"]
-        action_type = args.get("action")
+    actions = []
+    for tool in tool_calls:
+        logger.debug(f"Converting tool to action: {tool}")
+        action = {"type": "none"}
         
-        if action_type == "follow":
-            return {
-                "type": "follow",
-                "data": {
-                    "target": args.get("target")
-                }
-            }
-        elif action_type == "unfollow":
-            return {
-                "type": "unfollow",
-                "data": {}
-            }
-        elif action_type == "emote":
-            data = {
-                "emote_type": args.get("type")
-            }
-            if args.get("target"):
-                data["target"] = args["target"]
-            return {
-                "type": "emote",
-                "data": data
-            }
+        if tool["tool"] == "perform_action":
+            args = tool["args"]
+            action_type = args.get("action")
             
-    elif tool["tool"] == "navigate_to":
-        # Get coordinates directly from cache
-        slug = tool["args"].get("destination_slug")
-        if slug and slug in LOCATION_CACHE:
-            location = LOCATION_CACHE[slug]
-            return {
+            if action_type == "follow":
+                action = {
+                    "type": "follow",
+                    "data": {
+                        "target": args.get("target")
+                    }
+                }
+            elif action_type == "unfollow":
+                action = {
+                    "type": "unfollow",
+                    "data": {}
+                }
+            elif action_type == "emote":
+                data = {
+                    "emote_type": args.get("type")
+                }
+                if args.get("target"):
+                    data["target"] = args["target"]
+                action = {
+                    "type": "emote",
+                    "data": data
+                }
+            
+        elif tool["tool"] == "navigate_to":
+            # Get coordinates directly from cache
+            slug = tool["args"].get("destination_slug")
+            if slug and slug in LOCATION_CACHE:
+                location = LOCATION_CACHE[slug]
+                action = {
+                    "type": "navigate",
+                    "data": {
+                        "coordinates": {
+                            "x": location["coordinates"][0],
+                            "y": location["coordinates"][1],
+                            "z": location["coordinates"][2]
+                        }
+                    }
+                }
+            
+        elif tool["tool"] == "navigate_to_coordinates":
+            # Handle direct coordinate navigation
+            args = tool["args"]
+            action = {
                 "type": "navigate",
                 "data": {
                     "coordinates": {
-                        "x": location["coordinates"][0],
-                        "y": location["coordinates"][1],
-                        "z": location["coordinates"][2]
+                        "x": float(args.get("x", 0)),
+                        "y": float(args.get("y", 0)),
+                        "z": float(args.get("z", 0))
                     }
                 }
             }
-            
-    elif tool["tool"] == "navigate_to_coordinates":
-        # Handle direct coordinate navigation
-        args = tool["args"]
-        return {
-            "type": "navigate",
-            "data": {
-                "coordinates": {
-                    "x": float(args.get("x", 0)),
-                    "y": float(args.get("y", 0)),
-                    "z": float(args.get("z", 0))
-                }
-            }
-        }
         
-    logger.debug(f"Unknown tool type: {tool['tool']}")
-    return {"type": "none"}
+        actions.append(action)
+    
+    return {"actions": actions}

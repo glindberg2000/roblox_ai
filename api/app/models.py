@@ -216,3 +216,10 @@ class GameSnapshot(BaseModel):
     events: List[Dict[str, Any]]  # Required
     clusters: List[Dict[str, Any]]
     humanContext: Dict[str, Any]
+
+class ChatRequest(BaseModel):
+    npc_id: str
+    participant_id: str
+    messages: List[Dict[str, str]]  # Array of {content, role, name}
+    context: Optional[Dict[str, Any]] = None
+    system_prompt: Optional[str] = None
