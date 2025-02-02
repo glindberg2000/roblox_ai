@@ -3,18 +3,31 @@
 ## Core Components
 1. NPCManagerV3
    - Central management of NPCs
-   - Handles interactions and state
-   - Manages conversation flow
+   - Parallel message processing
+   - Thread-per-message pattern
+   - Built-in deduplication (1s window)
 
 2. InteractionService
-   - Proximity detection
-   - Cluster formation
-   - Position tracking
+   - Proximity-only checks
+   - No conversation locking
+   - Cluster-based validation
 
-3. GameStateService
-   - State synchronization
-   - Snapshot management
-   - Backend communication
+3. Message Processing
+   - Immediate parallel processing
+   - Thread spawning per message
+   - No artificial delays
+   - Natural AI response timing
+
+## Future Considerations
+1. Thread Management
+   - Consider thread pool limits
+   - Queue messages when pool is full
+   - Monitor thread usage
+
+2. Performance Patterns
+   - Track thread creation/cleanup
+   - Monitor memory usage
+   - Implement graceful degradation
 
 ## Key Patterns
 1. Event-Driven Architecture
