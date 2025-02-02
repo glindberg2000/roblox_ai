@@ -4,6 +4,9 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
 local LoggerService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LoggerService)
 local InteractionService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.InteractionService)
+local TextChatService = game:GetService("TextChatService")
+local ChatService = game:GetService("Chat")
+local HttpService = game:GetService("HttpService")
 
 local success, result = pcall(function()
 	return require(ServerScriptService:WaitForChild("InteractionController", 5))
@@ -118,12 +121,12 @@ local function checkPlayerProximity(clusters)
                                     continue
                                 end
                             end
-
-                            local systemMessage = string.format(
-                                "[SYSTEM] A player (%s) has entered your area. You can initiate a conversation if you'd like.",
-                                player.Name
-                            )
-                            npcManagerV3:handleNPCInteraction(npc, player, systemMessage)
+                            -- Comment this out to prevent player to  npc 
+                            -- local systemMessage = string.format(
+                            --     "[SYSTEM] A player (%s) has entered your area. You can initiate a conversation if you'd like.",
+                            --     player.Name
+                            -- )
+                            -- npcManagerV3:handleNPCInteraction(npc, player, systemMessage)
                             greetingCooldowns[cooldownKey] = os.time()
                         end
                     end
@@ -133,79 +136,200 @@ local function checkPlayerProximity(clusters)
     end
 end
 
-local function onPlayerChatted(player, message)
-    -- Get player position
+-- Move this function up, before onPlayerChatted
+local function handleChatRequest(player)
+    LoggerService:debug("CHAT", "Handling chat request for " .. player.Name)
+    
     local playerPosition = player.Character and player.Character.PrimaryPart
-    if not playerPosition then return end
+    if not playerPosition then 
+        LoggerService:warn("CHAT", "No valid position for player " .. player.Name)
+        return 
+    end
 
-    -- Find closest NPC in range that's in same cluster
-    local closestNPC, closestDistance = nil, math.huge
-
-    for _, npc in pairs(npcManagerV3.npcs) do
-        -- Use existing cluster check
-        if not interactionService:canInteract(player, npc) then
-            continue
+    -- Use existing cluster system
+    local clusters = interactionService:getLatestClusters()
+    LoggerService:debug("CHAT", string.format("Found %d clusters", #clusters))
+    
+    -- Find which cluster the player is in
+    local playerCluster = nil
+    for _, cluster in ipairs(clusters) do
+        if table.find(cluster.members, player.Name) then
+            playerCluster = cluster
+            LoggerService:debug("CHAT", string.format("Found player in cluster with %d members", #cluster.members))
+            break
         end
+    end
 
+    -- If player isn't in a cluster, they can't interact
+    if not playerCluster then 
+        LoggerService:warn("CHAT", "Player not in any cluster")
+        return 
+    end
+
+    -- Find closest NPC that's in the same cluster
+    local closestNPC, closestDistance = nil, math.huge
+    for _, npc in pairs(npcManagerV3.npcs) do
         if npc.model and npc.model.PrimaryPart then
-            local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
-            
-            LoggerService:debug("RANGE", string.format(
-                "Distance between player %s and NPC %s: %.2f studs (Radius: %d, InRange: %s)",
-                player.Name,
-                npc.displayName,
-                distance,
-                npc.responseRadius,
-                tostring(distance <= npc.responseRadius)
-            ))
-
-            if distance <= npc.responseRadius and distance < closestDistance then
-                closestNPC, closestDistance = npc, distance
+            -- Check if NPC is in same cluster as player
+            if table.find(playerCluster.members, npc.displayName) then
+                local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
+                LoggerService:debug("CHAT", string.format("Found NPC %s at distance %.1f", npc.displayName, distance))
+                if distance < closestDistance and not npc.isInteracting then
+                    closestNPC, closestDistance = npc, distance
+                end
             end
         end
     end
 
-    if closestNPC then
-        local cooldownKey = closestNPC.id .. "_" .. player.UserId
-        local lastGreeting = greetingCooldowns[cooldownKey]
-        local isGreeting = message:lower():match("^h[ae][yl]l?o+!?$") or message:lower() == "hi"
+    if not closestNPC then
+        LoggerService:warn("CHAT", "No eligible NPC found in cluster")
+    end
+
+    return closestNPC, closestDistance
+end
+
+-- Add this helper function near the top
+local function createPlayerParticipant(player)
+    return {
+        GetParticipantType = function()
+            return "Player"
+        end,
+        GetUserId = function()
+            return player.UserId
+        end,
+        GetName = function()
+            return player.Name
+        end,
+        GetParticipantId = function()
+            return tostring(player.UserId)
+        end,
+        GetInteractionHistory = function()
+            return {}
+        end,
+        Name = player.Name,
+        _player = player
+    }
+end
+
+-- Then modify onPlayerChatted to wrap the player
+local function onPlayerChatted(player, message)
+    LoggerService:info("CHAT", string.format("[onPlayerChatted] Called with player: %s, message: %s", 
+        player.Name, message))
         
-        if isGreeting and lastGreeting then
-            local timeSinceLastGreeting = os.time() - lastGreeting
-            if timeSinceLastGreeting < GREETING_COOLDOWN then
-                LoggerService:debug("DEBUG", string.format(
-                    "Skipping player greeting - on cooldown for %d more seconds",
-                    GREETING_COOLDOWN - timeSinceLastGreeting
-                ))
+    -- Find closest NPC to handle the chat
+    local closestNPC, closestDistance = handleChatRequest(player)
+    if closestNPC then
+        LoggerService:info("CHAT", string.format("Found closest NPC %s at distance %0.1f", 
+            closestNPC.displayName, closestDistance))
+            
+        -- Debug NPC methods
+        LoggerService:debug("CHAT", string.format("NPC methods: %s",
+            HttpService:JSONEncode({
+                hasGetInteractionHistory = type(closestNPC.getInteractionHistory) == "function",
+                hasGetInteractionHistoryCaps = type(closestNPC.GetInteractionHistory) == "function"
+            })
+        ))
+            
+        -- Create participant wrapper for the player
+        local playerParticipant = createPlayerParticipant(player)
+            
+        -- Have the NPC handle the chat message with wrapped player
+        npcManagerV3:handleChat(closestNPC, playerParticipant, message)
+    end
+end
+
+-- Debug chat system status immediately
+LoggerService:info("CHAT", string.format(
+    "Chat System Status:\nTextChat Enabled: %s\nLegacy Chat Enabled: %s",
+    tostring(TextChatService.ChatVersion == Enum.ChatVersion.TextChatService),
+    tostring(ChatService.LoadDefaultChat)
+))
+
+-- Set up chat before anything else
+local function setupChatConnections()
+    LoggerService:info("CHAT", "Setting up chat connections")
+    
+    if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+        LoggerService:info("CHAT", string.format("Chat version: %s", tostring(TextChatService.ChatVersion)))
+        
+        -- Wait for and connect to the general channel
+        local success, result = pcall(function()
+            local channels = TextChatService:WaitForChild("TextChannels", 10)
+            if not channels then
+                LoggerService:error("CHAT", "Failed to find TextChannels after 10 seconds")
                 return
             end
-        end
-
-        LoggerService:info("INTERACTION", string.format("Routing chat from %s to NPC %s (Distance: %.2f)", 
-            player.Name, closestNPC.displayName, closestDistance))
-        npcManagerV3:handleNPCInteraction(closestNPC, player, message)
+            
+            local generalChannel = channels:WaitForChild("RBXGeneral", 10)
+            if not generalChannel then
+                LoggerService:error("CHAT", "Failed to find RBXGeneral channel after 10 seconds")
+                return
+            end
+            
+            LoggerService:info("CHAT", "Found general chat channel")
+            
+            -- Set up the ShouldDeliverCallback
+            generalChannel.ShouldDeliverCallback = function(message, userId)
+                LoggerService:info("CHAT", "ShouldDeliverCallback fired")
+                
+                -- Debug the raw message
+                LoggerService:info("CHAT", string.format("Raw message data: %s", 
+                    HttpService:JSONEncode({
+                        Text = message.Text,
+                        TextSource = message.TextSource and {
+                            UserId = message.TextSource.UserId,
+                            Name = message.TextSource.Name
+                        },
+                        TargetUserId = userId
+                    })
+                ))
+                
+                local player = Players:GetPlayerByUserId(message.TextSource.UserId)
+                if player then
+                    LoggerService:info("CHAT", string.format("Received message from %s: %s",
+                        player.Name, message.Text))
+                    onPlayerChatted(player, message.Text)
+                else
+                    LoggerService:warn("CHAT", "Could not find player for UserId: " .. tostring(message.TextSource.UserId))
+                end
+                
+                -- Always deliver the message
+                return true
+            end
+            
+            LoggerService:info("CHAT", "ShouldDeliverCallback handler established")
+        end)
         
-        if isGreeting then
-            greetingCooldowns[cooldownKey] = os.time()
+        if not success then
+            LoggerService:error("CHAT", "Failed to set up chat connection: " .. tostring(result))
         end
     else
-        LoggerService:info("INTERACTION", string.format(
-            "No NPCs in range for player %s chat", 
-            player.Name
-        ))
+        LoggerService:warn("CHAT", "TextChatService not enabled, using legacy chat")
+        -- Legacy chat system
+        
+        -- Connect to existing players
+        for _, player in ipairs(Players:GetPlayers()) do
+            LoggerService:info("CHAT", "Setting up legacy chat for: " .. player.Name)
+            player.Chatted:Connect(function(message)
+                LoggerService:info("CHAT", string.format("Legacy chat from %s: %s", 
+                    player.Name, message))
+                onPlayerChatted(player, message)
+            end)
+        end
+        
+        -- Connect to new players
+        Players.PlayerAdded:Connect(function(player)
+            LoggerService:info("CHAT", "Setting up legacy chat for new player: " .. player.Name)
+            player.Chatted:Connect(function(message)
+                LoggerService:info("CHAT", string.format("Legacy chat from %s: %s", 
+                    player.Name, message))
+                onPlayerChatted(player, message)
+            end)
+        end)
     end
 end
 
-local function setupChatConnections()
-	LoggerService:info("SYSTEM", "Setting up chat connections")
-	Players.PlayerAdded:Connect(function(player)
-		LoggerService:info("STATE", string.format("Setting up chat connection for player: %s", player.Name))
-		player.Chatted:Connect(function(message)
-			onPlayerChatted(player, message)
-		end)
-	end)
-end
-
+-- Call setup immediately
 setupChatConnections()
 
 function checkNPCProximity(clusters)
@@ -244,13 +368,13 @@ function checkNPCProximity(clusters)
                                 end
                             end
 
-                            -- Create mock participant and initiate
-                            local mockParticipant = npcManagerV3:createMockParticipant(npc2)
-                            local systemMessage = string.format(
-                                "[SYSTEM] Another NPC (%s) has entered your area. You can initiate a conversation if you'd like.",
-                                npc2.displayName
-                            )
-                            npcManagerV3:handleNPCInteraction(npc1, mockParticipant, systemMessage)
+                            -- Comment out NPC-NPC system messages
+                            -- local systemMessage = string.format(
+                            --     "[SYSTEM] Another NPC (%s) has entered your area. You can initiate a conversation if you'd like.",
+                            --     npc2.displayName
+                            -- )
+                            -- npcManagerV3:handleNPCInteraction(npc1, mockParticipant, systemMessage)
+                            
                             greetingCooldowns[cooldownKey] = os.time()
                         end
                     end
@@ -351,38 +475,19 @@ end)
 
 LoggerService:info("SYSTEM", "NPC system V3 main script running")
 
-local function handleChatRequest(player)
-    local playerPosition = player.Character and player.Character.PrimaryPart
-    if not playerPosition then return end
-
-    -- Use existing cluster system
-    local clusters = InteractionService:getLatestClusters()
-    local playerCluster = nil
+-- At the top with other requires
+local NPCChatHandlerDep = ReplicatedStorage.Shared.NPCSystem:FindFirstChild("NPCChatHandler.dep")
+if NPCChatHandlerDep then
+    LoggerService:warn("SYSTEM", "Found deprecated NPCChatHandler.dep - this file should be removed")
     
-    -- Find which cluster the player is in
-    for _, cluster in ipairs(clusters) do
-        if table.find(cluster.members, player.Name) then
-            playerCluster = cluster
-            break
-        end
+    -- Try to load it to see if anything still depends on it
+    local success, result = pcall(function()
+        return require(NPCChatHandlerDep)
+    end)
+    
+    if success then
+        LoggerService:warn("SYSTEM", "NPCChatHandler.dep was loaded successfully - may still be in use")
+    else
+        LoggerService:info("SYSTEM", "NPCChatHandler.dep failed to load - safe to remove")
     end
-
-    -- If player isn't in a cluster, they can't interact
-    if not playerCluster then return end
-
-    -- Find closest NPC that's in the same cluster
-    local closestNPC, closestDistance = nil, math.huge
-    for _, npc in pairs(npcManagerV3.npcs) do
-        if npc.model and npc.model.PrimaryPart then
-            -- Check if NPC is in same cluster as player
-            if table.find(playerCluster.members, npc.displayName) then
-                local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
-                if distance < closestDistance and not npc.isInteracting then
-                    closestNPC, closestDistance = npc, distance
-                end
-            end
-        end
-    end
-
-    return closestNPC, closestDistance
 end

@@ -24,6 +24,7 @@ local LoggerService = require(services:WaitForChild("LoggerService"))
 local ModelLoader = require(script.Parent.services.ModelLoader)
 local AnimationService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.AnimationService)
 local GameStateService = require(script.Parent.services.GameStateService)
+local NPCChatDisplay = require(script.Parent.chat.NPCChatDisplay)
 
 ModelLoader.init()
 LoggerService:info("SYSTEM", string.format("Using ModelLoader v%s", ModelLoader.Version))
@@ -155,6 +156,9 @@ function NPCManagerV3.getInstance()
         -- Set initialization complete
         instance.initializationComplete = true  -- Set flag after initialization
         
+        -- Initialize NPCChatHandler
+        NPCChatHandler:init(instance)
+        
         LoggerService:info("SYSTEM", string.format("NPCManagerV3 %s initialization complete", NPCManagerV3.VERSION))
     end
     return instance
@@ -204,33 +208,47 @@ NPCChatEvent.OnServerEvent:Connect(function(player, data)
 end)
 
 function NPCManagerV3:handlePlayerMessage(player, data)
-    local npcName = data.npcName
     local message = data.message
     
-    LoggerService:debug("CHAT", string.format("Received message from player %s to NPC %s: %s",
+    LoggerService:debug("CHAT", string.format("Received message from player %s: %s",
         player.Name,
-        npcName,
         message
     ))
     
-    -- Find the NPC by name
-    for _, npc in pairs(self.npcs) do
-        if npc.displayName == npcName then
-            -- Check if the NPC is interacting with this player
-            if npc.isInteracting and npc.interactingPlayer == player then
-                -- Handle the interaction
-                self:handleNPCInteraction(npc, player, message)
-            else
-                LoggerService:debug("INTERACTION", string.format("NPC %s is not interacting with player %s", 
-                    npc.displayName, 
-                    player.Name
-                ))
-            end
-            return
-        end
+    -- Get current clusters
+    local clusters = InteractionService:getLatestClusters()
+    if not clusters then
+        LoggerService:warn("CHAT", "No clusters available")
+        return
     end
     
-    LoggerService:error("ERROR", string.format("NPC %s not found when handling player message", npcName))
+    -- Find player's cluster
+    local playerCluster
+    for _, cluster in ipairs(clusters) do
+        for _, member in ipairs(cluster.members) do
+            if member.UserId == player.UserId then
+                playerCluster = cluster
+                break
+            end
+        end
+        if playerCluster then break end
+    end
+    
+    if not playerCluster then
+        LoggerService:debug("CHAT", "Player not in any cluster")
+        return
+    end
+    
+    -- Send message to all NPCs in the cluster
+    for _, member in ipairs(playerCluster.members) do
+        if member.Type == "npc" then
+            local npc = self.npcs[member.id]
+            if npc then
+                LoggerService:debug("CHAT", string.format("Routing message to cluster member: %s", npc.displayName))
+                self:handleNPCInteraction(npc, player, message)
+            end
+        end
+    end
 end
 
 function NPCManagerV3:loadNPCDatabase()
@@ -531,105 +549,22 @@ function NPCManagerV3:isNPCParticipant(participant)
     return participant.Type == "npc" or participant.npcId ~= nil
 end
 
-function NPCManagerV3:displayMessage(npc, message, recipient)
-    -- Don't propagate error messages between NPCs
-    if self:isNPCParticipant(recipient) and message == "I'm having trouble understanding right now." then
-        LoggerService:log("CHAT", "Blocking error message propagation between NPCs")
-        return
-    end
-
-    -- Ensure we have a valid model and head
-    if not npc.model or not npc.model:FindFirstChild("Head") then
-        LoggerService:error("ERROR", string.format("Cannot display message for %s - missing model or head", npc.displayName))
-        return
-    end
-
-    -- Create chat bubble
-    local success, err = pcall(function()
-        game:GetService("Chat"):Chat(npc.model.Head, message)
-        LoggerService:debug("CHAT", string.format("Created chat bubble for NPC: %s", npc.displayName))
-    end)
-    if not success then
-        LoggerService:error("ERROR", string.format("Failed to create chat bubble: %s", err))
-    end
-
-    -- Handle NPC-to-NPC messages
-    if self:isNPCParticipant(recipient) then
-        LoggerService:debug("CHAT", string.format("NPC %s to NPC %s: %s",
-            npc.displayName,
-            recipient.displayName or recipient.Name,
-            message
-        ))
-        
-        -- Fire event to all clients for redundancy
-        NPCChatEvent:FireAllClients({
-            npcName = npc.displayName,
-            message = message,
-            type = "npc_chat"
-        })
-
-        -- Handle recipient response after a small delay
-        if recipient.npcId then
-            local recipientNPC = self.npcs[recipient.npcId]
-            if recipientNPC then
-                task.delay(1, function()
-                    self:handleNPCInteraction(recipientNPC, self:createMockParticipant(npc), message)
-                end)
-            end
-        end
-        return
-    end
-
-    -- Handle player messages
-    if typeof(recipient) == "Instance" and recipient:IsA("Player") then
-        LoggerService:debug("CHAT", string.format("NPC %s sending message to player %s: %s",
-            npc.displayName,
-            recipient.Name,
-            message
-        ))
-        
-        -- Send to player's chat window
-        NPCChatEvent:FireClient(recipient, {
-            npcName = npc.displayName,
-            message = message,
-            type = "chat"
-        })
-        return
-    end
-end
-
--- And modify processAIResponse to directly use displayMessage
 function NPCManagerV3:processAIResponse(npc, participant, response)
-    if response.metadata then
-        response.metadata.should_end = false
-    end
-
     if response.message then
-        self:displayMessage(npc, response.message, participant)
+        LoggerService:debug("CHAT", string.format(
+            "Attempting to display message from %s: %s",
+            npc.displayName,
+            response.message
+        ))
+        NPCChatDisplay:displayMessage(npc, response.message, participant)
     end
 
-    if response.actions then
-        LoggerService:debug("ACTION", string.format("Executing action for %s: %s",
-            npc.displayName,
-            HttpService:JSONEncode(response.actions)
-        ))
-        
-        -- Process each action in the array
-        for _, action in ipairs(response.actions) do
-            if action.type == "end_conversation" then
-                self:endInteraction(npc, participant)
-            elseif action.type ~= "none" then
+    if response.action and response.action.actions then
+        for _, action in ipairs(response.action.actions) do
+            if action.type ~= "none" then
                 self:executeAction(npc, participant, action)
             end
         end
-    end
-
-    if response.internal_state then
-        LoggerService:debug("STATE", string.format("Updating internal state for %s: %s",
-            npc.displayName,
-            HttpService:JSONEncode(response.internal_state)
-        ))
-        self:updateInternalState(npc, response.internal_state)
     end
 end
 
@@ -928,7 +863,7 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
                 participant_type = participantType,
                 participant_name = participant.Name,
                 speaker_name = npc.displayName, 
-                is_new_conversation = false,
+                is_new_conversation = true,
                 interaction_history = {},
                 nearby_players = self:getVisiblePlayers(npc),
                 npc_location = "Unknown"
@@ -1117,7 +1052,7 @@ function NPCManagerV3:createChatContext(npc, participant)
         npc_location = npc.currentLocation or "Unknown",
         nearby_players = nearbyPlayers,
         nearby_npcs = nearbyNPCs,
-        interaction_history = self:getInteractionHistory(npc.id, participant:GetParticipantId())
+        speaker_name = npc.displayName
     }
     
     return context

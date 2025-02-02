@@ -10,6 +10,7 @@ local Players = game:GetService("Players")
 
 -- Constants
 local CLUSTER_THRESHOLD = 20 -- Distance in studs for clustering
+local CLUSTER_UPDATE_INTERVAL = 1 -- Update clusters every second
 local lastClusters = nil
 local lastUpdateTime = nil
 
@@ -62,9 +63,12 @@ function InteractionService:unlockNPCsAfterInteraction(npc1, npc2)
 end
 
 function InteractionService:getClusterForEntity(entityName)
+    -- Add nil check for lastUpdateTime
+    if not lastUpdateTime then return nil end
+    
     -- Return cached cluster info if recent enough
     if os.time() - lastUpdateTime < CLUSTER_UPDATE_INTERVAL then
-        for _, cluster in ipairs(lastClusters) do
+        for _, cluster in ipairs(lastClusters or {}) do
             if table.find(cluster.members, entityName) then
                 return cluster
             end

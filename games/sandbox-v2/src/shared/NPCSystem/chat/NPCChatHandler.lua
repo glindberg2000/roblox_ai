@@ -9,8 +9,27 @@ local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.Logger
 
 local recentResponses = {}
 local RESPONSE_CACHE_TIME = 1
+local npcManager = nil
+
+function NPCChatHandler:init(manager)
+    npcManager = manager
+end
+
+function NPCChatHandler:getNPCById(npcId)
+    if not npcManager then
+        LoggerService:error("CHAT", "NPCManager not initialized in ChatHandler")
+        return nil
+    end
+    
+    return npcManager.npcs[npcId]
+end
 
 function NPCChatHandler:HandleChat(request)
+    LoggerService:debug("CHAT", string.format(
+        "NPCChatHandler received request: %s",
+        HttpService:JSONEncode(request)
+    ))
+    
     -- Generate response ID
     local responseId = string.format("%s_%s_%s", 
         request.npc_id,
@@ -43,6 +62,16 @@ function NPCChatHandler:HandleChat(request)
     if response then
         LoggerService:info("CHAT", string.format("NPC %s responded to %s", request.npc_id, request.participant_id))
         LoggerService:debug("CHAT", string.format("Response details: %s", HttpService:JSONEncode(response)))
+        -- After getting response from Letta
+        if response and response.message then
+            -- Create chat bubble
+            local npc = self:getNPCById(request.npc_id)
+            if npc and npc.model and npc.model:FindFirstChild("Head") then
+                -- This is the key part - create the chat bubble
+                local Chat = game:GetService("Chat")
+                Chat:Chat(npc.model.Head, response.message, Enum.ChatColor.Blue)
+            end
+        end
         return response
     end
     
