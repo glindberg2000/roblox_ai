@@ -27,22 +27,16 @@ function InteractionService:checkRangeAndEndConversation(npc1, npc2)
 end
 
 function InteractionService:canInteract(npc1, npc2)
-    -- Only check cluster membership for proximity awareness
+    -- Only checks cluster membership, no lock check
     local cluster1 = self:getClusterForEntity(npc1.displayName)
     if not cluster1 or not table.find(cluster1.members, npc2.displayName) then
-        LoggerService:debug("CLUSTER", string.format(
-            "NPCs in different clusters: %s, %s",
-            npc1.displayName, npc2.displayName
-        ))
         return false
     end
-    
-    -- Remove all other checks - let backend handle them
     return true
 end
 
 function InteractionService:lockNPCsForInteraction(npc1, npc2)
-    -- Remove movement locking but keep conversation state
+    -- Keep conversation state tracking for UI/analytics but don't prevent new interactions
     npc1.inConversation = true
     npc2.inConversation = true
     LoggerService:debug("INTERACTION", string.format(
@@ -55,7 +49,7 @@ function InteractionService:lockNPCsForInteraction(npc1, npc2)
 end
 
 function InteractionService:unlockNPCsAfterInteraction(npc1, npc2)
-    -- Remove movement unlocking but keep conversation cleanup
+    -- Basic cleanup of conversation state
     npc1.inConversation = false
     npc2.inConversation = false
     LoggerService:debug("INTERACTION", string.format(

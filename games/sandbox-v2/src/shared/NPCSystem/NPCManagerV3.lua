@@ -951,18 +951,13 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
 end
 
 function NPCManagerV3:canNPCsInteract(npc1, npc2)
-    -- Check if either NPC is in conversation
-    for userId, activeNPC in pairs(self.activeConversations) do
-        if activeNPC == npc1 or activeNPC == npc2 then
-            LoggerService:debug(string.format(
-                "Blocking NPC interaction: %s or %s is busy",
-                npc1.displayName,
-                npc2.displayName
-            ))
-            return false
-        end
+    -- Only check if NPCs exist and are in the same cluster
+    if not npc1 or not npc2 then
+        return false
     end
-    return true
+    
+    -- Use InteractionService to check cluster proximity only
+    return self.interactionService:canInteract(npc1, npc2)
 end
 
 function NPCManagerV3:createMockParticipant(npc)
