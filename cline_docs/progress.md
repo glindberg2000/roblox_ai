@@ -1,3 +1,22 @@
+# Development Progress
+
+## Completed Features
+- Basic NPC spawning and management
+- NPC chat bubbles
+- NPC proximity detection
+- Chat message integration with TextChatService
+- Message formatting with NPC names
+
+## In Progress
+- Full chatbox integration
+- System message configuration
+- Group chat features
+
+## Pending
+- Status update blocks
+- Group update blocks
+- System message ping restoration
+
 # Progress Status: NPC System Upgrade
 
 ## Completed

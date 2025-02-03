@@ -90,7 +90,9 @@ LoggerService:info("SYSTEM", "NPC system V3 initialized")
 
 -- Add cooldown tracking
 local GREETING_COOLDOWN = 60 -- 60 seconds between greetings
+local ENTRY_COOLDOWN = 300 -- 5 minutes between entry notifications
 local greetingCooldowns = {} -- Track when NPCs last greeted each other
+local entryNotificationCooldowns = {} -- Track when NPCs were last notified about a player
 
 -- Add at the top with other state variables
 -- local activeConversations = { ... }
@@ -110,23 +112,22 @@ local function checkPlayerProximity(clusters)
                             end
                         end
 
-                        -- Remove conversation locks
                         if npc and interactionController:canInteract(player) then
-                            -- Only check cooldown
-                            local cooldownKey = npc.id .. "_" .. player.UserId
-                            local lastGreeting = greetingCooldowns[cooldownKey]
-                            if lastGreeting then
-                                local timeSinceLastGreeting = os.time() - lastGreeting
-                                if timeSinceLastGreeting < GREETING_COOLDOWN then
-                                    continue
-                                end
+                            -- Check entry notification cooldown
+                            local entryKey = npc.id .. "_entry_" .. player.UserId
+                            local lastEntry = entryNotificationCooldowns[entryKey]
+                            
+                            if not lastEntry or (os.time() - lastEntry) > ENTRY_COOLDOWN then
+                                local systemMessage = string.format(
+                                    "[SYSTEM] A player (%s) has entered your area. You can initiate a conversation if you'd like.",
+                                    player.Name
+                                )
+                                npcManagerV3:handleNPCInteraction(npc, player, systemMessage)
+                                entryNotificationCooldowns[entryKey] = os.time()
                             end
-                            -- Comment this out to prevent player to  npc 
-                            -- local systemMessage = string.format(
-                            --     "[SYSTEM] A player (%s) has entered your area. You can initiate a conversation if you'd like.",
-                            --     player.Name
-                            -- )
-                            -- npcManagerV3:handleNPCInteraction(npc, player, systemMessage)
+                            
+                            -- Regular greeting cooldown remains unchanged
+                            local cooldownKey = npc.id .. "_" .. player.UserId
                             greetingCooldowns[cooldownKey] = os.time()
                         end
                     end

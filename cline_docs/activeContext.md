@@ -1,26 +1,55 @@
-# Active Context: NPC System Upgrade
+# Active Development Context
 
 ## Current Task
-Implementing multi-user conversation support
+Implementing NPC chat system with both chat bubbles and chatbox integration
 
 ## Recent Changes
-1. Removed conversation locks
-   - Eliminated lock checks in InteractionService
-   - Removed activeConversations blocking in NPCManagerV3
-   - Maintained cluster-based proximity checks only
+- Successfully implemented chat bubbles appearing above NPC heads
+- Successfully sending messages through TextChatService using CreateMessage and SendTextMessage
+- Disabled system message pings temporarily
+- Chat messages appear in both bubbles and chat window
 
-2. Analyzed message handling system
-   - Current parallel thread processing is sufficient
-   - No immediate need for message queuing
-   - Deduplication system working well
+## Current Issues
+- Need to re-enable status and group update blocks
+- System message pings are currently disabled
 
 ## Next Steps
-1. Future Optimization Considerations
-   - Add thread pool limits
-   - Implement message queuing when thread pool is full
-   - Monitor thread usage in high-load scenarios
+1. Re-enable status and group update blocks
+2. Review system message ping functionality
+3. Test chat system with multiple NPCs and players
+4. Document chat system architecture
 
-2. Current Focus
+## Current State (Critical Issues)
+
+## System Status: BROKEN
+- No user messages are being created or routed
+- Only system messages and their responses are displayed
+- No player messages reach NPCs
+- No messages route back to groups
+- Cluster system partially implemented but breaking core functionality
+
+## Core Issues
+1. Message Routing Broken
+   - Player -> NPC routing not working
+   - NPC -> Group routing not working
+   - Basic chat functionality non-functional
+
+2. Cluster System Problems
+   - Partially implemented
+   - Breaking core interaction logic
+   - Missing constants (CLUSTER_UPDATE_INTERVAL)
+
+3. Conversation Management
+   - Locks not working properly
+   - State tracking unreliable
+   - Multiple conversations possible when shouldn't be
+
+## Critical Files Affected
+- NPCManagerV3.lua
+- InteractionService.lua
+- GameStateService.lua
+
+## Current Focus
    - Test multi-user interactions
    - Monitor system performance
    - Document thread usage patterns

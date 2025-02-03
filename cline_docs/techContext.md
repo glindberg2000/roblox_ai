@@ -1,4 +1,29 @@
-# Technical Context: NPC System
+# Technical Context
+
+## Chat System Components
+1. TextChatService
+   - CreateMessage() for message creation
+   - SendTextMessage() for chat window display
+   - System message integration
+
+2. Chat Service
+   - Bubble creation and display
+   - Character-based chat visualization
+
+3. Custom Events
+   - NPCChatMessageEvent for server-client communication
+   - MessageReceived for chat monitoring
+
+## Development Setup
+- Roblox Studio
+- TextChatService enabled
+- Legacy chat system disabled
+- Custom NPC chat implementation
+
+## Technical Constraints
+- TextChatService limitations with system messages
+- Need to handle both bubble and window chat
+- System message ping configuration required
 
 ## Technologies Used
 1. Roblox Studio

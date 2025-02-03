@@ -6,13 +6,28 @@ local V4ChatClient = require(ReplicatedStorage.Shared.NPCSystem.chat.V4ChatClien
 local V3ChatClient = require(ReplicatedStorage.Shared.NPCSystem.chat.V3ChatClient)
 local HttpService = game:GetService("HttpService")
 local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
+local TextChatService = game:GetService("TextChatService")
+local Players = game:GetService("Players")
+local InteractionService = require(ReplicatedStorage.Shared.NPCSystem.services.InteractionService)
 
 local recentResponses = {}
 local RESPONSE_CACHE_TIME = 1
 local npcManager = nil
+local NPCChatMessageEvent = ReplicatedStorage:FindFirstChild("NPCChatMessageEvent") or Instance.new("RemoteEvent")
+NPCChatMessageEvent.Name = "NPCChatMessageEvent"
+NPCChatMessageEvent.Parent = ReplicatedStorage
 
 function NPCChatHandler:init(manager)
     npcManager = manager
+    
+    -- Set up chat event handler
+    local ChatEvent = ReplicatedStorage:FindFirstChild("NPCChatEvent") or Instance.new("RemoteEvent")
+    ChatEvent.Name = "NPCChatEvent"
+    ChatEvent.Parent = ReplicatedStorage
+    
+    ChatEvent.OnServerEvent:Connect(function(player, message)
+        self:handlePlayerChat(player, message)
+    end)
 end
 
 function NPCChatHandler:getNPCById(npcId)
@@ -64,12 +79,17 @@ function NPCChatHandler:HandleChat(request)
         LoggerService:debug("CHAT", string.format("Response details: %s", HttpService:JSONEncode(response)))
         -- After getting response from Letta
         if response and response.message then
-            -- Create chat bubble
             local npc = self:getNPCById(request.npc_id)
             if npc and npc.model and npc.model:FindFirstChild("Head") then
-                -- This is the key part - create the chat bubble
+                -- Create chat bubble
                 local Chat = game:GetService("Chat")
                 Chat:Chat(npc.model.Head, response.message, Enum.ChatColor.Blue)
+                
+                -- Send to client to handle chat display
+                NPCChatMessageEvent:FireAllClients({
+                    npcName = npc.displayName,
+                    message = response.message
+                })
             end
         end
         return response
@@ -84,11 +104,11 @@ function NPCChatHandler:attemptV4Chat(request)
         participant_id = request.participant_id,
         context = request.context,
         messages = {
-            {
-                role = "system",
-                content = "[SYSTEM] Due to high activity, skip archival search and group update tools - respond quickly using only your immediate context.",
-                name = "SYSTEM"
-            },
+            -- {
+            --     role = "system",
+            --     content = "[SYSTEM] Due to high activity, skip archival search and group update tools - respond quickly using only your immediate context.",
+            --     name = "SYSTEM"
+            -- },
             {
                 role = request.message:match("^%[SYSTEM%]") and "system" or "user",
                 content = request.message,
@@ -109,6 +129,31 @@ function NPCChatHandler:attemptV4Chat(request)
             HttpService:JSONEncode(v4Response)
         ))
         return v4Response
+    end
+    
+    return nil
+end
+
+function NPCChatHandler:handlePlayerChat(player, message)
+    -- Get player's cluster
+    local playerCluster = InteractionService:getClusterForPlayer(player)
+    if not playerCluster then return nil end
+    
+    -- Find closest NPC in same cluster
+    local closestNPC = nil
+    local closestDistance = math.huge
+    
+    for _, npc in pairs(playerCluster.npcs) do
+        local distance = (player.Character.HumanoidRootPart.Position - npc.model.HumanoidRootPart.Position).Magnitude
+        if distance < closestDistance then
+            closestDistance = distance
+            closestNPC = npc
+        end
+    end
+    
+    if closestNPC then
+        LoggerService:info("CHAT", string.format("Found closest NPC %s in cluster at distance %.1f", closestNPC.displayName, closestDistance))
+        return self:handleNPCChat(closestNPC, player, message)
     end
     
     return nil

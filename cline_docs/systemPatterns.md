@@ -1,4 +1,27 @@
-# System Patterns: NPC Interaction System
+# System Architecture & Patterns
+
+## Chat System Architecture
+1. Server-side (NPCChatHandler)
+   - Handles chat message processing
+   - Manages NPC responses
+   - Sends messages via NPCChatMessageEvent
+
+2. Client-side (NPCChatClient)
+   - Receives messages via NPCChatMessageEvent
+   - Creates chat bubbles
+   - Integrates with TextChatService
+   - Formats and displays messages in chat window
+
+## Key Technical Decisions
+- Using TextChatService for chat window integration
+- Separate bubble and window chat display
+- System messages for NPC communication
+- Event-based communication between server and client
+
+## Current Patterns
+- Event-driven messaging
+- Centralized chat handling
+- Dual display system (bubbles + chatbox)
 
 ## Core Components
 1. NPCManagerV3
