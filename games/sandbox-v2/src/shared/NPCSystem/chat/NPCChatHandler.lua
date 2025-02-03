@@ -9,6 +9,7 @@ local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.Logger
 local TextChatService = game:GetService("TextChatService")
 local Players = game:GetService("Players")
 local InteractionService = require(ReplicatedStorage.Shared.NPCSystem.services.InteractionService)
+local ChatService = game:GetService("Chat")
 
 local recentResponses = {}
 local RESPONSE_CACHE_TIME = 1
@@ -81,11 +82,15 @@ function NPCChatHandler:HandleChat(request)
         if response and response.message then
             local npc = self:getNPCById(request.npc_id)
             if npc and npc.model and npc.model:FindFirstChild("Head") then
-                -- Create chat bubble
-                local Chat = game:GetService("Chat")
-                Chat:Chat(npc.model.Head, response.message, Enum.ChatColor.Blue)
+                -- Create chat bubble (this still works on server)
+                ChatService:Chat(npc.model.Head, response.message, Enum.ChatColor.Blue)
                 
-                -- Send to client to handle chat display
+                -- Only fire event to let client handle TextChatService
+                LoggerService:debug("CHAT", string.format(
+                    "Firing chat event to clients - NPC: %s, Message: %s",
+                    npc.displayName,
+                    response.message
+                ))
                 NPCChatMessageEvent:FireAllClients({
                     npcName = npc.displayName,
                     message = response.message
@@ -157,6 +162,30 @@ function NPCChatHandler:handlePlayerChat(player, message)
     end
     
     return nil
+end
+
+function NPCChatHandler:handleResponse(npc, participant, response)
+    if response.message then
+        LoggerService:debug("CHAT", string.format(
+            "Attempting to display message from %s: %s",
+            npc.displayName,
+            response.message
+        ))
+        
+        -- Use NPCChatDisplay directly instead of FireAllClients
+        NPCChatMessageEvent:FireAllClients({
+            npcName = npc.displayName,
+            message = response.message
+        })
+    end
+
+    if response.action and response.action.actions then
+        for _, action in ipairs(response.action.actions) do
+            if action.type ~= "none" then
+                -- Handle actions if needed
+            end
+        end
+    end
 end
 
 return NPCChatHandler 

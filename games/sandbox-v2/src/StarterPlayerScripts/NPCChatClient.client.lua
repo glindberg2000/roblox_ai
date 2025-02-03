@@ -1,24 +1,37 @@
+-- NPCChatClient.client.lua
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextChatService = game:GetService("TextChatService")
+local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
 
 local NPCChatMessageEvent = ReplicatedStorage:WaitForChild("NPCChatMessageEvent")
 
--- Function to send NPC chat message
-local function sendNPCChatMessage(npcName, messageText)
-    local textChatMessage = TextChatService:CreateMessage()
-    textChatMessage.Text = string.format("[%s] %s", npcName, messageText)
-    textChatMessage.TextSource = nil -- Makes the message appear as a system message
-    TextChatService:SendTextMessage(textChatMessage)
+-- Log when we get the system channel
+local systemChannel = nil
+local success, err = pcall(function()
+    LoggerService:debug("CHAT", "Waiting for RBXSystem channel...")
+    systemChannel = TextChatService.TextChannels:WaitForChild("RBXSystem")
+    LoggerService:debug("CHAT", "Got RBXSystem channel")
+end)
+
+if not success then
+    LoggerService:error("CHAT", "Failed to get system channel: " .. tostring(err))
+    return
 end
 
 NPCChatMessageEvent.OnClientEvent:Connect(function(data)
-    -- Send message to chat
-    sendNPCChatMessage(data.npcName, data.message)
+    LoggerService:debug("CHAT", string.format("Client received message from %s: %s", data.npcName, data.message))
     
-    -- Also create chat bubble
-    local Chat = game:GetService("Chat")
-    local character = game.Players.LocalPlayer.Character
-    if character then
-        Chat:Chat(character.Head, data.message)
+    -- Display system message on client
+    local success, err = pcall(function()
+        LoggerService:debug("CHAT", "Attempting to display message...")
+        systemChannel:DisplaySystemMessage(string.format("[%s] %s", data.npcName, data.message))
+        LoggerService:debug("CHAT", "Message displayed successfully")
+    end)
+    
+    if not success then
+        LoggerService:error("CHAT", "Failed to display message: " .. tostring(err))
     end
-end) 
+end)
+
+LoggerService:info("CHAT", "NPC chat client fully initialized") 

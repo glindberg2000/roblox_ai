@@ -118,16 +118,60 @@ local function checkPlayerProximity(clusters)
                             local lastEntry = entryNotificationCooldowns[entryKey]
                             
                             if not lastEntry or (os.time() - lastEntry) > ENTRY_COOLDOWN then
+                                -- Get list of all members in speaking range
+                                local npcsInRange = {}
+                                local playersInRange = {}
+                                for _, memberName in ipairs(cluster.members) do
+                                    if memberName ~= npc.displayName then  -- Exclude self
+                                        local isNPC = false
+                                        for _, otherNpc in pairs(npcManagerV3.npcs) do
+                                            if otherNpc.displayName == memberName then
+                                                table.insert(npcsInRange, memberName)
+                                                isNPC = true
+                                                break
+                                            end
+                                        end
+                                        if not isNPC then
+                                            table.insert(playersInRange, memberName)
+                                        end
+                                    end
+                                end
+
+                                -- Create enhanced system message
                                 local systemMessage = string.format(
-                                    "[SYSTEM] A player (%s) has entered your area. You can initiate a conversation if you'd like.",
-                                    player.Name
+                                    "[SYSTEM] %s has entered your range. You are now in speaking range with %s%s%s.",
+                                    player.Name,
+                                    #npcsInRange > 0 and table.concat(npcsInRange, ", ") or "no other NPCs",
+                                    #playersInRange > 0 and (#npcsInRange > 0 and " and " or "") or "",
+                                    #playersInRange > 0 and table.concat(playersInRange, ", ") or ""
                                 )
-                                npcManagerV3:handleNPCInteraction(npc, player, systemMessage)
+
+                                -- Add structured data for API
+                                local context = {
+                                    update_type = "group_membership",
+                                    action = "join",
+                                    group = {
+                                        npcs = npcsInRange,
+                                        players = playersInRange,
+                                        location = player.Character and player.Character.PrimaryPart and {
+                                            x = player.Character.PrimaryPart.Position.X,
+                                            y = player.Character.PrimaryPart.Position.Y,
+                                            z = player.Character.PrimaryPart.Position.Z
+                                        } or nil
+                                    }
+                                }
+
+                                LoggerService:debug("GROUP", string.format(
+                                    "Group update - NPC: %s, Player: %s, Members: %s",
+                                    npc.displayName,
+                                    player.Name,
+                                    HttpService:JSONEncode(context.group)
+                                ))
+
+                                npcManagerV3:handleNPCInteraction(npc, player, systemMessage, context)
                                 entryNotificationCooldowns[entryKey] = os.time()
                             end
                             
-                            -- Regular greeting cooldown remains unchanged
-                            local cooldownKey = npc.id .. "_" .. player.UserId
                             greetingCooldowns[cooldownKey] = os.time()
                         end
                     end
