@@ -482,59 +482,54 @@ function checkNPCProximity(clusters)
     end
 end
 
--- Add near the top with other functions
-local function getRandomPosition(origin, radius)
-    local angle = math.random() * math.pi * 2
-    local distance = math.random() * radius
-    return Vector3.new(
-        origin.X + math.cos(angle) * distance,
-        origin.Y,
-        origin.Z + math.sin(angle) * distance
-    )
-end
+-- Add near the top with other variables
+local knownLocations = {
+    {name = "Pete's Merch Stand", slug = "petes_merch_stand", coordinates = {-12.0, 18.9, -127.0}},
+    {name = "The Crematorium", slug = "the_crematorium", coordinates = {-44.0, 21.0, -167.7}},
+    {name = "Calvin's Calzone Restaurant", slug = "calvins_calzone_restaurant", coordinates = {-21.9, 21.5, -103.0}},
+    {name = "Chipotle", slug = "chipotle", coordinates = {-19.0, 21.3, -8.2}},
+    {name = "The Barber Boys", slug = "the_barber_boys", coordinates = {-80.0, 21.3, -11.2}},
+    {name = "Grocery Spelunking", slug = "grocery_spelunking", coordinates = {-193.619, 27.775, 6.667}},
+    {name = "Egg Cafe", slug = "egg_cafe", coordinates = {-235.452, 26.0, -80.319}},
+    {name = "Bluesteel Hotel", slug = "bluesteel_hotel", coordinates = {-242.612, 32.15, -4.157}},
+    {name = "Yellow House", slug = "yellow_house", coordinates = {71.474, 26.65, -138.574}},
+    {name = "Red House", slug = "red_house", coordinates = {69.75, 24.42, -93.0}},
+    {name = "Blue House", slug = "blue_house", coordinates = {70.68, 26.65, -43.41}},
+    {name = "Green House", slug = "green_house", coordinates = {69.76, 24.89, 15.33}},
+    {name = "DVDs", slug = "dvds", coordinates = {-221.83, 26.0, -112.0}}
+}
 
-local function moveNPC(npc, targetPosition)
-    if not npc.model or not npc.model.PrimaryPart or not npc.model:FindFirstChild("Humanoid") then return end
+local LOCATION_RADIUS = 20  -- Consider within 20 studs to be "at" a location
+local LOCATION_UPDATE_COOLDOWN = 5  -- Only log location updates every 5 seconds
+local lastLocationUpdates = {}  -- Track when we last logged each NPC's location
+local lastKnownLocations = {}  -- Track last known location for each NPC
+
+-- Add near other helper functions
+local function getNearestLocation(position)
+    local nearestDistance = math.huge
+    local nearest = nil
     
-    local humanoid = npc.model:FindFirstChild("Humanoid")
-    humanoid:MoveTo(targetPosition)
-end
-
-local function updateNPCMovement()
-    while true do
-        for _, npc in pairs(npcManagerV3.npcs) do
-            -- Check if NPC can move and isn't busy
-            local canMove = false
-            for _, ability in ipairs(npc.abilities or {}) do
-                if ability == "move" then
-                    canMove = true
-                    break
-                end
-            end
-
-            if canMove and not npc.isInteracting then
-                -- Random chance to start moving
-                if math.random() < 0.8 then -- 80% chance each update
-                    local spawnPos = npc.spawnPosition or npc.model.PrimaryPart.Position
-                    local targetPos = getRandomPosition(spawnPos, 10) -- 10 stud radius
-                    
-                    LoggerService:debug("MOVEMENT", string.format(
-                        "Moving %s to random position (%.1f, %.1f, %.1f)",
-                        npc.displayName,
-                        targetPos.X,
-                        targetPos.Y,
-                        targetPos.Z
-                    ))
-                    
-                    moveNPC(npc, targetPos)
-                end
-            end
+    for _, loc in ipairs(knownLocations) do
+        local distance = math.sqrt(
+            (loc.coordinates[1] - position.X)^2 + 
+            (loc.coordinates[2] - position.Y)^2 + 
+            (loc.coordinates[3] - position.Z)^2
+        )
+        
+        if distance < nearestDistance then
+            nearestDistance = distance
+            nearest = {
+                name = loc.name,
+                slug = loc.slug,
+                distance = math.floor(distance * 10) / 10
+            }
         end
-        wait(5) -- Check every 5 seconds
     end
+    
+    return nearest, nearestDistance <= LOCATION_RADIUS
 end
 
--- Modify the main update loop to remove the call
+-- Modify the existing updateNPCs function
 local function updateNPCs()
     LoggerService:info("SYSTEM", "Starting NPC update loop")
     spawn(updateNPCMovement) -- Start movement system in parallel
@@ -549,6 +544,46 @@ local function updateNPCs()
             -- Use the fresh cluster data for all proximity checks
             checkPlayerProximity(clusters)
             checkNPCProximity(clusters)
+            
+            -- Add location check for each NPC
+            for _, npc in pairs(npcManagerV3.npcs) do
+                if npc.model and npc.model.PrimaryPart then
+                    local nearest, isNear = getNearestLocation(npc.model.PrimaryPart.Position)
+                    if nearest and isNear then
+                        local now = os.time()
+                        local lastUpdate = lastLocationUpdates[npc.id] or 0
+                        local lastLocation = lastKnownLocations[npc.id]
+                        
+                        -- Only log if location changed or enough time passed
+                        if lastLocation ~= nearest.slug or now - lastUpdate >= LOCATION_UPDATE_COOLDOWN then
+                            LoggerService:debug("LOCATION_STATUS", string.format(
+                                "NPC %s %s %s (%.1f studs away)",
+                                npc.displayName,
+                                lastLocation ~= nearest.slug and "arrived at" or "is at",
+                                nearest.name,
+                                nearest.distance
+                            ))
+                            lastLocationUpdates[npc.id] = now
+                            lastKnownLocations[npc.id] = nearest.slug
+                        end
+                    elseif lastKnownLocations[npc.id] then
+                        -- NPC left a location - always log this
+                        local locationName = ""
+                        for _, loc in ipairs(knownLocations) do
+                            if loc.slug == lastKnownLocations[npc.id] then
+                                locationName = loc.name
+                                break
+                            end
+                        end
+                        LoggerService:debug("LOCATION_STATUS", string.format(
+                            "NPC %s left %s",
+                            npc.displayName,
+                            locationName
+                        ))
+                        lastKnownLocations[npc.id] = nil
+                    end
+                end
+            end
         end
         
         wait(1)
