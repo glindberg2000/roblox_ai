@@ -24,22 +24,36 @@
 - Dual display system (bubbles + chatbox)
 
 ## Core Components
-1. NPCManagerV3
-   - Central management of NPCs
-   - Parallel message processing
-   - Thread-per-message pattern
-   - Built-in deduplication (1s window)
+1. Game Services
+   - GameStateService: Manages state sync (2s local, 10s backend)
+   - InteractionService: Handles proximity and clusters
+   - LoggerService: Centralized logging
 
-2. InteractionService
-   - Proximity-only checks
-   - No conversation locking
-   - Cluster-based validation
+2. API Services
+   - Snapshot Processing: Enriches game state data
+   - Chat Processing: Handles NPC conversations
+   - Queue System: Manages message processing
 
-3. Message Processing
-   - Immediate parallel processing
-   - Thread spawning per message
-   - No artificial delays
-   - Natural AI response timing
+## Key Patterns
+1. State Management
+   - Regular snapshots for game state
+   - Real-time updates for critical changes
+   - Memory blocks for NPC context
+
+2. Interaction Patterns
+   - Proximity-based clustering
+   - Group conversation handling
+   - Message queue processing
+
+3. Data Flow
+   - Game -> API -> LLM -> Response
+   - State updates through snapshot system
+   - Context enrichment via processor
+
+## Current Focus
+- Optimizing group update flow
+- Leveraging existing snapshot processor
+- Improving state synchronization
 
 ## Future Considerations
 1. Thread Management

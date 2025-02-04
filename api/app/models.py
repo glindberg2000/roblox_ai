@@ -223,3 +223,10 @@ class ChatRequest(BaseModel):
     messages: List[Dict[str, str]]  # Array of {content, role, name}
     context: Optional[Dict[str, Any]] = None
     system_prompt: Optional[str] = None
+
+class GroupUpdate(BaseModel):
+    npc_id: str
+    player_id: str
+    is_joining: bool
+    player_name: Optional[str] = None
+    purge: Optional[bool] = False

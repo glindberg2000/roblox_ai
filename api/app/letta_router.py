@@ -68,7 +68,8 @@ from .config import (
 from .models import (
     GameSnapshot,
     ClusterData,
-    HumanContextData
+    HumanContextData,
+    GroupUpdate
 )
 from .letta_utils import extract_tool_results, convert_tool_calls_to_action
 from pathlib import Path
@@ -78,6 +79,7 @@ from .main import LETTA_CONFIG
 from .group_manager import GroupMembershipManager
 from letta_templates.npc_prompts import PLAYER_JOIN_MESSAGE, PLAYER_LEAVE_MESSAGE
 from .utils import get_current_action  # Import from utils instead
+from .group_processor import GroupProcessor
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -1205,4 +1207,20 @@ def get_current_action(context: HumanContextData) -> str:
     elif context.health and context.health.get('isMoving'):
         return "Moving"
     return "Idle"  # Default action
+
+@router.post("/npc/group/update")
+async def update_npc_group(update: GroupUpdate):
+    """Handle single NPC group membership updates"""
+    try:
+        processor = GroupProcessor(direct_client)
+        result = await processor.process_group_update(
+            npc_id=update.npc_id,
+            player_id=update.player_id,
+            is_joining=update.is_joining,
+            player_name=update.player_name
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error in group update: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 

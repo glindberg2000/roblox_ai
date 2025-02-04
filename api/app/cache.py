@@ -1,7 +1,12 @@
 """In-memory cache for static game data"""
 import logging
 from typing import Dict, Optional
-from .database import get_db, get_all_locations, get_player_info as db_get_player_info
+from .database import (
+    get_db, 
+    get_all_locations, 
+    get_player_info as db_get_player_info,
+    get_player_description as db_get_player_description
+)
 
 logger = logging.getLogger("roblox_app")
 
@@ -137,6 +142,39 @@ def invalidate_player_cache(player_id: str) -> None:
     if player_id in PLAYER_CACHE:
         del PLAYER_CACHE[player_id]
         logger.info(f"Invalidated cache for player {player_id}") 
+
+def get_player_description(player_name: str) -> str:
+    """Get appearance description for a player"""
+    logger.info(f"\nLooking up description for player: {player_name}")
+    
+    # Try getting from database first
+    try:
+        with get_db() as db:
+            # Log the query we're about to run
+            query = "SELECT description FROM player_descriptions WHERE display_name = ? OR player_id = ?"
+            params = (player_name, player_name)
+            logger.info(f"Running query: {query} with params: {params}")
+            
+            cursor = db.execute(query, params)
+            result = cursor.fetchone()
+            
+            if result:
+                desc = result["description"]
+                logger.info(f"Found description in DB: {desc}")
+                return desc
+            else:
+                # Log what we searched for but didn't find
+                cursor = db.execute("SELECT * FROM player_descriptions")
+                all_players = cursor.fetchall()
+                logger.info("Available players in DB:")
+                for player in all_players:
+                    logger.info(f"  ID: {player['player_id']}, Name: {player['display_name']}, Desc: {player['description'][:50]}...")
+                
+    except Exception as e:
+        logger.error(f"Error looking up player description: {e}")
+    
+    logger.info("No description found, using fallback")
+    return f"A player named {player_name}"
 
 # Current format needed:
 LOCATION_CACHE = {
