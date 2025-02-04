@@ -1209,10 +1209,10 @@ def get_current_action(context: HumanContextData) -> str:
     return "Idle"  # Default action
 
 @router.post("/npc/group/update")
-async def update_npc_group(update: GroupUpdate):
-    """Handle single NPC group membership updates"""
+async def update_group(update: GroupUpdate):
+    """Update NPC group membership when players join/leave"""
     try:
-        processor = GroupProcessor(direct_client)
+        processor = GroupProcessor(letta_client)
         result = await processor.process_group_update(
             npc_id=update.npc_id,
             player_id=update.player_id,
@@ -1221,6 +1221,5 @@ async def update_npc_group(update: GroupUpdate):
         )
         return result
     except Exception as e:
-        logger.error(f"Error in group update: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 

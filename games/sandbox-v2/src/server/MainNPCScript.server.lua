@@ -97,6 +97,54 @@ local entryNotificationCooldowns = {} -- Track when NPCs were last notified abou
 -- Add at the top with other state variables
 -- local activeConversations = { ... }
 
+-- Add near the top with other requires
+local LettaConfig = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.config.LettaConfig)
+
+-- Add new function for group updates
+local function updateNPCGroup(npc, player, isJoining)
+    -- Log before HTTP call
+    LoggerService:debug("GROUP", string.format(
+        "Sending group update - URL: %s, Data: %s",
+        LettaConfig.BASE_URL .. LettaConfig.ENDPOINTS.GROUP_UPDATE,
+        HttpService:JSONEncode({
+            npc_id = npc.id,
+            player_id = tostring(player.UserId),
+            is_joining = isJoining,
+            player_name = player.Name
+        })
+    ))
+
+    local success, response = pcall(function()
+        return HttpService:PostAsync(
+            LettaConfig.BASE_URL .. LettaConfig.ENDPOINTS.GROUP_UPDATE,
+            HttpService:JSONEncode({
+                npc_id = npc.id,
+                player_id = tostring(player.UserId),
+                is_joining = isJoining,
+                player_name = player.Name
+            }),
+            Enum.HttpContentType.ApplicationJson,
+            false,
+            LettaConfig.DEFAULT_HEADERS
+        )
+    end)
+
+    if not success then
+        LoggerService:error("GROUP", string.format(
+            "Failed to update group for %s: %s",
+            npc.displayName,
+            tostring(response)
+        ))
+    else
+        LoggerService:debug("GROUP", string.format(
+            "Group update for %s: %s %s group",
+            npc.displayName,
+            player.Name,
+            isJoining and "joined" or "left"
+        ))
+    end
+end
+
 local function checkPlayerProximity(clusters)
     for _, cluster in ipairs(clusters) do
         if cluster.players > 0 and cluster.npcs > 0 then
@@ -118,6 +166,9 @@ local function checkPlayerProximity(clusters)
                             local lastEntry = entryNotificationCooldowns[entryKey]
                             
                             if not lastEntry or (os.time() - lastEntry) > ENTRY_COOLDOWN then
+                                -- Update group membership first
+                                updateNPCGroup(npc, player, true)
+
                                 -- Get list of all members in speaking range
                                 local npcsInRange = {}
                                 local playersInRange = {}
@@ -168,6 +219,7 @@ local function checkPlayerProximity(clusters)
                                     HttpService:JSONEncode(context.group)
                                 ))
 
+                                -- Handle interaction after group update
                                 npcManagerV3:handleNPCInteraction(npc, player, systemMessage, context)
                                 entryNotificationCooldowns[entryKey] = os.time()
                             end
