@@ -500,8 +500,6 @@ local knownLocations = {
 }
 
 local LOCATION_RADIUS = 20  -- Consider within 20 studs to be "at" a location
-local LOCATION_UPDATE_COOLDOWN = 5  -- Only log location updates every 5 seconds
-local lastLocationUpdates = {}  -- Track when we last logged each NPC's location
 local lastKnownLocations = {}  -- Track last known location for each NPC
 
 -- Add near other helper functions
@@ -549,38 +547,38 @@ local function updateNPCs()
             for _, npc in pairs(npcManagerV3.npcs) do
                 if npc.model and npc.model.PrimaryPart then
                     local nearest, isNear = getNearestLocation(npc.model.PrimaryPart.Position)
-                    if nearest and isNear then
-                        local now = os.time()
-                        local lastUpdate = lastLocationUpdates[npc.id] or 0
-                        local lastLocation = lastKnownLocations[npc.id]
-                        
-                        -- Only log if location changed or enough time passed
-                        if lastLocation ~= nearest.slug or now - lastUpdate >= LOCATION_UPDATE_COOLDOWN then
+                    local lastLocation = lastKnownLocations[npc.id]
+                    
+                    if nearest then
+                        if isNear then
+                            -- Only log if this is a new location
+                            if lastLocation ~= nearest.slug then
+                                LoggerService:debug("LOCATION_STATUS", string.format(
+                                    "NPC %s arrived at %s (%.1f studs away)",
+                                    npc.displayName,
+                                    nearest.name,
+                                    nearest.distance
+                                ))
+                                lastKnownLocations[npc.id] = nearest.slug
+                            end
+                        elseif lastLocation then
+                            -- NPC has left their previous location
+                            local locationName = ""
+                            for _, loc in ipairs(knownLocations) do
+                                if loc.slug == lastLocation then
+                                    locationName = loc.name
+                                    break
+                                end
+                            end
                             LoggerService:debug("LOCATION_STATUS", string.format(
-                                "NPC %s %s %s (%.1f studs away)",
+                                "NPC %s left %s (nearest: %s, %.1f studs away)",
                                 npc.displayName,
-                                lastLocation ~= nearest.slug and "arrived at" or "is at",
+                                locationName,
                                 nearest.name,
                                 nearest.distance
                             ))
-                            lastLocationUpdates[npc.id] = now
-                            lastKnownLocations[npc.id] = nearest.slug
+                            lastKnownLocations[npc.id] = nil
                         end
-                    elseif lastKnownLocations[npc.id] then
-                        -- NPC left a location - always log this
-                        local locationName = ""
-                        for _, loc in ipairs(knownLocations) do
-                            if loc.slug == lastKnownLocations[npc.id] then
-                                locationName = loc.name
-                                break
-                            end
-                        end
-                        LoggerService:debug("LOCATION_STATUS", string.format(
-                            "NPC %s left %s",
-                            npc.displayName,
-                            locationName
-                        ))
-                        lastKnownLocations[npc.id] = nil
                     end
                 end
             end
