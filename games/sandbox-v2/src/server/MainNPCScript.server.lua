@@ -1,12 +1,82 @@
 -- ServerScriptService/MainNPCScript.server.lua
--- At the top of MainNPCScript.server.lua
+-- 1. Move these to the VERY top, before any other code
 local ServerScriptService = game:GetService("ServerScriptService")
-local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
-local LoggerService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LoggerService)
-local InteractionService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.InteractionService)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
 local TextChatService = game:GetService("TextChatService")
 local ChatService = game:GetService("Chat")
 local HttpService = game:GetService("HttpService")
+local LoggerService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LoggerService)
+
+-- 2. All state variables together at the top
+local lastKnownLocations = {}
+local lastKnownHealth = {}
+local LOCATION_RADIUS = 20
+local HEALTH_CHANGE_THRESHOLD = 10
+
+-- 3. Health-related functions
+local function setNPCHealth(npcName, healthPercent)
+    LoggerService:debug("HEALTH", "=== Starting health change attempt ===")
+    
+    -- Validate input parameters
+    if type(npcName) ~= "string" or type(healthPercent) ~= "number" then
+        LoggerService:error("HEALTH", "Invalid parameters")
+        return false
+    end
+    
+    healthPercent = math.clamp(healthPercent, 0, 100)
+    
+    -- Find NPC
+    local targetNPC = npcManagerV3:getNPCByName(npcName)
+    if not targetNPC then
+        LoggerService:error("HEALTH", string.format("NPC %s not found", npcName))
+        return false
+    end
+
+    local humanoid = targetNPC.model:FindFirstChildWhichIsA("Humanoid")
+    if not humanoid then
+        LoggerService:error("HEALTH", "No Humanoid found")
+        return false
+    end
+
+    -- Log current state
+    LoggerService:debug("HEALTH", string.format(
+        "Current state for %s:\n- MaxHealth: %d\n- Health: %d",
+        npcName, humanoid.MaxHealth, humanoid.Health
+    ))
+
+    -- Calculate target health and damage needed
+    local targetHealth = (healthPercent / 100) * humanoid.MaxHealth
+    local currentHealth = humanoid.Health
+    local damageNeeded = currentHealth - targetHealth
+
+    -- Apply damage if needed
+    if damageNeeded > 0 then
+        LoggerService:debug("HEALTH", string.format("Applying %.1f damage to reach %.1f health", 
+            damageNeeded, targetHealth))
+        humanoid:TakeDamage(damageNeeded)
+    elseif damageNeeded < 0 then
+        -- For healing, we'll still use direct Health setting
+        LoggerService:debug("HEALTH", string.format("Healing for %.1f to reach %.1f health", 
+            -damageNeeded, targetHealth))
+        humanoid.Health = targetHealth
+    end
+
+    -- Verify change
+    task.wait(0.1)
+    LoggerService:debug("HEALTH", string.format(
+        "After change:\n- Health: %.1f\n- Target was: %.1f",
+        humanoid.Health, targetHealth
+    ))
+
+    -- Update tracking
+    lastKnownHealth[targetNPC.id] = math.floor((humanoid.Health / humanoid.MaxHealth) * 100)
+    return true
+end
+
+-- 5. Rest of your existing code...
+local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
+local InteractionService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.InteractionService)
 
 local success, result = pcall(function()
 	return require(ServerScriptService:WaitForChild("InteractionController", 5))
@@ -36,13 +106,6 @@ else
 	}
 end
 
--- Rest of your MainNPCScript code...
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-local ServerScriptService = game:GetService("ServerScriptService")
-
-local Logger = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
-
 -- Move ensureStorage to the top, before NPC initialization
 local function ensureStorage()
     local ServerStorage = game:GetService("ServerStorage")
@@ -59,7 +122,7 @@ local function ensureStorage()
         error("npcs folder not found in Assets! Check Rojo sync.")
     end
     
-    Logger:log("SYSTEM", "Storage structure verified")
+    LoggerService:info("SYSTEM", "Storage structure verified")
 end
 
 -- Call ensureStorage first
@@ -499,9 +562,6 @@ local knownLocations = {
     {name = "DVDs", slug = "dvds", coordinates = {-221.83, 26.0, -112.0}}
 }
 
-local LOCATION_RADIUS = 20  -- Consider within 20 studs to be "at" a location
-local lastKnownLocations = {}  -- Track last known location for each NPC
-
 -- Add near other helper functions
 local function getNearestLocation(position)
     local nearestDistance = math.huge
@@ -580,6 +640,40 @@ local function updateNPCs()
                             lastKnownLocations[npc.id] = nil
                         end
                     end
+
+                    -- Add health check here, after location check is complete
+                    pcall(function()
+                        local humanoid = npc.model:FindFirstChild("Humanoid")
+                        if humanoid then
+                            local currentHealth = humanoid.Health
+                            local maxHealth = humanoid.MaxHealth
+                            
+                            -- Prevent division by zero
+                            if maxHealth <= 0 then
+                                LoggerService:error("HEALTH", string.format(
+                                    "Invalid MaxHealth for %s, fixing...", 
+                                    npc.displayName
+                                ))
+                                maxHealth = 100
+                                humanoid.MaxHealth = maxHealth
+                            end
+                            
+                            local healthPercent = math.floor((currentHealth / maxHealth) * 100)
+                            
+                            -- Always log health, flag if it changed
+                            local healthChanged = not lastKnownHealth[npc.id] or healthPercent ~= lastKnownHealth[npc.id]
+                            if healthChanged then
+                                LoggerService:debug("HEALTH", string.format(
+                                    "NPC %s health changed: %d/%d (%d%%)",
+                                    npc.displayName,
+                                    currentHealth,
+                                    maxHealth,
+                                    healthPercent
+                                ))
+                            end
+                            lastKnownHealth[npc.id] = healthPercent
+                        end
+                    end)
                 end
             end
         end
@@ -621,4 +715,40 @@ if NPCChatHandlerDep then
     else
         LoggerService:info("SYSTEM", "NPCChatHandler.dep failed to load - safe to remove")
     end
+end
+
+-- Add this helper function before the test loop
+local function findNPCByName(name)
+    for _, npc in pairs(npcManagerV3.npcs) do
+        if npc.displayName == name then
+            return npc
+        end
+    end
+    return nil
+end
+
+-- Add configuration flag for damage test
+local CONFIG = {
+    ENABLE_DAMAGE_TEST = false,  -- Easy to disable
+    DAMAGE_TEST_INTERVAL = 10,
+    DAMAGE_TEST_AMOUNT = 10
+}
+
+-- Modify test loop to use config
+if CONFIG.ENABLE_DAMAGE_TEST then
+    spawn(function()
+        LoggerService:info("TEST", "Starting damage test loop for Goldie")
+        while true do
+            local targetNPC = findNPCByName("Goldie")
+            if targetNPC and targetNPC.model then
+                local humanoid = targetNPC.model:FindFirstChildWhichIsA("Humanoid")
+                if humanoid then
+                    LoggerService:debug("TEST", string.format("Damaging Goldie - Current Health: %.1f", humanoid.Health))
+                    humanoid:TakeDamage(CONFIG.DAMAGE_TEST_AMOUNT)
+                    LoggerService:debug("TEST", string.format("After damage - Health: %.1f", humanoid.Health))
+                end
+            end
+            task.wait(CONFIG.DAMAGE_TEST_INTERVAL)
+        end
+    end)
 end

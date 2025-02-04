@@ -1,7 +1,9 @@
 print("LoggerService loaded")
 
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
-export type LogCategory = "SYSTEM" | "NPC" | "CHAT" | "INTERACTION" | "MOVEMENT" | "ANIMATION" | "DATABASE" | "API" | "SNAPSHOT" | "RANGE"
+export type LogCategory = 
+    "SYSTEM" | "NPC" | "CHAT" | "INTERACTION" | "MOVEMENT" | "ANIMATION" | 
+    "DATABASE" | "API" | "SNAPSHOT" | "RANGE" | "HEALTH"
 
 local SHOW_CLUSTER_LOGS = false -- Set to true to see cluster debug logs
 
@@ -49,6 +51,22 @@ local LoggerService = {
         API = {
             enabled = true,
             minLevel = "INFO"
+        },
+        HEALTH_TEST = {
+            enabled = true,
+            minLevel = "DEBUG"  -- Set to DEBUG to see all levels
+        },
+        HEALTH_STATUS = {
+            enabled = true,
+            minLevel = "DEBUG"  -- Set to DEBUG to see all levels
+        },
+        HEALTH_ERROR = {
+            enabled = true,
+            minLevel = "ERROR"
+        },
+        HEALTH = {
+            enabled = true,
+            minLevel = "DEBUG"  -- Set to DEBUG to see all levels
         }
     },
     
