@@ -171,6 +171,7 @@ local function checkPlayerProximity(clusters)
                             -- Check entry notification cooldown
                             local entryKey = npc.id .. "_entry_" .. player.UserId
                             local lastEntry = entryNotificationCooldowns[entryKey]
+                            local cooldownKey = npc.id .. "_" .. player.UserId
                             
                             if not lastEntry or (os.time() - lastEntry) > ENTRY_COOLDOWN then
                                 -- Update group membership first
@@ -218,13 +219,6 @@ local function checkPlayerProximity(clusters)
                                         } or nil
                                     }
                                 }
-
-                                LoggerService:debug("GROUP", string.format(
-                                    "Group update - NPC: %s, Player: %s, Members: %s",
-                                    npc.displayName,
-                                    player.Name,
-                                    HttpService:JSONEncode(context.group)
-                                ))
 
                                 -- Handle interaction after group update
                                 npcManagerV3:handleNPCInteraction(npc, player, systemMessage, context)
