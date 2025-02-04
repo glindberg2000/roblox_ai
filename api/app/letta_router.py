@@ -1212,9 +1212,14 @@ def get_current_action(context: HumanContextData) -> str:
 async def update_group(update: GroupUpdate):
     """Update NPC group membership when players join/leave"""
     try:
-        processor = GroupProcessor(letta_client)
+        # Get the correct agent ID for this NPC using the helper
+        agent_id = get_agent_id(update.npc_id)
+        if not agent_id:
+            raise HTTPException(status_code=404, detail="No agent found for NPC")
+            
+        processor = GroupProcessor(direct_client)
         result = await processor.process_group_update(
-            npc_id=update.npc_id,
+            npc_id=agent_id,  # Use the looked-up agent ID instead of raw NPC ID
             player_id=update.player_id,
             is_joining=update.is_joining,
             player_name=update.player_name

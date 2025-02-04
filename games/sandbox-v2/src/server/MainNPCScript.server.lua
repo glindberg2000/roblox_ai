@@ -103,30 +103,27 @@ local LettaConfig = require(game:GetService("ReplicatedStorage").Shared.NPCSyste
 -- Add new function for group updates
 local function updateNPCGroup(npc, player, isJoining)
     -- Log before HTTP call
+    local data = HttpService:JSONEncode({
+        npc_id = npc.id,
+        player_id = tostring(player.UserId),
+        is_joining = isJoining,
+        player_name = player.Name
+    })
+    
     LoggerService:debug("GROUP", string.format(
         "Sending group update - URL: %s, Data: %s",
         LettaConfig.BASE_URL .. LettaConfig.ENDPOINTS.GROUP_UPDATE,
-        HttpService:JSONEncode({
-            npc_id = npc.id,
-            player_id = tostring(player.UserId),
-            is_joining = isJoining,
-            player_name = player.Name
-        })
+        data
     ))
 
+    -- Send request without specifying content type
     local success, response = pcall(function()
-        return HttpService:PostAsync(
-            LettaConfig.BASE_URL .. LettaConfig.ENDPOINTS.GROUP_UPDATE,
-            HttpService:JSONEncode({
-                npc_id = npc.id,
-                player_id = tostring(player.UserId),
-                is_joining = isJoining,
-                player_name = player.Name
-            }),
-            Enum.HttpContentType.ApplicationJson,
-            false,
-            LettaConfig.DEFAULT_HEADERS
-        )
+        return HttpService:RequestAsync({
+            Url = LettaConfig.BASE_URL .. LettaConfig.ENDPOINTS.GROUP_UPDATE,
+            Method = "POST",
+            Body = data,
+            Headers = LettaConfig.DEFAULT_HEADERS
+        })
     end)
 
     if not success then
@@ -136,12 +133,22 @@ local function updateNPCGroup(npc, player, isJoining)
             tostring(response)
         ))
     else
-        LoggerService:debug("GROUP", string.format(
-            "Group update for %s: %s %s group",
-            npc.displayName,
-            player.Name,
-            isJoining and "joined" or "left"
-        ))
+        -- Check if we got a successful response
+        if response.Success then
+            LoggerService:debug("GROUP", string.format(
+                "Group update for %s: %s %s group",
+                npc.displayName,
+                player.Name,
+                isJoining and "joined" or "left"
+            ))
+        else
+            LoggerService:error("GROUP", string.format(
+                "Group update failed for %s with status %d: %s",
+                npc.displayName,
+                response.StatusCode,
+                response.Body
+            ))
+        end
     end
 end
 

@@ -80,4 +80,22 @@
 3. Service Pattern
    - Separated concerns
    - Clear interfaces
-   - Modular design 
+   - Modular design
+
+## NPC Identification
+- NPCs have multiple identifiers:
+  - npc.id: Used for internal game references
+  - npc.displayName: Used for display and some API calls
+  - No AgentId in game code - handled by API
+
+## API Integration Patterns
+- Game sends what it has (displayName, id)
+- API handles mapping to Letta agent IDs
+- Consistent with other endpoints (chat, snapshot)
+
+## Group Management
+- Attempted pattern:
+  1. Detect cluster changes
+  2. Send group updates to API
+  3. API updates Letta agent memory
+- Current blocker: NPC ID access in proximity code 
