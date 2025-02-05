@@ -98,4 +98,104 @@
   1. Detect cluster changes
   2. Send group updates to API
   3. API updates Letta agent memory
-- Current blocker: NPC ID access in proximity code 
+- Current blocker: NPC ID access in proximity code
+
+## State Management
+- Central NPC manager (npcManagerV3)
+- State tracking via lastKnownLocations and lastKnownHealth
+- Event-based state change detection
+
+## Health System
+- Uses Humanoid.Health for state
+- TakeDamage() for health reduction
+- Direct Health setting for healing
+- Percentage-based health tracking
+
+## Location System
+- Known locations list with coordinates
+- Radius-based location detection
+- Slug-based location tracking
+- Change detection via state comparison
+
+## Logging System
+- Centralized LoggerService
+- Debug/Info/Error levels
+- Structured logging format
+
+## API Integration Pattern
+1. Status Updates
+   - Location changes trigger update
+   - Health changes trigger update
+   - Updates batched when possible
+   - Critical changes sent immediately
+
+2. Data Flow
+   - Game detects state change
+   - APIService formats update
+   - API updates status block
+   - LLM uses in conversations
+
+3. Rate Limiting Pattern
+   - Batch similar updates
+   - Minimum time between updates
+   - Priority queue for critical changes
+
+## State Change Detection
+- Location: Compare against lastKnownLocations
+- Health: Compare against lastKnownHealth
+- Immediate notification of critical changes
+- Batched updates for minor changes
+
+## Error Handling Pattern
+1. Failed Calls
+   - Retry with backoff
+   - Queue during outages
+   - Log all failures
+
+2. Data Validation
+   - Verify before sending
+   - Handle API errors
+   - Log invalid states
+
+## Status Update Pattern
+1. Data Structure
+   ```python
+   status_data = {
+       "location": str,
+       "health": {
+           "state": str,  # Dead/Critical/Injured/Healthy
+           "percentage": int
+       },
+       "action": str,
+       "last_updated": datetime
+   }
+   ```
+
+2. Update Flow
+   - Game detects state change
+   - Formats status data dict
+   - Sends to /npc/status/update
+   - API updates Letta memory
+
+3. Health States
+   - Dead: health <= 0
+   - Critical: health <= 25
+   - Injured: health <= 75
+   - Healthy: health > 75
+
+## Integration Patterns
+1. Status Updates
+   - Use structured dict format
+   - Include timestamps
+   - Preserve existing fields
+   - Support custom fields
+
+2. Rate Limiting
+   - Batch similar updates
+   - Prioritize critical changes
+   - Minimum update interval
+
+3. Error Handling
+   - Retry with backoff
+   - Queue during outages
+   - Log all failures 

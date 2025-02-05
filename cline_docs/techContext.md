@@ -1,5 +1,27 @@
 # Technical Context
 
+## Core Technologies
+- Roblox Studio
+- Lua
+- HTTP Service (pending for API)
+
+## Key Services
+- LoggerService
+- NPCManagerV3
+- InteractionService
+- API Service (planned)
+
+## Development Setup
+- Git for version control
+- Rojo for file sync
+- External API integration planned
+
+## Technical Constraints
+- Rate limits for API calls
+- Need for retry logic
+- Event batching requirements
+- Error handling needs
+
 ## Chat System Components
 1. TextChatService
    - CreateMessage() for message creation

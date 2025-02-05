@@ -1,21 +1,26 @@
 # Development Progress
 
-## Completed Features
-- Basic NPC spawning and management
-- NPC chat bubbles
-- NPC proximity detection
-- Chat message integration with TextChatService
-- Message formatting with NPC names
+## Completed
+- NPC spawning system
+- Health system implementation
+- Location tracking system
+- Basic state change detection
+- Test framework
 
 ## In Progress
-- Full chatbox integration
-- System message configuration
-- Group chat features
+- API integration planning
+- Event system design
 
-## Pending
-- Status update blocks
-- Group update blocks
-- System message ping restoration
+## To Do
+1. Create API service
+2. Implement webhook system
+3. Add rate limiting
+4. Add retry logic
+5. Implement event batching
+6. Add error handling
+
+## Known Issues
+None critical - ready for API integration
 
 # Progress Status: NPC System Upgrade
 

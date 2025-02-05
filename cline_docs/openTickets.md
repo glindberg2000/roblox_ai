@@ -4,6 +4,7 @@
 | Ticket | Assignee | Title | Status | Dependencies |
 |--------|----------|-------|--------|--------------|
 | CLUSTER-01 | RD | Snapshot Migration | In Progress | - |
+| STATUS-01 | RD | Status Update Integration | In Progress | - |
 | BATCH-02 | RD+LD | Message Aggregation | Not Started | CLUSTER-01 |
 
 ## Core Systems
@@ -14,6 +15,7 @@
 
 ## QA & Testing
 | TEST-05 | HD | Load Test Pipeline | Configuring | CLUSTER-01 |
+| TEST-06 | RD | Status Update Testing | Not Started | STATUS-01 |
 
 ## Optimization
 | OPT-06 | LD | Cached Reactions | Backlog | BATCH-02 |

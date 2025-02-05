@@ -146,6 +146,11 @@ class ChatResponse(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     action: Optional[Dict[str, Any]] = None
 
+# Add new model for status updates
+class StatusUpdateRequest(BaseModel):
+    npc_id: str
+    status_text: str  # Changed from separate fields to single status_text
+
 @router.post("/chat/debug", status_code=200)
 async def debug_chat_request(request: Request):
     """Debug endpoint to see raw request data"""
@@ -1227,4 +1232,42 @@ async def update_group(update: GroupUpdate):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/npc/status/update")
+async def update_npc_status(request: StatusUpdateRequest):
+    """Update NPC's status block with current state"""
+    try:
+        agent_id = get_agent_id(request.npc_id)
+        if not agent_id:
+            logger.error(f"No agent found for NPC {request.npc_id}")
+            raise HTTPException(status_code=404, detail="No agent found for NPC")
+            
+        # Get status text from request
+        status_text = request.status_text  # New field from Lua client
+        if not status_text:
+            logger.error(f"No status text provided for NPC {request.npc_id}")
+            raise HTTPException(status_code=400, detail="Status text is required")
+            
+        # Update using string format
+        letta_update_status(direct_client, agent_id, status_text)
+        
+        logger.info(f"Updated status for NPC {request.npc_id} (Agent: {agent_id})")
+        logger.debug(f"New status: {status_text}")
+        
+        return {
+            "success": True,
+            "agent_id": agent_id,
+            "status": {
+                "text": status_text,
+                "last_updated": datetime.now().isoformat()
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error updating NPC status: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update status: {str(e)}"
+        )
 

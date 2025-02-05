@@ -587,6 +587,59 @@ local function getNearestLocation(position)
     return nearest, nearestDistance <= LOCATION_RADIUS
 end
 
+
+-- Move updateNPCStatus function before it's used
+local function updateNPCStatus(npc, statusData)
+    -- Format status as simple string
+    local statusParts = {}
+    if statusData.health then
+        table.insert(statusParts, string.format("health: %d", statusData.health))
+    end
+    if statusData.location then
+        table.insert(statusParts, string.format("location: %s", statusData.location))
+    end
+    if statusData.current_action then
+        table.insert(statusParts, string.format("current_action: %s", statusData.current_action))
+    end
+    
+    local statusText = table.concat(statusParts, " | ")
+    
+    LoggerService:info("API", string.format(
+        "Sending status update for %s: %s",
+        npc.displayName,
+        statusText
+    ))
+
+    -- Send status update with string format
+    local success, response = pcall(function()
+        return HttpService:RequestAsync({
+            Url = LettaConfig.BASE_URL .. LettaConfig.ENDPOINTS.STATUS_UPDATE,
+            Method = "POST",
+            Body = HttpService:JSONEncode({
+                npc_id = npc.id,
+                status_text = statusText  -- Changed from status to status_text to match API
+            }),
+            Headers = LettaConfig.DEFAULT_HEADERS
+        })
+    end)
+
+    if not success then
+        LoggerService:error("API", string.format(
+            "Failed to send status update for %s: %s",
+            npc.displayName,
+            tostring(response)
+        ))
+        return
+    end
+
+    -- Log successful update with response
+    LoggerService:info("API", string.format(
+        "Status update response for %s: %s",
+        npc.displayName,
+        response.Body
+    ))
+end
+
 -- Modify the existing updateNPCs function
 local function updateNPCs()
     LoggerService:info("SYSTEM", "Starting NPC update loop")
@@ -620,6 +673,14 @@ local function updateNPCs()
                                     nearest.distance
                                 ))
                                 lastKnownLocations[npc.id] = nearest.slug
+                                
+                                -- Add status update
+                                pcall(function()
+                                    updateNPCStatus(npc, {
+                                        location = nearest.slug,
+                                        current_action = npc.isInteracting and "Interacting" or "Idle"
+                                    })
+                                end)
                             end
                         elseif lastLocation then
                             -- NPC has left their previous location
@@ -670,6 +731,14 @@ local function updateNPCs()
                                     maxHealth,
                                     healthPercent
                                 ))
+                                
+                                -- Add status update
+                                pcall(function()
+                                    updateNPCStatus(npc, {
+                                        health = healthPercent,
+                                        current_action = npc.isInteracting and "Interacting" or "Idle"
+                                    })
+                                end)
                             end
                             lastKnownHealth[npc.id] = healthPercent
                         end
@@ -752,3 +821,5 @@ if CONFIG.ENABLE_DAMAGE_TEST then
         end
     end)
 end
+
+
