@@ -1,83 +1,74 @@
 # Active Development Context
 
 ## Current Task
-Implementing NPC status update endpoint
+Improving NPC status and group updates
 
 ## Recent Changes
-- Added /npc/status/update endpoint
-- Implemented new dict-based status updates
-- Added health state descriptions (Healthy/Injured/Critical/Dead)
-- Added timestamp tracking for status updates
+- Simplified status updates to use string format
+- Fixed message routing from player to NPC
+- Implemented cluster-based group detection
+- Added health and location tracking
 
-## Current Focus
-Testing and integrating status updates:
-1. Test endpoint with various health/location states
-2. Verify status block updates in Letta memory
-3. Confirm LLM can read structured status data
+## Current State
+### Working
+- Player -> NPC message routing
+- Cluster detection and formation
+- Health and location tracking
+- Basic group detection
+- Status updates (new string format)
+- Basic chat functionality
+- Core interaction logic
+- State tracking and conversation management
+
+### Known Issues
+1. Group Updates
+   - Using playerid instead of display name
+   - Slow updates on group departure
+   - Need to verify member format
+
+2. Status Updates
+   - Need location names instead of slugs
+   - Missing spawn initialization
+   - Could improve narrative style
+
+3. Interaction Issues
+   - Echo on first interaction
+   - System message cleanup needed
+   - Coordinate alerts need refinement
+
+4. Message Broadcasting
+   - Only closest NPC receives messages
+   - NPC-NPC chat commented out (but functional)
+   - Need to implement group broadcasting
 
 ## Next Steps
-1. Create APIService in Roblox
-2. Implement status update calls from game
-3. Add rate limiting and batching
-4. Test with multiple NPCs
-5. Add error handling and retries
+1. Fix group member format (use display names)
+2. Add spawn status initialization
+3. Implement message broadcasting
+4. Fix first interaction echo
+5. Clean up system messages
+6. Speed up group departure updates
+7. Improve status narrative style
 
 ## Implementation Plan
-1. Status Updates
-   - Format: Structured dict with health/location
-   - Endpoint: /npc/status/update
-   - Frequency: On significant changes
+1. Group Updates
+   - Switch to display names
+   - Speed up departure detection
+   - Add broadcast support
 
-2. Rate Limiting
-   - Batch updates when possible
-   - Minimum interval between updates
-   - Priority for critical changes
+2. Status Updates
+   - Add spawn initialization
+   - Use location names
+   - Improve narrative format
 
-3. Error Handling
-   - Retry failed calls
-   - Queue updates during outages
-   - Log all API interactions
-
-## Testing Status
-- API endpoint implemented and ready
-- Need to implement Roblox client
-- Ready for integration testing
-
-## Current Issues
-- Need to re-enable status and group update blocks
-- System message pings are currently disabled
-
-## Current State (Critical Issues)
-
-## System Status: BROKEN
-- No user messages are being created or routed
-- Only system messages and their responses are displayed
-- No player messages reach NPCs
-- No messages route back to groups
-- Cluster system partially implemented but breaking core functionality
-
-## Core Issues
-1. Message Routing Broken
-   - Player -> NPC routing not working
-   - NPC -> Group routing not working
-   - Basic chat functionality non-functional
-
-2. Cluster System Problems
-   - Partially implemented
-   - Breaking core interaction logic
-   - Missing constants (CLUSTER_UPDATE_INTERVAL)
-
-3. Conversation Management
-   - Locks not working properly
-   - State tracking unreliable
-   - Multiple conversations possible when shouldn't be
-
-## Critical Files Affected
-- NPCManagerV3.lua
-- InteractionService.lua
-- GameStateService.lua
+3. Message Handling
+   - Fix echo issue
+   - Add broadcasting
+   - Clean up system messages
 
 ## Testing Status
 - Health system verified working
 - Location system verified working
-- Ready for API integration 
+- Message routing verified working
+- Cluster system functioning
+- API integration complete 

@@ -562,6 +562,21 @@ function NPCManagerV3:processAIResponse(npc, participant, response)
     if response.action and response.action.actions then
         for _, action in ipairs(response.action.actions) do
             if action.type ~= "none" then
+                -- Debug log the action structure
+                LoggerService:debug("ACTION", string.format(
+                    "Processing action: %s",
+                    HttpService:JSONEncode(action)
+                ))
+                
+                -- Debug log the data structure
+                if action.data then
+                    LoggerService:debug("ACTION", string.format(
+                        "Action data types - data: %s, target: %s",
+                        typeof(action.data),
+                        action.data.target and typeof(action.data.target) or "nil"
+                    ))
+                end
+                
                 self:executeAction(npc, participant, action)
             end
         end
@@ -651,12 +666,26 @@ end
 
 local USE_ACTION_SERVICE = true  -- Make sure this is true
 
-function NPCManagerV3:executeAction(npc, player, action)
-    LoggerService:debug("ACTION", string.format("Executing action: %s for %s", action.type, npc.displayName))
+function NPCManagerV3:executeAction(npc, participant, action)
+    LoggerService:debug("ACTION", string.format(
+        "Raw action data: %s",
+        HttpService:JSONEncode(action)
+    ))
     
     local ActionService = require(ReplicatedStorage.Shared.NPCSystem.services.ActionService)
     
-    if action.type == "navigate" then
+    if action.type == "follow" then
+        if USE_ACTION_SERVICE then
+            -- Pass the action as-is, don't reconstruct it
+            LoggerService:debug("ACTION", string.format(
+                "Using ActionService to handle 'follow' with data: %s",
+                HttpService:JSONEncode(action)
+            ))
+            ActionService.follow(npc, action)  -- Pass original action
+        else
+            self:startFollowing(npc, participant)
+        end
+    elseif action.type == "navigate" then
         LoggerService:debug("ACTION", string.format("Processing navigate action for %s", npc.displayName))
         local success = ActionService.navigate(npc, action)
         if not success then
@@ -665,16 +694,6 @@ function NPCManagerV3:executeAction(npc, player, action)
                 npc.displayName
             ))
         end
-        
-    elseif action.type == "follow" then
-        if USE_ACTION_SERVICE then
-            LoggerService:debug("ACTION", "Using ActionService to handle 'follow'")
-            ActionService.follow(npc, player)
-        else
-            LoggerService:debug("ACTION", "Using LEGACY 'startFollowing' method for 'follow'")
-            self:startFollowing(npc, player)
-        end
-        
     elseif action.type == "unfollow" then
         if USE_ACTION_SERVICE then
             LoggerService:debug("ACTION", "Using ActionService to handle 'unfollow'")
@@ -683,7 +702,6 @@ function NPCManagerV3:executeAction(npc, player, action)
             LoggerService:debug("ACTION", "Using LEGACY 'stopFollowing' method for 'unfollow'")
             self:stopFollowing(npc)
         end
-        
     elseif action.type == "emote" then
         LoggerService:debug("ACTION", "Using ActionService to handle 'emote'")
         local success = ActionService.emote(npc, action.data)

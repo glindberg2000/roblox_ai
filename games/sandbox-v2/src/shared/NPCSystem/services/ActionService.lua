@@ -4,17 +4,64 @@ local NPCManagerV3 = require(ReplicatedStorage.Shared.NPCSystem.NPCManagerV3)
 local NavigationService = require(ReplicatedStorage.Shared.NPCSystem.services.NavigationService)
 local movementServiceInstance = NPCManagerV3.getInstance().movementService
 local AnimationService = require(ReplicatedStorage.Shared.NPCSystem.services.AnimationService)
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 
 local ActionService = {}
 
-function ActionService.follow(npc, target)
-    LoggerService:debug("ACTION_SERVICE", string.format("NPC %s is following %s", npc.displayName, target.Name))
+function ActionService.follow(npc, action)
+    -- Debug log the entire action
+    LoggerService:debug("ACTION_SERVICE", string.format(
+        "Follow action data: %s",
+        typeof(action) == "string" and action or HttpService:JSONEncode(action)
+    ))
 
-    if not target or not target.Character then
-        LoggerService:warn("ACTION_SERVICE", "Invalid target or no character to follow")
+    -- If action is a string (JSON), decode it
+    if typeof(action) == "string" then
+        local success, decoded = pcall(function()
+            return HttpService:JSONDecode(action)
+        end)
+        if success then
+            action = decoded
+        else
+            LoggerService:warn("ACTION_SERVICE", "Failed to decode action JSON")
+            return
+        end
+    end
+
+    -- Extract target from action data
+    local targetName = action and (
+        -- Try both formats
+        (action.data and action.data.target) or  -- New format
+        action.target                            -- Old format
+    )
+    
+    LoggerService:debug("ACTION_SERVICE", string.format(
+        "Extracted target name: %s (type: %s)",
+        tostring(targetName),
+        typeof(targetName)
+    ))
+
+    if not targetName then
+        LoggerService:warn("ACTION_SERVICE", string.format(
+            "No target specified for NPC %s to follow. Action data: %s",
+            npc.displayName,
+            typeof(action) == "string" and action or HttpService:JSONEncode(action)
+        ))
         return
     end
 
+    local target = Players:FindFirstChild(targetName)
+    if not target then
+        LoggerService:warn("ACTION_SERVICE", string.format(
+            "Could not find player %s for NPC %s to follow",
+            targetName,
+            npc.displayName
+        ))
+        return
+    end
+
+    -- Now we have a valid target, set up following
     npc.isFollowing = true
     npc.followTarget = target
     npc.followStartTime = tick()
@@ -25,7 +72,11 @@ function ActionService.follow(npc, target)
         updateRate = 0.1
     })
 
-    LoggerService:debug("ACTION_SERVICE", string.format("NPC %s follow state set -> %s", npc.displayName, target.Name))
+    LoggerService:debug("ACTION_SERVICE", string.format(
+        "NPC %s follow state set -> %s",
+        npc.displayName,
+        target.Name
+    ))
 end
 
 -- Unfollow Action
@@ -90,7 +141,37 @@ function ActionService.navigate(npc, destination)
 end
 
 -- Add emote handling
-function ActionService.emote(npc, emoteData)
+function ActionService.emote(npc, action)
+    -- Debug log the entire action
+    LoggerService:debug("ACTION_SERVICE", string.format(
+        "Emote action data: %s",
+        typeof(action) == "string" and action or HttpService:JSONEncode(action)
+    ))
+
+    -- If action is a string (JSON), decode it
+    if typeof(action) == "string" then
+        local success, decoded = pcall(function()
+            return HttpService:JSONDecode(action)
+        end)
+        if success then
+            action = decoded
+        else
+            LoggerService:warn("ACTION_SERVICE", "Failed to decode emote action JSON")
+            return false
+        end
+    end
+
+    -- Extract emote data from action
+    local emoteData = action.data or action  -- Try both formats
+    if not emoteData or not emoteData.emote_type then
+        LoggerService:warn("ACTION_SERVICE", string.format(
+            "Invalid emote data for NPC %s: %s",
+            npc.displayName,
+            HttpService:JSONEncode(action)
+        ))
+        return false
+    end
+
     LoggerService:debug("ACTION_SERVICE", string.format(
         "NPC %s performing emote: %s", 
         npc.displayName,
@@ -148,6 +229,22 @@ function ActionService.emote(npc, emoteData)
     track:Play()
 
     return true
+end
+
+function NPCManagerV3:executeAction(npc, player, action)
+    if action.type == "follow" then
+        if USE_ACTION_SERVICE then
+            local target = action.data and action.data.target
+            LoggerService:debug("ACTION", string.format(
+                "Using ActionService to handle 'follow' with target: %s",
+                target or "nil"
+            ))
+            ActionService.follow(npc, action)  -- Pass the whole action object
+        else
+            LoggerService:debug("ACTION", "Using LEGACY 'startFollowing' method for 'follow'")
+            self:startFollowing(npc, player)
+        end
+    end
 end
 
 return ActionService

@@ -1,23 +1,27 @@
 # Development Progress
 
 ## Completed
-- NPC spawning system
-- Health system implementation
-- Location tracking system
-- Basic state change detection
-- Test framework
+- ✅ Simplified status update system
+- ✅ Implemented health tracking
+- ✅ Added location tracking
+- ✅ Basic group membership tracking
+- ✅ Status update logging
+- ✅ Location-based updates
 
 ## In Progress
-- API integration planning
-- Event system design
+- 🔄 Group member format improvements
+- 🔄 Status update narrative style
+- 🔄 System message handling
+- 🔄 Spawn initialization process
 
 ## To Do
-1. Create API service
-2. Implement webhook system
-3. Add rate limiting
-4. Add retry logic
-5. Implement event batching
-6. Add error handling
+- ⏳ Fix group member display names
+- ⏳ Add spawn status updates
+- ⏳ Improve location descriptions
+- ⏳ Fix first interaction echo
+- ⏳ Implement system message cleanup
+- ⏳ Speed up group updates
+- ⏳ Review coordinate alerts
 
 ## Known Issues
 None critical - ready for API integration

@@ -94,11 +94,10 @@
 - Consistent with other endpoints (chat, snapshot)
 
 ## Group Management
-- Attempted pattern:
-  1. Detect cluster changes
-  2. Send group updates to API
-  3. API updates Letta agent memory
-- Current blocker: NPC ID access in proximity code
+- Track member changes
+- Use display names for consistency
+- Quick updates on departure
+- Maintain group context
 
 ## State Management
 - Central NPC manager (npcManagerV3)
@@ -124,10 +123,11 @@
 
 ## API Integration Pattern
 1. Status Updates
-   - Location changes trigger update
-   - Health changes trigger update
-   - Updates batched when possible
-   - Critical changes sent immediately
+   - Use string format: "key: value | key: value"
+   - Update on health changes
+   - Update on location changes
+   - Update on group changes
+   - Should update on spawn (to be implemented)
 
 2. Data Flow
    - Game detects state change
@@ -198,4 +198,62 @@
 3. Error Handling
    - Retry with backoff
    - Queue during outages
-   - Log all failures 
+   - Log all failures
+
+## Location Handling
+- Track nearest location
+- Use location names for narrative
+- Monitor coordinate changes
+- Handle location transitions
+
+## Message Handling
+- System message cleanup needed
+- First interaction needs echo fix
+- Coordinate alerts need refinement
+
+## Agent Lifecycle
+- Create on spawn
+- Verify before updates
+- Maintain status consistency
+
+## Message Routing
+- Player -> NPC: Working
+- NPC -> Player: Working
+- NPC -> NPC: Implemented but disabled
+- Group Broadcasting: Not implemented
+
+## Cluster System
+- Working as designed
+- Forms basis for group detection
+- Handles proximity calculations
+- Supports multiple entities
+
+## Status Updates
+- String format: "key: value | key: value"
+- Triggers:
+  - Health changes
+  - Location changes
+  - Group changes
+  - Spawn (to be implemented)
+
+## Group Management
+- Uses cluster system for detection
+- Needs display name standardization
+- Quick updates on departure needed
+- Broadcasting to be implemented
+
+## Location Handling
+- Tracks nearest location
+- Uses slugs (should use names)
+- Handles transitions
+- Coordinate alerts need work
+
+## Message Handling
+- System message cleanup needed
+- First interaction needs echo fix
+- Broadcasting system needed
+
+## Agent Lifecycle
+- Create on spawn
+- Verify before updates
+- Maintain status consistency 

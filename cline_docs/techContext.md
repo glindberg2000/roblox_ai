@@ -1,26 +1,78 @@
 # Technical Context
 
+## Status Update System
+```lua
+-- Format: key: value | key: value
+status_text = "health: 100 | location: Cafe | current_action: Idle"
+```
+
+## Group Update Format
+```lua
+-- Should use display names
+members = {
+    [displayName] = {
+        name = displayName,
+        appearance = description,
+        last_seen = timestamp
+    }
+}
+```
+
+## Location System
+```lua
+-- Current format
+location = location_slug
+
+-- Should be
+location = location_name
+```
+
+## Known Technical Issues
+1. Group updates using wrong identifier (playerid vs displayName)
+2. Missing spawn initialization for status updates
+3. Echo in first interaction with NPCs
+4. Slow group departure updates
+5. System message accumulation
+6. Coordinate system alerts need refinement
+
 ## Core Technologies
 - Roblox Studio
 - Lua
-- HTTP Service (pending for API)
+- HTTP Service for API integration
+- TextChatService for messaging
 
 ## Key Services
-- LoggerService
-- NPCManagerV3
-- InteractionService
-- API Service (planned)
+- LoggerService: Centralized logging
+- NPCManagerV3: NPC state management
+- InteractionService: Proximity and clusters
+- LettaConfig: API configuration
 
 ## Development Setup
 - Git for version control
 - Rojo for file sync
-- External API integration planned
+- External API integration
+- Debug logging enabled
 
 ## Technical Constraints
-- Rate limits for API calls
-- Need for retry logic
-- Event batching requirements
-- Error handling needs
+1. API Integration
+   - Rate limits for API calls
+   - Need for retry logic
+   - Error handling for failed calls
+
+2. Chat System
+   - TextChatService limitations
+   - System message handling
+   - Echo prevention needed
+
+3. State Management
+   - Agent creation verification
+   - Status update timing
+   - Group state consistency
+
+4. Performance
+   - Message batching
+   - Update throttling
+   - Resource monitoring
 
 ## Chat System Components
 1. TextChatService
