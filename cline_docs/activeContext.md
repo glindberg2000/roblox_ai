@@ -71,4 +71,39 @@ Improving NPC status and group updates
 - Location system verified working
 - Message routing verified working
 - Cluster system functioning
-- API integration complete 
+- API integration complete
+
+# Current Task Context
+
+## Issue: System Messages and Chat Display
+Currently investigating two related issues:
+1. System messages being triggered from multiple places
+2. Chat messages only showing in bubbles, not in TextChatService text box
+
+### Known Message Sources
+1. InteractionService - Player proximity/range notifications
+2. GroupProcessor - Group membership changes
+3. Status updates (notifications disabled)
+4. Chat system - NPC responses
+
+### Chat Display Status
+- ✅ Chat bubbles working
+- ❌ TextChatService text box not showing messages
+- ✅ Server sending messages via NPCChatMessageEvent
+- ❌ Client handling of TextChatService needs review
+
+### Next Steps
+1. Track down all system message triggers:
+   - Review InteractionService
+   - Review GroupProcessor
+   - Check for other potential sources
+2. Fix TextChatService integration:
+   - Review client-side chat handling
+   - Verify TextChatService configuration
+   - Debug message routing to text box
+
+### Current Progress
+- Disabled notifications for status updates
+- Confirmed group updates don't send notifications by default
+- Need to investigate system message triggers
+- Need to fix TextChatService integration 

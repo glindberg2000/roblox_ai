@@ -256,4 +256,39 @@
 ## Agent Lifecycle
 - Create on spawn
 - Verify before updates
-- Maintain status consistency 
+- Maintain status consistency
+
+## Message Flow
+1. Server generates message (NPC/System)
+2. NPCChatHandler processes message
+3. NPCChatMessageEvent fired to clients
+4. Client should:
+   - Display chat bubble (working)
+   - Show in TextChatService text box (not working)
+
+## Known Components
+1. Server-side:
+   - NPCChatHandler
+   - InteractionService
+   - GroupProcessor
+   - Status update system
+
+2. Client-side:
+   - NPCChatClient
+   - TextChatService integration
+
+## System Message Types
+1. Proximity notifications
+2. Group membership changes
+3. Status updates
+4. NPC chat responses
+
+## Chat Display Methods
+1. Chat Bubbles:
+   - Using ChatService:Chat()
+   - Working correctly
+
+2. Text Box:
+   - Using TextChatService
+   - Not displaying messages
+   - Client-side handling needs review 

@@ -47,8 +47,7 @@ class GroupProcessor:
                     self.client,
                     agent_id=npc_id,
                     players=[],  # Empty list to clear group
-                    update_message="Group purged",
-                    send_notification=False
+                    update_message="Group purged"
                 )
                 return {
                     "success": True,
@@ -65,8 +64,7 @@ class GroupProcessor:
                     player_name=player_name,
                     appearance=player_appearance,
                     notes="Joined group",
-                    update_message=f"{player_name} joined the group",
-                    send_notification=False
+                    update_message=f"{player_name} joined the group"
                 )
                 action = "joined"
             else:
@@ -75,8 +73,7 @@ class GroupProcessor:
                     self.client,
                     agent_id=npc_id,
                     player_id=player_id,
-                    update_message=f"{player_name} left the group",
-                    send_notification=False
+                    update_message=f"{player_name} left the group"
                 )
                 action = "left"
 

@@ -70,4 +70,29 @@ None critical - ready for API integration
 1. Snapshot collection
 2. Priority tagging
 3. Batch assembly
-4. Moderator routing 
+4. Moderator routing
+
+## Chat System Status
+
+### Working Features
+- Chat bubbles appear above NPC heads
+- Server successfully sends messages
+- NPCChatMessageEvent firing correctly
+- Status update notifications disabled
+
+### Issues to Resolve
+1. System Messages:
+   - Need to identify all trigger points
+   - Review necessity of each message type
+   - Consider adding control flags
+
+2. TextChatService Integration:
+   - Messages not appearing in text box
+   - Client handling needs review
+   - May need configuration changes
+
+### Next Tasks
+1. Map all system message sources
+2. Fix TextChatService integration
+3. Add message control options
+4. Test and verify fixes 
