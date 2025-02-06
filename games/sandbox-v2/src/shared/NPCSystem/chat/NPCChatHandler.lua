@@ -41,16 +41,81 @@ function NPCChatHandler:getNPCById(npcId)
 end
 
 function NPCChatHandler:HandleChat(request)
-    LoggerService:debug("CHAT", string.format(
-        "NPCChatHandler received request: %s",
-        HttpService:JSONEncode(request)
-    ))
+    LoggerService:debug("CHAT", "NPCChatHandler: Starting chat handling")
     
-    -- Generate response ID
+    -- Validate request
+    if not request then
+        LoggerService:error("CHAT", "NPCChatHandler received nil request")
+        return nil
+    end
+    
+    -- For system messages about players entering range, use the player's ID
+    if request.message and request.message:match("^%[SYSTEM%]") then
+        -- Extract player name - try different patterns
+        local playerName = request.message:match("^%[SYSTEM%] ([^%s]+) has entered") or
+                          request.message:match("^%[SYSTEM%] ([^%s]+) is now") or
+                          request.message:match("^%[SYSTEM%] ([^%s]+)")
+        
+        LoggerService:debug("CHAT", string.format("System message detected, extracted player name: %s", 
+            playerName or "none found"
+        ))
+        
+        if playerName then
+            -- Clean up the player name if it ends with a period
+            playerName = playerName:gsub("%.$", "")
+            
+            -- Try to find the player
+            local player = game:GetService("Players"):FindFirstChild(playerName)
+            if player then
+                LoggerService:debug("CHAT", string.format("Found player %s, setting participant_id to %s", 
+                    playerName, 
+                    tostring(player.UserId)
+                ))
+                
+                request.participant_id = player.UserId
+                if not request.context then request.context = {} end
+                request.context.participant_type = "system"
+                request.context.participant_name = "SYSTEM"
+            else
+                LoggerService:warn("CHAT", string.format("Could not find player with name: %s", playerName))
+            end
+        else
+            LoggerService:warn("CHAT", "Could not extract player name from system message: " .. request.message)
+        end
+    end
+    
+    -- Add validation before proceeding
+    if not request.participant_id then
+        request.participant_id = "system"  -- Set default for system messages
+        if not request.context then request.context = {} end
+        request.context.participant_type = "system"
+        request.context.participant_name = "SYSTEM"
+    end
+    
+    -- Safely encode entire request with pcall
+    local success, encodedRequest = pcall(function()
+        return HttpService:JSONEncode({
+            npc_id = request.npc_id,
+            participant_id = request.participant_id,
+            message = request.message,
+            context = request.context
+        })
+    end)
+    
+    if success then
+        LoggerService:debug("CHAT", string.format(
+            "NPCChatHandler received request: %s",
+            encodedRequest
+        ))
+    else
+        LoggerService:warn("CHAT", "Failed to encode request: " .. tostring(encodedRequest))
+    end
+    
+    -- Generate response ID with nil checks
     local responseId = string.format("%s_%s_%s", 
-        request.npc_id,
-        request.participant_id,
-        request.message
+        tostring(request.npc_id or "unknown"),
+        tostring(request.participant_id or "system"),  -- Use "system" as fallback for system messages
+        tostring(request.message or "")
     )
     
     -- Check for duplicate response

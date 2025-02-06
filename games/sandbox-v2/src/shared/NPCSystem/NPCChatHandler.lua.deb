@@ -1,0 +1,30 @@
+function NPCChatHandler:HandleChat(request)
+    LoggerService:debug("CHAT", "NPCChatHandler: Starting chat handling")
+    
+    -- Validate request and context
+    if not request then
+        LoggerService:error("CHAT", "NPCChatHandler received nil request")
+        return nil
+    end
+    
+    if not request.context then
+        LoggerService:error("CHAT", "NPCChatHandler received request with nil context")
+        return nil
+    end
+    
+    -- Safely encode context with pcall
+    local success, encodedContext = pcall(function()
+        return HttpService:JSONEncode(request.context)
+    end)
+    
+    if success then
+        LoggerService:debug("CHAT", string.format(
+            "Request context: %s",
+            encodedContext
+        ))
+    else
+        LoggerService:warn("CHAT", "Failed to encode request context: " .. tostring(encodedContext))
+    end
+    
+    -- Rest of the code...
+end 

@@ -207,6 +207,15 @@ NPCChatEvent.OnServerEvent:Connect(function(player, data)
     NPCManagerV3:getInstance():handlePlayerMessage(player, data)
 end)
 
+-- Add this helper function at the top with other local functions
+local function createSystemParticipant()
+    return {
+        GetParticipantType = function() return "system" end,
+        GetParticipantId = function() return "system" end,
+        Name = "SYSTEM"
+    }
+end
+
 function NPCManagerV3:handlePlayerMessage(player, data)
     local message = data.message
     
@@ -238,14 +247,24 @@ function NPCManagerV3:handlePlayerMessage(player, data)
         LoggerService:debug("CHAT", "Player not in any cluster")
         return
     end
+
+    -- Create a participant object for the message source
+    local participant = {
+        GetParticipantType = function() return "player" end,
+        GetParticipantId = function() return player.UserId end,
+        Name = player.Name
+    }
     
-    -- Send message to all NPCs in the cluster
+    -- Send message to all NPCs in the cluster, except the originating NPC if this is an NPC message
     for _, member in ipairs(playerCluster.members) do
         if member.Type == "npc" then
             local npc = self.npcs[member.id]
-            if npc then
+            -- Skip if this is the NPC that originated the message
+            if npc and (participant:GetParticipantType() ~= "npc" or participant:GetParticipantId() ~= npc.id) then
                 LoggerService:debug("CHAT", string.format("Routing message to cluster member: %s", npc.displayName))
-                self:handleNPCInteraction(npc, player, message)
+                self:handleNPCInteraction(npc, participant, message)
+            else
+                LoggerService:debug("CHAT", string.format("Skipping echo route to origin NPC: %s", npc and npc.displayName or "unknown"))
             end
         end
     end
@@ -825,20 +844,76 @@ end
 local recentMessages = {} -- Store recent message IDs to prevent duplicates
 local MESSAGE_CACHE_TIME = 1 -- Time in seconds to cache messages
 
--- Add this helper function
+-- Add this helper function with nil checks
 local function generateMessageId(npcId, participantId, message)
-    return string.format("%s_%s_%s", npcId, participantId, message)
+    -- First convert all inputs to strings safely
+    local npcIdStr = tostring(npcId or "nil")
+    local participantIdStr = tostring(participantId or "nil")
+    local messageStr = tostring(message or "nil")
+    
+    -- Validate inputs after conversion
+    if npcId == nil or participantId == nil or message == nil then
+        LoggerService:warn("CHAT", string.format(
+            "Invalid message ID parameters: npcId=%s, participantId=%s, message=%s",
+            npcIdStr,
+            participantIdStr,
+            messageStr
+        ))
+        return "invalid_message_id"
+    end
+    
+    -- Now we can safely use string.format since all values are strings
+    return string.format("%s_%s_%s", npcIdStr, participantIdStr, messageStr)
 end
 
 -- Modify handleNPCInteraction to check for duplicates
 function NPCManagerV3:handleNPCInteraction(npc, participant, message)
-    -- Generate a unique ID for this message
-    local messageId = generateMessageId(npc.id, participant.UserId, message)
+    -- Validate required parameters with more detailed logging
+    if not npc or not message then
+        LoggerService:warn("CHAT", string.format(
+            "Missing required parameters: npc=%s, message=%s",
+            tostring(npc),
+            tostring(message)
+        ))
+        return
+    end
+
+    -- Handle system messages
+    if message:match("^%[SYSTEM%]") then
+        participant = createSystemParticipant()
+        LoggerService:debug("CHAT", "Created system participant for system message")
+    end
+    
+    -- Convert Player instance to participant object if needed
+    if typeof(participant) == "Instance" and participant:IsA("Player") then
+        participant = {
+            GetParticipantType = function() return "player" end,
+            GetParticipantId = function() return participant.UserId end,
+            Name = participant.Name
+        }
+    end
+
+    -- Ensure we have a valid participant
+    if not participant then
+        participant = createSystemParticipant()
+    end
+
+    -- Add debug logging for participant object
+    LoggerService:debug("CHAT", string.format(
+        "Participant details - Type: %s, ID: %s, Name: %s",
+        participant:GetParticipantType(),
+        tostring(participant:GetParticipantId()),
+        tostring(participant.Name)
+    ))
+
+    -- Generate a unique ID for this message with nil checks
+    local messageId = generateMessageId(npc.id, participant:GetParticipantId(), message)
     
     -- Check if this is a duplicate message
     if recentMessages[messageId] then
         if tick() - recentMessages[messageId] < MESSAGE_CACHE_TIME then
-            return -- Skip duplicate message
+            LoggerService:debug("CHAT", "Skipping duplicate message")
+            return
         end
     end
     
@@ -851,49 +926,65 @@ function NPCManagerV3:handleNPCInteraction(npc, participant, message)
             recentMessages[id] = nil
         end
     end
-    
-    -- Determine participant type
-    local participantType = typeof(participant) == "Instance" and participant:IsA("Player") and "player" or "npc"
-    local participantId = participantType == "player" and participant.UserId or participant.npcId
-    local participantName = participant.Name or participant.displayName
 
-    LoggerService:debug(
+    LoggerService:debug("CHAT", string.format(
         "Starting interaction - NPC: %s, Participant: %s (%s), Message: %s",
         npc.displayName,
-        participantName,
-        participantType,
+        participant.Name,
+        participant:GetParticipantType(),
         message
-    )
+    ))
 
     -- Generate unique interaction ID
     local interactionId = HttpService:GenerateGUID()
     
-    -- Create new thread for interaction
+    -- Create new thread for interaction with validated data
     local thread = task.spawn(function()
-        -- Add thread to pool
         table.insert(self.threadPool.interactionThreads, interactionId)
         
-        local response = NPCChatHandler:HandleChat({
+        -- Add debug logging before HandleChat call
+        LoggerService:debug("CHAT", string.format(
+            "Sending chat request - Message: %s, NPC ID: %s, Participant ID: %s",
+            tostring(message),
+            tostring(npc.id),
+            tostring(participant:GetParticipantId())
+        ))
+        
+        local chatRequest = {
             message = message,
             npc_id = npc.id,
-            participant_id = participantType == "player" and participant.UserId or participant.npcId,
+            participant_id = participant:GetParticipantId(),
             context = {
-                participant_type = participantType,
+                participant_type = participant:GetParticipantType(),
                 participant_name = participant.Name,
                 speaker_name = npc.displayName, 
                 is_new_conversation = true,
                 interaction_history = {},
                 nearby_players = self:getVisiblePlayers(npc),
-                npc_location = "Unknown"
+                npc_location = npc.currentLocation or "Unknown"
             }
-        })
-        
-        if response then
-            -- Process response (this handles chat bubbles and actions)
-            self:processAIResponse(npc, participant, response)
+        }
+
+        -- Validate chat request before sending
+        if not chatRequest.message or not chatRequest.npc_id or not chatRequest.participant_id then
+            LoggerService:error("CHAT", string.format(
+                "Invalid chat request: message=%s, npc_id=%s, participant_id=%s",
+                tostring(chatRequest.message),
+                tostring(chatRequest.npc_id),
+                tostring(chatRequest.participant_id)
+            ))
+            return
         end
 
-        -- Clean up thread when done
+        local response = NPCChatHandler:HandleChat(chatRequest)
+        
+        if response then
+            self:processAIResponse(npc, participant, response)
+        else
+            LoggerService:warn("CHAT", "No response received from NPCChatHandler")
+        end
+
+        -- Clean up thread
         for i, threadId in ipairs(self.threadPool.interactionThreads) do
             if threadId == interactionId then
                 table.remove(self.threadPool.interactionThreads, i)
