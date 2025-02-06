@@ -1167,7 +1167,7 @@ async def process_npc_status(entity_id: str, context: HumanContextData, enriched
             
             status_text = f"Location: {current_location} | Action: {current_action}"
             logger.info(f"Updating status for {entity_id}: {status_text}")
-            letta_update_status(direct_client, agent_id, status_text)
+            letta_update_status(direct_client, agent_id, status_text, send_notification=False)
         
         # Only update group if members changed
         if context.currentGroups and context.currentGroups.members:
@@ -1196,7 +1196,7 @@ async def process_npc_status(entity_id: str, context: HumanContextData, enriched
                         "notes": ""
                     }
                 
-                letta_update_group(direct_client, agent_id, group_data)
+                letta_update_group(direct_client, agent_id, group_data, send_notification=False)
 
     except Exception as e:
         logger.error(f"Error updating status block: {e}", exc_info=True)
@@ -1243,13 +1243,13 @@ async def update_npc_status(request: StatusUpdateRequest):
             raise HTTPException(status_code=404, detail="No agent found for NPC")
             
         # Get status text from request
-        status_text = request.status_text  # New field from Lua client
+        status_text = request.status_text
         if not status_text:
             logger.error(f"No status text provided for NPC {request.npc_id}")
             raise HTTPException(status_code=400, detail="Status text is required")
             
-        # Update using string format
-        letta_update_status(direct_client, agent_id, status_text)
+        # Update using string format with notifications disabled
+        letta_update_status(direct_client, agent_id, status_text, send_notification=False)
         
         logger.info(f"Updated status for NPC {request.npc_id} (Agent: {agent_id})")
         logger.debug(f"New status: {status_text}")
