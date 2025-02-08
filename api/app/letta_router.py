@@ -32,7 +32,7 @@ from letta_templates.npc_utils_v2 import (
     update_memory_block,
     get_location_history,
     get_group_history,
-    extract_agent_response
+    extract_agent_response,
 )
 
 from letta_templates.npc_test_data import DEMO_BLOCKS
@@ -743,10 +743,7 @@ def create_memory_blocks(npc_details: dict) -> dict:
         },
         "status": "Ready to interact with visitors",
         "group_members": {
-            "members": {},
-            "summary": "No current group members",
-            "updates": [],
-            "last_updated": ""
+            "players": {}
         },
         "persona": f"""I am {npc_details.get('name', npc_details.get('display_name'))}.
 {npc_details.get('system_prompt', '')}""",
@@ -1213,24 +1210,68 @@ def get_current_action(context: HumanContextData) -> str:
         return "Moving"
     return "Idle"  # Default action
 
+def validate_group_update(update: GroupUpdate):
+    """Validate all group update fields"""
+    if not isinstance(update.player_id, int) or update.player_id <= 0:
+        raise ValueError(f"Invalid Roblox UserId: {update.player_id}")
+        
+    if not update.player_name or not isinstance(update.player_name, str):
+        raise ValueError("Player name required")
+        
+    if not update.npc_id:
+        raise ValueError("NPC ID required")
+
 @router.post("/npc/group/update")
 async def update_group(update: GroupUpdate):
     """Update NPC group membership when players join/leave"""
     try:
-        # Get the correct agent ID for this NPC using the helper
+        # 1. Validate input
+        validate_group_update(update)
+        
+        # 2. Get agent ID
         agent_id = get_agent_id(update.npc_id)
         if not agent_id:
             raise HTTPException(status_code=404, detail="No agent found for NPC")
             
-        processor = GroupProcessor(direct_client)
-        result = await processor.process_group_update(
-            npc_id=agent_id,  # Use the looked-up agent ID instead of raw NPC ID
-            player_id=update.player_id,
-            is_joining=update.is_joining,
-            player_name=update.player_name
+        # 3. Get player info from cache/db
+        player_info = PLAYER_CACHE.get(update.player_id) or {}
+        
+        # 4. Update with real Roblox ID
+        result = await letta_update_group(
+            client=direct_client,
+            agent_id=agent_id,
+            member_data={
+                "entity_id": str(update.player_id),  # Always use real Roblox ID
+                "name": update.player_name,
+                "is_present": update.is_joining,
+                "health": "healthy",
+                "appearance": player_info.get("description", "Unknown"),
+                "last_seen": datetime.now().isoformat(),
+                "roblox_data": {  # Added metadata
+                    "user_id": update.player_id,
+                    "display_name": update.player_name
+                }
+            }
         )
-        return result
+        
+        # 5. Log migration if it happened
+        if "migrated_from" in result:
+            logger.info(
+                f"Migrated player {update.player_name} from {result['migrated_from']} "
+                f"to {update.player_id}"
+            )
+        
+        return {
+            "success": True,
+            "agent_id": agent_id,
+            "updated": datetime.now().isoformat(),
+            "result": result
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.error(f"Error updating group: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/npc/status/update")
@@ -1242,23 +1283,33 @@ async def update_npc_status(request: StatusUpdateRequest):
             logger.error(f"No agent found for NPC {request.npc_id}")
             raise HTTPException(status_code=404, detail="No agent found for NPC")
             
-        # Get status text from request
-        status_text = request.status_text
-        if not status_text:
-            logger.error(f"No status text provided for NPC {request.npc_id}")
-            raise HTTPException(status_code=400, detail="Status text is required")
-            
-        # Update using string format with notifications disabled
-        letta_update_status(direct_client, agent_id, status_text, send_notification=False)
+        # Parse status text into components
+        # Example input: "health: 100 | current_action: Idle | location: plaza"
+        status_parts = dict(part.strip().split(": ") for part in request.status_text.split("|"))
         
-        logger.info(f"Updated status for NPC {request.npc_id} (Agent: {agent_id})")
-        logger.debug(f"New status: {status_text}")
+        # Build status block with first-person description
+        status_block = {
+            "current_location": status_parts.get("location", "unknown"),
+            "state": status_parts.get("current_action", "Idle"),
+            "description": generate_status_description(
+                location=status_parts.get("location"),
+                action=status_parts.get("current_action"),
+                health=status_parts.get("health")
+            )
+        }
+        
+        # Update using new format
+        letta_update_status(
+            client=direct_client,
+            agent_id=agent_id,
+            field_updates=status_block
+        )
         
         return {
             "success": True,
             "agent_id": agent_id,
             "status": {
-                "text": status_text,
+                "text": request.status_text,
                 "last_updated": datetime.now().isoformat()
             },
             "timestamp": datetime.now().isoformat()
@@ -1270,4 +1321,20 @@ async def update_npc_status(request: StatusUpdateRequest):
             status_code=500,
             detail=f"Failed to update status: {str(e)}"
         )
+
+def generate_status_description(location: str = None, action: str = None, health: str = None) -> str:
+    """Generate first-person status description"""
+    if not location:
+        return "I'm wandering around..."
+        
+    templates = {
+        "Idle": "I'm standing at {location}, taking in the surroundings",
+        "Moving": "I'm walking towards {location}",
+        "Interacting": "I'm chatting with visitors at {location}",
+        "Injured": "I'm at {location}, nursing my wounds",
+        "Dead": "I've fallen at {location}"
+    }
+    
+    template = templates.get(action, templates["Idle"])
+    return template.format(location=location)
 

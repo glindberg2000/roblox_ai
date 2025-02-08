@@ -1214,4 +1214,97 @@ function NPCManagerV3:update()
     -- Rest of update function...
 end
 
+function NPCManagerV3:initializeNPCState(npc)
+    if not npc then return false end
+    
+    -- Initialize core state properties
+    npc.state = {
+        canInteract = true,
+        isInteracting = false,
+        lastInteraction = 0,
+        currentTarget = nil,
+        chatHandler = self.ChatHandler,
+        movementState = "idle",
+        -- ... other state properties
+    }
+    
+    -- Set direct properties for backward compatibility
+    -- These need to be set BEFORE the metatable to ensure they exist
+    npc.canInteract = true
+    npc.isInteracting = false
+    
+    -- Set up metatable for property access
+    local mt = {
+        __index = function(t, k)
+            if k == "canInteract" then
+                return t.state.canInteract
+            elseif k == "isInteracting" then
+                return t.state.isInteracting
+            end
+            return rawget(t, k)
+        end,
+        __newindex = function(t, k, v)
+            if k == "canInteract" then
+                t.state.canInteract = v
+                rawset(t, k, v) -- Keep direct property in sync
+            elseif k == "isInteracting" then
+                t.state.isInteracting = v
+                rawset(t, k, v) -- Keep direct property in sync
+            else
+                rawset(t, k, v)
+            end
+        end
+    }
+    setmetatable(npc, mt)
+    
+    npc.isInitialized = true
+    
+    -- Initialize chat handler
+    npc.ChatHandler = self.ChatHandler
+    
+    LoggerService:info("INIT", string.format("Initialized state for NPC %s", npc.displayName))
+    return true
+end
+
+-- Add new status update function
+function NPCManagerV3:updateNPCStatus(npc, updates)
+    if not npc or not updates then return end
+    
+    -- Format first-person description based on state
+    local descriptions = {
+        Idle = string.format("I'm standing at %s, taking in the surroundings", 
+            updates.current_location or "unknown location"),
+        Interacting = string.format("I'm chatting with visitors at %s", 
+            updates.current_location or "unknown location"),
+        Moving = string.format("I'm walking towards %s", 
+            updates.current_location or "unknown location")
+    }
+
+    -- Build status block
+    local statusBlock = {
+        current_location = updates.current_location,
+        state = updates.current_action or "Idle",
+        description = descriptions[updates.current_action or "Idle"]
+    }
+
+    -- Send to API
+    self.ApiService:updateStatusBlock(npc.agentId, statusBlock)
+end
+
+-- Add new group member update function
+function NPCManagerV3:updateGroupMember(npc, player, isPresent)
+    if not npc or not player then return end
+
+    local memberData = {
+        entity_id = tostring(player.UserId),
+        name = player.Name,
+        is_present = isPresent,
+        health = "healthy", -- We can update this based on player health
+        appearance = player.description or "Unknown appearance",
+        last_seen = os.date("!%Y-%m-%dT%H:%M:%SZ")
+    }
+
+    self.ApiService:upsertGroupMember(npc.agentId, memberData)
+end
+
 return NPCManagerV3
