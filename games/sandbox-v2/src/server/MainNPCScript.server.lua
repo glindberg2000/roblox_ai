@@ -153,7 +153,7 @@ LoggerService:info("SYSTEM", "NPC system V3 initialized")
 
 -- Add cooldown tracking
 local GREETING_COOLDOWN = 60 -- 60 seconds between greetings
-local ENTRY_COOLDOWN = 300 -- 5 minutes between entry notifications
+local ENTRY_COOLDOWN = 0  -- Was 300
 local greetingCooldowns = {} -- Track when NPCs last greeted each other
 local entryNotificationCooldowns = {} -- Track when NPCs were last notified about a player
 
@@ -165,7 +165,14 @@ local LettaConfig = require(game:GetService("ReplicatedStorage").Shared.NPCSyste
 
 -- Add new function for group updates
 local function updateNPCGroup(npc, player, isJoining)
-    -- Log before HTTP call
+    LoggerService:info("GROUP", string.format(
+        "Group Update - NPC: %s, Player: %s (%d), Action: %s",
+        npc.displayName,
+        player.Name,
+        player.UserId,
+        isJoining and "joining" or "leaving"
+    ))
+    
     local data = HttpService:JSONEncode({
         npc_id = npc.id,
         player_id = tostring(player.UserId),
@@ -174,12 +181,12 @@ local function updateNPCGroup(npc, player, isJoining)
     })
     
     LoggerService:debug("GROUP", string.format(
-        "Sending group update - URL: %s, Data: %s",
+        "Sending group update - URL: %s\nData: %s",
         LettaConfig.BASE_URL .. LettaConfig.ENDPOINTS.GROUP_UPDATE,
         data
     ))
 
-    -- Send request without specifying content type
+    -- Send request and log response
     local success, response = pcall(function()
         return HttpService:RequestAsync({
             Url = LettaConfig.BASE_URL .. LettaConfig.ENDPOINTS.GROUP_UPDATE,
@@ -189,38 +196,40 @@ local function updateNPCGroup(npc, player, isJoining)
         })
     end)
 
-    if not success then
-        LoggerService:error("GROUP", string.format(
-            "Failed to update group for %s: %s",
-            npc.displayName,
-            tostring(response)
+    if success then
+        LoggerService:info("GROUP", string.format(
+            "Group update response: Status=%d, Body=%s",
+            response.StatusCode,
+            response.Body
         ))
     else
-        -- Check if we got a successful response
-        if response.Success then
-            LoggerService:debug("GROUP", string.format(
-                "Group update for %s: %s %s group",
-                npc.displayName,
-                player.Name,
-                isJoining and "joined" or "left"
-            ))
-        else
-            LoggerService:error("GROUP", string.format(
-                "Group update failed for %s with status %d: %s",
-                npc.displayName,
-                response.StatusCode,
-                response.Body
-            ))
-        end
+        LoggerService:error("GROUP", string.format(
+            "Group update failed: %s",
+            tostring(response)
+        ))
     end
 end
 
 local function checkPlayerProximity(clusters)
+    LoggerService:debug("PROXIMITY", string.format("Checking %d clusters for players", #clusters))
+    
     for _, cluster in ipairs(clusters) do
+        LoggerService:debug("PROXIMITY", string.format(
+            "Checking cluster: %d players, %d NPCs, %d total members",
+            cluster.players,
+            cluster.npcs,
+            #cluster.members
+        ))
+        
         if cluster.players > 0 and cluster.npcs > 0 then
             for _, playerName in ipairs(cluster.members) do
                 local player = Players:FindFirstChild(playerName)
                 if player then
+                    LoggerService:debug("PROXIMITY", string.format(
+                        "Found player %s in cluster with NPCs", 
+                        player.Name
+                    ))
+                    
                     for _, npcName in ipairs(cluster.members) do
                         local npc = nil
                         for _, possibleNpc in pairs(npcManagerV3.npcs) do
@@ -237,6 +246,12 @@ local function checkPlayerProximity(clusters)
                             local cooldownKey = npc.id .. "_" .. player.UserId
                             
                             if not lastEntry or (os.time() - lastEntry) > ENTRY_COOLDOWN then
+                                LoggerService:info("GROUP", string.format(
+                                    "Processing group update for %s with %s",
+                                    npc.displayName,
+                                    player.Name
+                                ))
+                                
                                 -- Update group membership first
                                 updateNPCGroup(npc, player, true)
 
@@ -286,6 +301,12 @@ local function checkPlayerProximity(clusters)
                                 -- Handle interaction after group update
                                 npcManagerV3:handleNPCInteraction(npc, player, systemMessage, context)
                                 entryNotificationCooldowns[entryKey] = os.time()
+
+                                LoggerService:debug("GROUP", string.format(
+                                    "Cluster members - NPCs: %s, Players: %s",
+                                    table.concat(npcsInRange, ", "),
+                                    table.concat(playersInRange, ", ")
+                                ))
                             end
                             
                             greetingCooldowns[cooldownKey] = os.time()

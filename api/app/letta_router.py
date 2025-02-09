@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from typing import Dict, Any, Optional, List, Tuple, Set
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from datetime import datetime
 import logging
 import json
@@ -33,6 +33,7 @@ from letta_templates.npc_utils_v2 import (
     get_location_history,
     get_group_history,
     extract_agent_response,
+    upsert_group_member,
 )
 
 from letta_templates.npc_test_data import DEMO_BLOCKS
@@ -108,6 +109,9 @@ direct_client = create_letta_client()
 print("\nDEBUG - Message API Signature:")
 print(inspect.signature(direct_client.agents.messages.create))
 
+print("\nDEBUG - Group Update Function Signature:")
+print(inspect.signature(letta_update_group))
+
 """
 Letta AI Integration Router
 
@@ -150,6 +154,22 @@ class ChatResponse(BaseModel):
 class StatusUpdateRequest(BaseModel):
     npc_id: str
     status_text: str  # Changed from separate fields to single status_text
+
+class GroupUpdate(BaseModel):
+    npc_id: str
+    player_id: str  # Now expects string
+    player_name: str
+    is_joining: bool
+
+    @validator('player_id')
+    def validate_player_id(cls, v):
+        try:
+            id_num = int(v)
+            if id_num <= 0:
+                raise ValueError()
+            return v
+        except:
+            raise ValueError(f"Invalid Roblox UserId format: {v}")
 
 @router.post("/chat/debug", status_code=200)
 async def debug_chat_request(request: Request):
@@ -1210,56 +1230,30 @@ def get_current_action(context: HumanContextData) -> str:
         return "Moving"
     return "Idle"  # Default action
 
-def validate_group_update(update: GroupUpdate):
-    """Validate all group update fields"""
-    if not isinstance(update.player_id, int) or update.player_id <= 0:
-        raise ValueError(f"Invalid Roblox UserId: {update.player_id}")
-        
-    if not update.player_name or not isinstance(update.player_name, str):
-        raise ValueError("Player name required")
-        
-    if not update.npc_id:
-        raise ValueError("NPC ID required")
-
 @router.post("/npc/group/update")
 async def update_group(update: GroupUpdate):
     """Update NPC group membership when players join/leave"""
     try:
-        # 1. Validate input
-        validate_group_update(update)
-        
-        # 2. Get agent ID
         agent_id = get_agent_id(update.npc_id)
         if not agent_id:
             raise HTTPException(status_code=404, detail="No agent found for NPC")
             
-        # 3. Get player info from cache/db
+        # Get player info from cache/db
         player_info = PLAYER_CACHE.get(update.player_id) or {}
         
-        # 4. Update with real Roblox ID
-        result = await letta_update_group(
+        # Use upsert_group_member
+        result = upsert_group_member(
             client=direct_client,
             agent_id=agent_id,
-            member_data={
-                "entity_id": str(update.player_id),  # Always use real Roblox ID
+            entity_id=str(update.player_id),
+            update_data={
                 "name": update.player_name,
                 "is_present": update.is_joining,
                 "health": "healthy",
                 "appearance": player_info.get("description", "Unknown"),
-                "last_seen": datetime.now().isoformat(),
-                "roblox_data": {  # Added metadata
-                    "user_id": update.player_id,
-                    "display_name": update.player_name
-                }
+                "last_seen": datetime.now().isoformat()
             }
         )
-        
-        # 5. Log migration if it happened
-        if "migrated_from" in result:
-            logger.info(
-                f"Migrated player {update.player_name} from {result['migrated_from']} "
-                f"to {update.player_id}"
-            )
         
         return {
             "success": True,
@@ -1268,8 +1262,6 @@ async def update_group(update: GroupUpdate):
             "result": result
         }
         
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error updating group: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

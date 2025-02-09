@@ -5,15 +5,14 @@ Fixing group updates and memory system
 
 ## Recent Changes
 1. Fixed group memory initialization
-   - Removed old "members" format
    - Using only "players" structure
    - Cleaned up initialization code
 
 2. Updated API endpoints
+   - Using string IDs consistently (v3.4.0)
    - Added proper validation
-   - Using real Roblox IDs
-   - Added migration logging
-   - Improved error handling
+   - Added detailed logging
+   - Removed cooldown for testing
 
 ## Current State
 ### Working
@@ -21,6 +20,7 @@ Fixing group updates and memory system
 - Chat system functioning
 - Memory initialization fixed
 - API validation improved
+- Group updates sending (with string IDs)
 
 ### Not Working
 - Group updates not being sent
@@ -28,15 +28,9 @@ Fixing group updates and memory system
 - NPCs detect players but don't update group state
 
 ## Next Steps
-1. Commit current fixes:
-   - api/app/letta_router.py
-   - games/sandbox-v2/src/shared/NPCSystem/NPCManagerV3.lua
-   - games/sandbox-v2/src/client/NPCChatClient.lua
-
-2. Investigate group updates:
-   - Check InteractionService
-   - Review cluster detection
-   - Add group update logging
+1. Test group leave updates
+2. Add cluster change tracking
+3. Restore appropriate cooldowns
 
 ## Implementation Plan
 1. Group Updates
