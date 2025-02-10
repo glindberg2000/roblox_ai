@@ -153,7 +153,7 @@ LoggerService:info("SYSTEM", "NPC system V3 initialized")
 
 -- Add cooldown tracking
 local GREETING_COOLDOWN = 60 -- 60 seconds between greetings
-local ENTRY_COOLDOWN = 0  -- Was 300
+local ENTRY_COOLDOWN = 30  -- Changed from 0 to 30 seconds
 local greetingCooldowns = {} -- Track when NPCs last greeted each other
 local entryNotificationCooldowns = {} -- Track when NPCs were last notified about a player
 
@@ -240,12 +240,13 @@ local function checkPlayerProximity(clusters)
                         end
 
                         if npc and interactionController:canInteract(player) then
-                            -- Check entry notification cooldown
-                            local entryKey = npc.id .. "_entry_" .. player.UserId
-                            local lastEntry = entryNotificationCooldowns[entryKey]
-                            local cooldownKey = npc.id .. "_" .. player.UserId
-                            
-                            if not lastEntry or (os.time() - lastEntry) > ENTRY_COOLDOWN then
+                            -- At the start of the proximity handling
+                            local entryKey = npc.id .. "_" .. player.UserId
+                            local lastNotification = entryNotificationCooldowns[entryKey]
+                            local now = os.time()
+
+                            -- Check cooldown before processing
+                            if not lastNotification or (now - lastNotification) > ENTRY_COOLDOWN then
                                 LoggerService:info("GROUP", string.format(
                                     "Processing group update for %s with %s",
                                     npc.displayName,
@@ -276,7 +277,7 @@ local function checkPlayerProximity(clusters)
 
                                 -- Create enhanced system message
                                 local systemMessage = string.format(
-                                    "[SYSTEM] %s has entered your range. You are now in speaking range with %s%s%s.",
+                                    "[SYSTEM] %s has entered your range. You are now in speaking range with %s%s%s. Please check archival memory with request_heartbeat to properly greet them.",
                                     player.Name,
                                     #npcsInRange > 0 and table.concat(npcsInRange, ", ") or "no other NPCs",
                                     #playersInRange > 0 and (#npcsInRange > 0 and " and " or "") or "",
@@ -300,7 +301,9 @@ local function checkPlayerProximity(clusters)
 
                                 -- Handle interaction after group update
                                 npcManagerV3:handleNPCInteraction(npc, player, systemMessage, context)
-                                entryNotificationCooldowns[entryKey] = os.time()
+
+                                -- Update cooldown at the end
+                                entryNotificationCooldowns[entryKey] = now
 
                                 LoggerService:debug("GROUP", string.format(
                                     "Cluster members - NPCs: %s, Players: %s",
@@ -309,7 +312,7 @@ local function checkPlayerProximity(clusters)
                                 ))
                             end
                             
-                            greetingCooldowns[cooldownKey] = os.time()
+                            greetingCooldowns[entryKey] = os.time()
                         end
                     end
                 end
@@ -466,17 +469,36 @@ local function setupChatConnections()
                     })
                 ))
                 
+                -- First check if this is an NPC message
+                if message.TextSource and message.TextSource.Name then
+                    for _, npc in pairs(npcManagerV3.npcs) do
+                        if npc.displayName == message.TextSource.Name then
+                            LoggerService:debug("CHAT", "Ignoring message from NPC: " .. npc.displayName)
+                            return true -- Deliver but don't process
+                        end
+                    end
+                end
+                
                 local player = Players:GetPlayerByUserId(message.TextSource.UserId)
                 if player then
-                    LoggerService:info("CHAT", string.format("Received message from %s: %s",
-                        player.Name, message.Text))
-                    onPlayerChatted(player, message.Text)
+                    if message.TextSource then
+                        local sourceUserId = message.TextSource.UserId
+                        -- Only process messages from real players
+                        if sourceUserId and sourceUserId > 0 then
+                            LoggerService:info("CHAT", string.format(
+                                "Received message from %s: %s",
+                                message.TextSource.Name,
+                                message.Text
+                            ))
+                            
+                            onPlayerChatted(player, message.Text)
+                        end
+                    end
                 else
                     LoggerService:warn("CHAT", "Could not find player for UserId: " .. tostring(message.TextSource.UserId))
                 end
                 
-                -- Always deliver the message
-                return true
+                return true -- Always deliver the message
             end
             
             LoggerService:info("CHAT", "ShouldDeliverCallback handler established")

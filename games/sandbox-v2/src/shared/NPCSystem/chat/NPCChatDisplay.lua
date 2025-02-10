@@ -12,8 +12,21 @@ function NPCChatDisplay:displayMessage(npc, message, recipient)
     LoggerService:debug("CHAT", string.format(
         "Display message called - NPC: %s, Message: %s",
         npc.displayName,
-        message
+        typeof(message) == "table" and message.text or message
     ))
+
+    -- Check if this is an API response
+    if typeof(message) == "table" and message.isApiResponse then
+        -- Skip NPCChatHandler for API responses, only send to client
+        if typeof(recipient) == "Instance" and recipient:IsA("Player") then
+            NPCChatEvent:FireClient(recipient, {
+                npcName = npc.displayName,
+                message = message.text,
+                type = "chat"
+            })
+        end
+        return
+    end
 
     -- Ensure we have a valid model and head
     if not npc.model then

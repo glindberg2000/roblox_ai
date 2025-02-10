@@ -484,13 +484,25 @@ Description: {player_info['description']}"""
             logger.debug(f"Message: {result['message']}")
             logger.debug(f"Tool calls: {result['tool_calls']}")
             
+            # Handle None message during tool calls
+            if result['message'] is None and result['tool_calls']:
+                logger.info("Got None message during tool call, waiting for completion")
+                return ChatResponse(
+                    message="",  # Empty string instead of None
+                    action=convert_tool_calls_to_action(result["tool_calls"]),
+                    metadata={
+                        "tool_calls": result["tool_calls"],
+                        "reasoning": result.get("reasoning", "")
+                    }
+                )
+            
             # Convert tool calls to action
             action = convert_tool_calls_to_action(result["tool_calls"])
             logger.debug(f"Converted action: {action}")
             
             return ChatResponse(
                 message=result["message"],
-                action=action,
+                action=action,  # Now using our converted action
                 metadata={
                     "tool_calls": result["tool_calls"],
                     "reasoning": result.get("reasoning", "")
@@ -804,12 +816,25 @@ async def process_game_snapshot(snapshot: GameSnapshot):
         logger.error(f"Error processing snapshot: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/chat/v3", response_model=ChatResponse)
+@router.post("/chat/v3")
 async def chat_with_npc_v3(request: ChatRequest):
     try:
         logger.info(f"Processing chat request for NPC {request.npc_id}")
         
-        # Use cache first
+        # Add detailed message sequence logging
+        logger.info("=== Message Sequence Start ===")
+        for i, msg in enumerate(request.messages):
+            logger.info(f"Message {i}:")
+            logger.info(f"  Role: {msg.get('role')}")
+            logger.info(f"  Content: {msg.get('content')}")
+            logger.info(f"  Context: {msg.get('context')}")
+            logger.info(f"  Name: {msg.get('name')}")
+            logger.info(f"  Is System Message: {msg.get('role') == 'system'}")
+            logger.info(f"  Is Assistant Message: {msg.get('role') == 'assistant'}")
+            logger.info(f"  Is User Message: {msg.get('role') == 'user'}")
+        logger.info("=== Message Sequence End ===")
+
+        # Continue with normal processing - no blocking
         agent_id = get_agent_id(request.npc_id)
         
         if not agent_id:
@@ -846,19 +871,50 @@ async def chat_with_npc_v3(request: ChatRequest):
                 "messages": request.messages
             }
             
+            # Log what we're sending to Letta
+            logger.info("=== Sending to Letta ===")
+            logger.info(f"Agent ID: {agent_id}")
+            logger.info(f"Request: {json.dumps(letta_request, indent=2)}")
+            
             response = direct_client.agents.messages.create(**letta_request)
             
-            # Extract tool calls and convert to action
+            # Log raw response from Letta - but handle datetime objects
+            logger.info("=== Raw Letta Response ===")
+            logger.info(f"Response Type: {type(response)}")
+            logger.info(f"Response Content: {str(response)}")  # Use str() instead of json.dumps
+            
+            # Log what we extract
             result = extract_agent_response(response)
-            logger.debug("=== Letta Response ===")
-            logger.debug(f"Message: {result['message']}")
-            logger.debug(f"Tool calls: {result['tool_calls']}")
+            logger.info("=== Extracted Response ===")
+            logger.info(f"Message: {result.get('message')}")
+            logger.info(f"Tool Calls: {result.get('tool_calls')}")
+            logger.info(f"Reasoning: {result.get('reasoning')}")
+            
+            # If system message about proximity and no response, add default greeting
+            if (any(msg.get('role') == 'system' and 'has entered your range' in msg.get('content', '') 
+                    for msg in request.messages) and not result.get('message')):
+                logger.info("Adding default greeting for proximity message")
+                result['message'] = "Hi there! Default greeting!"
+            
+            # Handle None message during tool calls
+            if result['message'] is None and result['tool_calls']:
+                logger.info("Got None message during tool call, waiting for completion")
+                return ChatResponse(
+                    message="",  # Empty string instead of None
+                    action=convert_tool_calls_to_action(result["tool_calls"]),
+                    metadata={
+                        "tool_calls": result["tool_calls"],
+                        "reasoning": result.get("reasoning", "")
+                    }
+                )
             
             # Convert tool calls to proper Roblox action format
             action = convert_tool_calls_to_action(result["tool_calls"])
             logger.debug(f"Converted action: {action}")
             
-            return ChatResponse(
+            # Log what we send back
+            logger.info("=== Sending to Client ===")
+            response = ChatResponse(
                 message=result["message"],
                 action=action,  # Now using our converted action
                 metadata={
@@ -866,6 +922,9 @@ async def chat_with_npc_v3(request: ChatRequest):
                     "reasoning": result.get("reasoning", "")
                 }
             )
+            logger.info(f"Final Response: {json.dumps(response.dict(), indent=2)}")
+            
+            return response
 
         except Exception as e:
             logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)

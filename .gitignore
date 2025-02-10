@@ -43,3 +43,10 @@ htmlcov/
 *.patch
 generate_problem_doc.pyapi/app/letta-templates/
 api/letta-templates/
+
+
+# Add supervisor files
+supervisor/
+supervisor/*.log
+supervisor/*.pid
+supervisor/*.conf

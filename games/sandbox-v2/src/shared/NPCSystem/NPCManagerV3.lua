@@ -571,11 +571,19 @@ end
 function NPCManagerV3:processAIResponse(npc, participant, response)
     if response.message then
         LoggerService:debug("CHAT", string.format(
-            "Attempting to display message from %s: %s",
+            "Processing API response from %s: %s",
             npc.displayName,
             response.message
         ))
-        NPCChatDisplay:displayMessage(npc, response.message, participant)
+        
+        -- Mark this as an API response
+        local messageData = {
+            text = response.message,
+            isApiResponse = true,  -- Add flag to identify API responses
+            source = "API"
+        }
+        
+        NPCChatDisplay:displayMessage(npc, messageData, participant)
     end
 
     if response.action and response.action.actions then
