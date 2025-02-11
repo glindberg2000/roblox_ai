@@ -181,130 +181,130 @@ async def debug_chat_request(request: Request):
         "validation_model": ChatRequest.model_json_schema()
     }
 
-@router.post("/chat", response_model=ChatResponse)
-async def chat_with_npc(request: ChatRequest):
-    logger.info(f"Received request from game: {request.model_dump_json()}")
-    try:
-        # Get NPC context
-        npc_context = get_npc_context(request.npc_id)
-        logger.info(f"Got NPC context: {npc_context}")
-        if not npc_context:
-            raise HTTPException(status_code=404, detail="NPC not found")
+# @router.post("/chat", response_model=ChatResponse)
+# async def chat_with_npc(request: ChatRequest):
+#     logger.info(f"Received request from game: {request.model_dump_json()}")
+#     try:
+#         # Get NPC context
+#         npc_context = get_npc_context(request.npc_id)
+#         logger.info(f"Got NPC context: {npc_context}")
+#         if not npc_context:
+#             raise HTTPException(status_code=404, detail="NPC not found")
 
-        # Initialize context if None
-        request_context = request.context or {}
+#         # Initialize context if None
+#         request_context = request.context or {}
         
-        # Get existing agent mapping
-        agent_mapping = get_agent_mapping(request.npc_id, request.participant_id)
-        print(f"Found agent mapping: {agent_mapping}")
+#         # Get existing agent mapping
+#         agent_mapping = get_agent_mapping(request.npc_id, request.participant_id)
+#         print(f"Found agent mapping: {agent_mapping}")
 
-        if not agent_mapping:
-            # Get NPC details for memory
-            npc_details = get_npc_context(request.npc_id)
+#         if not agent_mapping:
+#             # Get NPC details for memory
+#             npc_details = get_npc_context(request.npc_id)
             
-            # Add participant type handling
-            participant_type = request.context.get("participant_type", "player")
-            participant_info = None
+#             # Add participant type handling
+#             participant_type = request.context.get("participant_type", "player")
+#             participant_info = None
             
-            if participant_type == "npc":
-                participant_info = get_npc_context(request.participant_id)
-                if participant_info:  # Only use NPC context if found
-                    human_description = f"""This is what I know about the NPC:
-Name: {participant_info['display_name']}
-Description: {participant_info['system_prompt']}"""
-                else:
-                    # Fallback to player lookup if NPC not found
-                    participant_type = "player"
+#             if participant_type == "npc":
+#                 participant_info = get_npc_context(request.participant_id)
+#                 if participant_info:  # Only use NPC context if found
+#                     human_description = f"""This is what I know about the NPC:
+# Name: {participant_info['display_name']}
+# Description: {participant_info['system_prompt']}"""
+#                 else:
+#                     # Fallback to player lookup if NPC not found
+#                     participant_type = "player"
             
-            # Handle player case (either direct or fallback)
-            if participant_type == "player":
-                player_info = get_player_info(request.participant_id)
-                human_description = f"""This is what I know about the player:
-Name: {player_info['display_name'] or request_context.get('participant_name', 'a player')}
-Description: {player_info['description']}"""
+#             # Handle player case (either direct or fallback)
+#             if participant_type == "player":
+#                 player_info = get_player_info(request.participant_id)
+#                 human_description = f"""This is what I know about the player:
+# Name: {player_info['display_name'] or request_context.get('participant_name', 'a player')}
+# Description: {player_info['description']}"""
             
-            # Create memory using the appropriate description
-            memory = ChatMemory(
-                human=human_description.strip(),
-                persona=f"""My name is {npc_details['display_name']}.
-{npc_details['system_prompt']}""".strip()
-            )
+#             # Create memory using the appropriate description
+#             memory = ChatMemory(
+#                 human=human_description.strip(),
+#                 persona=f"""My name is {npc_details['display_name']}.
+# {npc_details['system_prompt']}""".strip()
+#             )
             
-            # Create new agent with proper config
-            agent = letta_client.create_agent(
-                name=f"npc_{npc_details['display_name']}_{request.npc_id[:8]}_{request.participant_id[:8]}_{str(uuid.uuid4())[:8]}",
-                memory=memory,
-                llm_config=LLM_CONFIGS[DEFAULT_LLM],
-                system=gpt_system.get_system_text("memgpt_chat"),
-                include_base_tools=True
-            )
+#             # Create new agent with proper config
+#             agent = letta_client.create_agent(
+#                 name=f"npc_{npc_details['display_name']}_{request.npc_id[:8]}_{request.participant_id[:8]}_{str(uuid.uuid4())[:8]}",
+#                 memory=memory,
+#                 llm_config=LLM_CONFIGS[DEFAULT_LLM],
+#                 system=gpt_system.get_system_text("memgpt_chat"),
+#                 include_base_tools=True
+#             )
             
-            # Store new agent mapping
-            agent_mapping = create_agent_mapping(
-                npc_id=request.npc_id,
-                participant_id=request.participant_id,
-                agent_id=agent["id"]
-            )
-            print(f"Created new agent mapping: {agent_mapping}")
-        else:
-            print(f"Using existing agent {agent_mapping.letta_agent_id} for {request.participant_id}")
-            logger.info(f"Chat using agent {agent_mapping.letta_agent_id} for NPC {request.npc_id}")
-            logger.info(f"  This agent is in cache: {agent_mapping.letta_agent_id in AGENT_ID_CACHE.values()}")
+#             # Store new agent mapping
+#             agent_mapping = create_agent_mapping(
+#                 npc_id=request.npc_id,
+#                 participant_id=request.participant_id,
+#                 agent_id=agent["id"]
+#             )
+#             print(f"Created new agent mapping: {agent_mapping}")
+#         else:
+#             print(f"Using existing agent {agent_mapping.letta_agent_id} for {request.participant_id}")
+#             logger.info(f"Chat using agent {agent_mapping.letta_agent_id} for NPC {request.npc_id}")
+#             logger.info(f"  This agent is in cache: {agent_mapping.letta_agent_id in AGENT_ID_CACHE.values()}")
         
-        # Send message to agent
-        logger.info(f"Sending message to agent {agent_mapping.letta_agent_id}")
-        try:
-            # Get name from context
-            speaker_name = request.context.get("participant_name")
-            logger.info(f"Message details:")
-            logger.info(f"  agent_id: {agent_mapping.letta_agent_id}")
-            logger.info(f"  role: {message_role}")
-            logger.info(f"  message: {request.message}")
-            logger.info(f"  speaker_name: {speaker_name}")
+#         # Send message to agent
+#         logger.info(f"Sending message to agent {agent_mapping.letta_agent_id}")
+#         try:
+#             # Get name from context
+#             speaker_name = request.context.get("participant_name")
+#             logger.info(f"Message details:")
+#             logger.info(f"  agent_id: {agent_mapping.letta_agent_id}")
+#             logger.info(f"  role: {message_role}")
+#             logger.info(f"  message: {request.message}")
+#             logger.info(f"  speaker_name: {speaker_name}")
             
-            response = direct_client.send_message(
-                agent_id=agent_mapping.letta_agent_id,
-                role=message_role,
-                message=request.message,
-                name=speaker_name
-            )
+#             response = direct_client.send_message(
+#                 agent_id=agent_mapping.letta_agent_id,
+#                 role=message_role,
+#                 message=request.message,
+#                 name=speaker_name
+#             )
             
-            logger.info(f"Response type: {type(response)}")
-            logger.info(f"Response content: {response}")
+#             logger.info(f"Response type: {type(response)}")
+#             logger.info(f"Response content: {response}")
             
-        except Exception as e:
-            logger.error(f"Error sending message to Letta: {str(e)}")
-            logger.error(f"Error type: {type(e)}")
-            logger.error(f"Error details: {e.__dict__}")
-            raise
+#         except Exception as e:
+#             logger.error(f"Error sending message to Letta: {str(e)}")
+#             logger.error(f"Error type: {type(e)}")
+#             logger.error(f"Error details: {e.__dict__}")
+#             raise
         
-        # Extract message from function call
-        message = None
-        for msg in response.messages:
-            if msg.message_type == "function_call":
-                try:
-                    args = json.loads(msg.function_call.arguments)
-                    if "message" in args:
-                        message = args["message"]
-                        break
-                except:
-                    continue
+#         # Extract message from function call
+#         message = None
+#         for msg in response.messages:
+#             if msg.message_type == "function_call":
+#                 try:
+#                     args = json.loads(msg.function_call.arguments)
+#                     if "message" in args:
+#                         message = args["message"]
+#                         break
+#                 except:
+#                     continue
 
-        # Format response
-        return ChatResponse(
-            message=message or "I'm having trouble responding right now.",
-            conversation_id=None,
-            metadata={
-                "participant_type": request_context.get("participant_type", "player"),
-                "interaction_id": request_context.get("interaction_id"),
-                "is_npc_chat": request_context.get("participant_type") == "npc"
-            },
-            action={"type": "none"}
-        )
+#         # Format response
+#         return ChatResponse(
+#             message=message or "I'm having trouble responding right now.",
+#             conversation_id=None,
+#             metadata={
+#                 "participant_type": request_context.get("participant_type", "player"),
+#                 "interaction_id": request_context.get("interaction_id"),
+#                 "is_npc_chat": request_context.get("participant_type") == "npc"
+#             },
+#             action={"type": "none"}
+#         )
 
-    except Exception as e:
-        logger.error(f"Error in chat endpoint: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+#     except Exception as e:
+#         logger.error(f"Error in chat endpoint: {str(e)}")
+#         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/agents/{npc_id}/{participant_id}")
 async def delete_agent(npc_id: int, participant_id: str):
@@ -390,140 +390,140 @@ def get_player_description(participant_id: str) -> str:
         ).fetchone()
         return result['description'] if result else ""
 
-@router.post("/chat/v2", response_model=ChatResponse)
-async def chat_with_npc_v2(request: ChatRequest):
-    try:
-        logger.info(f"Processing chat request for NPC {request.npc_id}")
-        logger.info(f"Processing chat request with context: {request.context}")
+# @router.post("/chat/v2", response_model=ChatResponse)
+# async def chat_with_npc_v2(request: ChatRequest):
+#     try:
+#         logger.info(f"Processing chat request for NPC {request.npc_id}")
+#         logger.info(f"Processing chat request with context: {request.context}")
         
-        # Determine message role
-        message_role = "system" if request.message.startswith("[SYSTEM]") else "user"
-        logger.info(f"Determined message role: {message_role} for message: {request.message[:50]}...")
+#         # Determine message role
+#         message_role = "system" if request.message.startswith("[SYSTEM]") else "user"
+#         logger.info(f"Determined message role: {message_role} for message: {request.message[:50]}...")
         
-        # Get or create agent mapping
-        mapping = get_agent_mapping(
-            request.npc_id,
-            request.participant_id
-        )
+#         # Get or create agent mapping
+#         mapping = get_agent_mapping(
+#             request.npc_id,
+#             request.participant_id
+#         )
         
-        if not mapping:
-            # Get NPC details for memory
-            npc_details = get_npc_context(request.npc_id)
+#         if not mapping:
+#             # Get NPC details for memory
+#             npc_details = get_npc_context(request.npc_id)
             
-            # Add participant type handling
-            participant_type = request.context.get("participant_type", "player")
-            participant_info = None
+#             # Add participant type handling
+#             participant_type = request.context.get("participant_type", "player")
+#             participant_info = None
             
-            if participant_type == "npc":
-                participant_info = get_npc_context(request.participant_id)
-                if participant_info:  # Only use NPC context if found
-                    human_description = f"""This is what I know about the NPC:
-Name: {participant_info['display_name']}
-Description: {participant_info['system_prompt']}"""
-                else:
-                    # Fallback to player lookup if NPC not found
-                    participant_type = "player"
+#             if participant_type == "npc":
+#                 participant_info = get_npc_context(request.participant_id)
+#                 if participant_info:  # Only use NPC context if found
+#                     human_description = f"""This is what I know about the NPC:
+# Name: {participant_info['display_name']}
+# Description: {participant_info['system_prompt']}"""
+#                 else:
+#                     # Fallback to player lookup if NPC not found
+#                     participant_type = "player"
             
-            # Handle player case (either direct or fallback)
-            if participant_type == "player":
-                player_info = get_player_info(request.participant_id)
-                human_description = f"""This is what I know about the player:
-Name: {player_info['display_name'] or request_context.get('participant_name', 'a player')}
-Description: {player_info['description']}"""
+#             # Handle player case (either direct or fallback)
+#             if participant_type == "player":
+#                 player_info = get_player_info(request.participant_id)
+#                 human_description = f"""This is what I know about the player:
+# Name: {player_info['display_name'] or request_context.get('participant_name', 'a player')}
+# Description: {player_info['description']}"""
             
-            # Create memory using the appropriate description
-            memory = create_agent_memory(direct_client, npc_details, human_description)
-            logger.info(f"Using memory for agent creation: {memory}")
+#             # Create memory using the appropriate description
+#             memory = create_agent_memory(direct_client, npc_details, human_description)
+#             logger.info(f"Using memory for agent creation: {memory}")
             
-            system_prompt = gpt_system.get_system_text("memgpt_chat").strip()
+#             system_prompt = gpt_system.get_system_text("memgpt_chat").strip()
 
-            agent = create_roblox_agent(
-                client=direct_client,
-                name=f"npc_{npc_details['display_name']}_{request.npc_id[:8]}_{request.participant_id[:8]}_{str(uuid.uuid4())[:8]}",
-                memory=memory,
-                system=system_prompt,
-                llm_type=request.context.get("llm_type", DEFAULT_LLM)
-            )
+#             agent = create_roblox_agent(
+#                 client=direct_client,
+#                 name=f"npc_{npc_details['display_name']}_{request.npc_id[:8]}_{request.participant_id[:8]}_{str(uuid.uuid4())[:8]}",
+#                 memory=memory,
+#                 system=system_prompt,
+#                 llm_type=request.context.get("llm_type", DEFAULT_LLM)
+#             )
             
-            # Store mapping
-            mapping = create_agent_mapping(
-                npc_id=request.npc_id,
-                participant_id=request.participant_id,
-                agent_id=agent.id
-            )
-            print(f"Created new agent mapping: {mapping}")
-        else:
-            print(f"Using existing agent {mapping.letta_agent_id} for {request.participant_id}")
+#             # Store mapping
+#             mapping = create_agent_mapping(
+#                 npc_id=request.npc_id,
+#                 participant_id=request.participant_id,
+#                 agent_id=agent.id
+#             )
+#             print(f"Created new agent mapping: {mapping}")
+#         else:
+#             print(f"Using existing agent {mapping.letta_agent_id} for {request.participant_id}")
         
-        # Send message to agent
-        logger.info(f"Sending message to agent {mapping.letta_agent_id}")
-        try:
-            # Get name from context
-            speaker_name = request.context.get("participant_name")
-            logger.info(f"Message details:")
-            logger.info(f"  agent_id: {mapping.letta_agent_id}")
-            logger.info(f"  role: {message_role}")
-            logger.info(f"  message: {request.message}")
-            logger.info(f"  speaker_name: {speaker_name}")
+#         # Send message to agent
+#         logger.info(f"Sending message to agent {mapping.letta_agent_id}")
+#         try:
+#             # Get name from context
+#             speaker_name = request.context.get("participant_name")
+#             logger.info(f"Message details:")
+#             logger.info(f"  agent_id: {mapping.letta_agent_id}")
+#             logger.info(f"  role: {message_role}")
+#             logger.info(f"  message: {request.message}")
+#             logger.info(f"  speaker_name: {speaker_name}")
             
-            # Send message using new API format
-            letta_request = {
-                "agent_id": mapping.letta_agent_id,
-                "messages": [{
-                    "content": request.message,
-                    "role": message_role,
-                    "name": speaker_name
-                }]
-            }
+#             # Send message using new API format
+#             letta_request = {
+#                 "agent_id": mapping.letta_agent_id,
+#                 "messages": [{
+#                     "content": request.message,
+#                     "role": message_role,
+#                     "name": speaker_name
+#                 }]
+#             }
             
-            response = direct_client.agents.messages.create(**letta_request)
+#             response = direct_client.agents.messages.create(**letta_request)
             
-            # Use our existing response handling
-            result = extract_agent_response(response)
-            logger.debug("=== Letta Response ===")
-            logger.debug(f"Message: {result['message']}")
-            logger.debug(f"Tool calls: {result['tool_calls']}")
+#             # Use our existing response handling
+#             result = extract_agent_response(response)
+#             logger.debug("=== Letta Response ===")
+#             logger.debug(f"Message: {result['message']}")
+#             logger.debug(f"Tool calls: {result['tool_calls']}")
             
-            # Handle None message during tool calls
-            if result['message'] is None and result['tool_calls']:
-                logger.info("Got None message during tool call, waiting for completion")
-                return ChatResponse(
-                    message="",  # Empty string instead of None
-                    action=convert_tool_calls_to_action(result["tool_calls"]),
-                    metadata={
-                        "tool_calls": result["tool_calls"],
-                        "reasoning": result.get("reasoning", "")
-                    }
-                )
+#             # Handle None message during tool calls
+#             if result['message'] is None and result['tool_calls']:
+#                 logger.info("Got None message during tool call, waiting for completion")
+#                 return ChatResponse(
+#                     message="",  # Empty string instead of None
+#                     action=convert_tool_calls_to_action(result["tool_calls"]),
+#                     metadata={
+#                         "tool_calls": result["tool_calls"],
+#                         "reasoning": result.get("reasoning", "")
+#                     }
+#                 )
             
-            # Convert tool calls to action
-            action = convert_tool_calls_to_action(result["tool_calls"])
-            logger.debug(f"Converted action: {action}")
+#             # Convert tool calls to action
+#             action = convert_tool_calls_to_action(result["tool_calls"])
+#             logger.debug(f"Converted action: {action}")
             
-            return ChatResponse(
-                message=result["message"],
-                action=action,  # Now using our converted action
-                metadata={
-                    "tool_calls": result["tool_calls"],
-                    "reasoning": result.get("reasoning", "")
-                }
-            )
+#             return ChatResponse(
+#                 message=result["message"],
+#                 action=action,  # Now using our converted action
+#                 metadata={
+#                     "tool_calls": result["tool_calls"],
+#                     "reasoning": result.get("reasoning", "")
+#                 }
+#             )
 
-        except Exception as e:
-            logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
-            return ChatResponse(
-                message="Something went wrong!",
-                action={"type": "none"},
-                metadata={"error": str(e)}
-            )
+#         except Exception as e:
+#             logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
+#             return ChatResponse(
+#                 message="Something went wrong!",
+#                 action={"type": "none"},
+#                 metadata={"error": str(e)}
+#             )
 
-    except Exception as e:
-        logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
-        return ChatResponse(
-            message="Something went wrong!",
-            action={"type": "none"},
-            metadata={"error": str(e)}
-        )
+#     except Exception as e:
+#         logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
+#         return ChatResponse(
+#             message="Something went wrong!",
+#             action={"type": "none"},
+#             metadata={"error": str(e)}
+#         )
 
 # Tool registration function
 def register_base_tools(client) -> List[str]:
@@ -588,73 +588,73 @@ def extract_tool_results(response):
 
     return results
 
-def create_agent_for_npc(npc_context: dict, participant_id: str):
-    """Create agent with navigation tools and location memory"""
+# def create_agent_for_npc(npc_context: dict, participant_id: str):
+#     """Create agent with navigation tools and location memory"""
     
-    # 1. Create memory blocks
-    memory = {
-        "persona": {
-            "name": npc_context["displayName"],
-            "description": npc_context["systemPrompt"]
-        },
-        "human": {
-            "name": participant_id,  # Player's name/ID
-            "description": "A Roblox player exploring the game"
-        },
-        "locations": {
-            "known_locations": [
-                # Slug-based location
-                {
-                    "name": "Pete's Stand",
-                    "description": "A friendly food stand run by Pete",
-                    "coordinates": [-12.0, 18.9, -127.0],
-                    "slug": "petes_stand"
-                },
-                # Coordinate-based locations
-                {
-                    "name": "Secret Garden",
-                    "description": "A hidden garden with rare flowers",
-                    "coordinates": [15.5, 20.0, -110.8]
-                    # No slug - will use coordinates
-                },
-                {
-                    "name": "Town Square",
-                    "description": "Central gathering place with fountain",
-                    "coordinates": [45.2, 12.0, -89.5],
-                    "slug": "town_square"  # Optional with coordinates
-                },
-                {
-                    "name": "Market District",
-                    "description": "Busy shopping area with many vendors",
-                    "coordinates": [-28.4, 15.0, -95.2],
-                    "slug": "market_district"
-                }
-            ]
-        }
-    }
+#     # 1. Create memory blocks
+#     memory = {
+#         "persona": {
+#             "name": npc_context["displayName"],
+#             "description": npc_context["systemPrompt"]
+#         },
+#         "human": {
+#             "name": participant_id,  # Player's name/ID
+#             "description": "A Roblox player exploring the game"
+#         },
+#         "locations": {
+#             "known_locations": [
+#                 # Slug-based location
+#                 {
+#                     "name": "Pete's Stand",
+#                     "description": "A friendly food stand run by Pete",
+#                     "coordinates": [-12.0, 18.9, -127.0],
+#                     "slug": "petes_stand"
+#                 },
+#                 # Coordinate-based locations
+#                 {
+#                     "name": "Secret Garden",
+#                     "description": "A hidden garden with rare flowers",
+#                     "coordinates": [15.5, 20.0, -110.8]
+#                     # No slug - will use coordinates
+#                 },
+#                 {
+#                     "name": "Town Square",
+#                     "description": "Central gathering place with fountain",
+#                     "coordinates": [45.2, 12.0, -89.5],
+#                     "slug": "town_square"  # Optional with coordinates
+#                 },
+#                 {
+#                     "name": "Market District",
+#                     "description": "Busy shopping area with many vendors",
+#                     "coordinates": [-28.4, 15.0, -95.2],
+#                     "slug": "market_district"
+#                 }
+#             ]
+#         }
+#     }
 
-    # 2. Only register the tools we need
-    tools_to_register = {
-        "navigate_to": TOOL_REGISTRY["navigate_to"],  # Updated tool name
-        "perform_action": TOOL_REGISTRY["perform_action"]
-    }
+#     # 2. Only register the tools we need
+#     tools_to_register = {
+#         "navigate_to": TOOL_REGISTRY["navigate_to"],  # Updated tool name
+#         "perform_action": TOOL_REGISTRY["perform_action"]
+#     }
 
-    # 3. Create agent with tools and memory
-    agent = direct_client.create_agent(
-        name=f"{npc_context['displayName']}_{participant_id}",
-        system=npc_context["systemPrompt"] + TOOL_INSTRUCTIONS,
-        memory=memory,
-        embedding_config=embedding_config,
-        llm_config=llm_config,
-        include_base_tools=True
-    )
+#     # 3. Create agent with tools and memory
+#     agent = direct_client.create_agent(
+#         name=f"{npc_context['displayName']}_{participant_id}",
+#         system=npc_context["systemPrompt"] + TOOL_INSTRUCTIONS,
+#         memory=memory,
+#         embedding_config=embedding_config,
+#         llm_config=llm_config,
+#         include_base_tools=True
+#     )
 
-    # 4. Register only navigation tools
-    for name, info in tools_to_register.items():
-        tool = direct_client.create_tool(info["function"], name=name)
-        logger.info(f"Created tool: {name} for navigation")
+#     # 4. Register only navigation tools
+#     for name, info in tools_to_register.items():
+#         tool = direct_client.create_tool(info["function"], name=name)
+#         logger.info(f"Created tool: {name} for navigation")
 
-    return agent
+#     return agent
 
 def process_tool_results(tool_results: dict) -> Tuple[str, dict]:
     """Process tool results and extract message/action"""

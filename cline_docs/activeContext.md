@@ -1,61 +1,71 @@
 # Active Development Context
 
 ## Current Task
-Fixing group updates and memory system
+Adding NPC animations and actions (jump, sit)
 
 ## Recent Changes
-1. Fixed group memory initialization
-   - Using only "players" structure
-   - Cleaned up initialization code
-
-2. Updated API endpoints
-   - Using string IDs consistently (v3.4.0)
-   - Added proper validation
-   - Added detailed logging
-   - Removed cooldown for testing
+1. Fixed chat system
+   - Fixed message routing loop
+   - Added conditional heartbeat reminder
+   - Improved system message handling
+   - Fixed TextChatService integration
 
 ## Current State
 ### Working
-- Status updates sending correctly
-- Chat system functioning
-- Memory initialization fixed
-- API validation improved
-- Group updates sending (with string IDs)
+- Chat system fully functional
+- Message routing fixed
+- System message handling improved
+- TextChatService integration complete
 
-### Not Working
-- Group updates not being sent
-- Cluster data not updating
-- NPCs detect players but don't update group state
-
-## Next Steps
-1. Test group leave updates
-2. Add cluster change tracking
-3. Restore appropriate cooldowns
+### Next Implementation
+- Jump action and animation
+- Sit state tracking
+- Status updates for animations
+- Prompt updates for actions
 
 ## Implementation Plan
-1. Group Updates
-   - Switch to display names
-   - Speed up departure detection
-   - Add broadcast support
+1. Animation System
+   - Add jump animation
+   - Track sitting state
+   - Update status system
 
-2. Status Updates
-   - Add spawn initialization
-   - Use location names
-   - Improve narrative format
+2. Action Commands
+   - Implement jump command
+   - Add sit state handling
+   - Update prompt for actions
 
-3. Message Handling
-   - Fix echo issue
-   - Add broadcasting
-   - Clean up system messages
+3. Status Updates
+   - Track animation states
+   - Add sitting status
+   - Update status format
 
-## Testing Status
-- Health system verified working
-- Location system verified working
-- Message routing verified working
-- Cluster system functioning
-- API integration complete
+## Technical Requirements
+1. Animation
+   ```lua
+   -- Animation format
+   local jumpAnim = Instance.new("Animation")
+   jumpAnim.AnimationId = "rbxassetid://507765644"
+   ```
 
-# Current Task Context
+2. Status Format
+   ```lua
+   -- New status format
+   status = "health: 100 | location: Cafe | state: sitting"
+   ```
+
+3. Action Commands
+   ```lua
+   -- New action structure
+   action = {
+       type = "jump",
+       data = {
+           height = 5,
+           animation = jumpAnim
+       }
+   }
+   ```
+
+## Current Task Context
 
 ## Issue: System Messages and Chat Display
 Currently investigating two related issues:
