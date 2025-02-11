@@ -314,9 +314,36 @@ do
             LoggerService:error("SYSTEM", "Could not find config ModuleScript")
             return {
                 Behaviors = {
-                    EnableWander = true,
-                    WanderRadius = 40,
-                    MaxMovementThreads = 5
+                    EnableBehaviors = true,
+                    MaxMovementThreads = 5,
+                    
+                    States = {
+                        Wander = {
+                            Enabled = true,
+                            Radius = 40,
+                            MinRadius = 10,
+                            JumpProbability = 0.15,
+                            UpdateInterval = 10,
+                        },
+                        Idle = {
+                            Enabled = true,
+                            SmallMovementRadius = 3,
+                            SmallMovementProbability = 0.3,
+                            JumpProbability = 0.05,
+                            EmoteProbability = 0.1,
+                            MinIdleTime = 5,
+                            MaxIdleTime = 30,
+                        }
+                    },
+                    
+                    NPCDefaults = {
+                        DefaultState = "Wander",
+                        AllowedStates = {"Wander", "Idle"},
+                        StateTransitions = {
+                            MinStateTime = 30,
+                            MaxStateTime = 120,
+                        }
+                    }
                 }
             }
         end
@@ -330,12 +357,39 @@ do
         ))
     else
         LoggerService:error("SYSTEM", string.format("Failed to load config: %s", tostring(result)))
-        -- Use default config
+        -- Use default config that matches our new structure
         config = {
             Behaviors = {
-                EnableWander = true,
-                WanderRadius = 40,
-                MaxMovementThreads = 5
+                EnableBehaviors = true,
+                MaxMovementThreads = 5,
+                
+                States = {
+                    Wander = {
+                        Enabled = true,
+                        Radius = 40,
+                        MinRadius = 10,
+                        JumpProbability = 0.15,
+                        UpdateInterval = 10,
+                    },
+                    Idle = {
+                        Enabled = true,
+                        SmallMovementRadius = 3,
+                        SmallMovementProbability = 0.3,
+                        JumpProbability = 0.05,
+                        EmoteProbability = 0.1,
+                        MinIdleTime = 5,
+                        MaxIdleTime = 30,
+                    }
+                },
+                
+                NPCDefaults = {
+                    DefaultState = "Wander",
+                    AllowedStates = {"Wander", "Idle"},
+                    StateTransitions = {
+                        MinStateTime = 30,
+                        MaxStateTime = 120,
+                    }
+                }
             }
         }
     end
@@ -357,9 +411,9 @@ function NPCManagerV3:initializeBehaviors(npc)
         return
     end
 
-    if not config.Behaviors.EnableWander then
+    if not config.Behaviors.EnableBehaviors then
         LoggerService:debug("BEHAVIOR", string.format(
-            "Skipping behavior initialization for %s - wandering disabled in config",
+            "Skipping behavior initialization for %s - behaviors disabled in config",
             npc.displayName
         ))
         return
@@ -369,6 +423,15 @@ function NPCManagerV3:initializeBehaviors(npc)
         "Initializing behaviors for NPC %s",
         npc.displayName
     ))
+
+    -- Set default behavior state
+    npc.currentBehavior = (config.Behaviors.NPCDefaults and config.Behaviors.NPCDefaults.DefaultState) or "Wander"
+    
+    -- Update when behavior changes
+    function npc:setBehavior(newBehavior)
+        self.currentBehavior = newBehavior
+        -- This will trigger the status update on next cycle
+    end
 
     local success, err = pcall(function()
         local WanderAndPanic = require(script.Parent.behaviors.WanderAndPanic)
@@ -1369,29 +1432,39 @@ function NPCManagerV3:initializeNPCState(npc)
     return true
 end
 
--- Add new status update function
+-- Modify just the updateNPCStatus function
 function NPCManagerV3:updateNPCStatus(npc, updates)
     if not npc or not updates then return end
     
+    -- Get location info from the update
+    local locationString = updates.location or "unknown location"
+    if updates.location then
+        -- Use the location name directly since MainNPCScript already converts it
+        locationString = updates.location
+    end
+    
     -- Format first-person description based on state
     local descriptions = {
-        Idle = string.format("I'm standing at %s, taking in the surroundings", 
-            updates.current_location or "unknown location"),
-        Interacting = string.format("I'm chatting with visitors at %s", 
-            updates.current_location or "unknown location"),
-        Moving = string.format("I'm walking towards %s", 
-            updates.current_location or "unknown location")
+        Idle = string.format("I'm at %s, taking in the surroundings", locationString),
+        Interacting = string.format("I'm chatting with visitors at %s", locationString),
+        Moving = string.format("I'm walking around %s", locationString),
+        Wandering = string.format("I'm wandering near %s", locationString),
+        Exploring = string.format("I'm exploring the area around %s", locationString),
+        Patrolling = string.format("I'm patrolling near %s", locationString)
     }
 
-    -- Build status block
+    -- Build status block with location
     local statusBlock = {
-        current_location = updates.current_location,
+        current_location = updates.location or "unknown",
         state = updates.current_action or "Idle",
-        description = descriptions[updates.current_action or "Idle"]
+        description = descriptions[updates.current_action or "Idle"] or descriptions.Idle
     }
 
     -- Send to API
     self.ApiService:updateStatusBlock(npc.agentId, statusBlock)
+    
+    -- Update NPC's stored location
+    npc.currentLocation = updates.location or npc.currentLocation
 end
 
 -- Add new group member update function
@@ -1408,6 +1481,28 @@ function NPCManagerV3:updateGroupMember(npc, player, isPresent)
     }
 
     self.ApiService:upsertGroupMember(npc.agentId, memberData)
+end
+
+-- Update in wander behavior
+function NPCManagerV3:startWandering(npc)
+    npc:setBehavior("Wander")
+    -- ... rest of wandering logic ...
+end
+
+-- Update in other behavior functions
+function NPCManagerV3:startExploring(npc)
+    npc:setBehavior("Explore")
+    -- ... exploration logic ...
+end
+
+function NPCManagerV3:startPatrolling(npc)
+    npc:setBehavior("Patrol")
+    -- ... patrol logic ...
+end
+
+function NPCManagerV3:setIdle(npc)
+    npc:setBehavior("Idle")
+    -- ... idle logic ...
 end
 
 return NPCManagerV3

@@ -588,6 +588,273 @@ function checkNPCProximity(clusters)
     end
 end
 
+-- Move this function up, before onPlayerChatted
+local function handleChatRequest(player)
+    LoggerService:debug("CHAT", "Handling chat request for " .. player.Name)
+    
+    local playerPosition = player.Character and player.Character.PrimaryPart
+    if not playerPosition then 
+        LoggerService:warn("CHAT", "No valid position for player " .. player.Name)
+        return 
+    end
+
+    -- Use existing cluster system
+    local clusters = interactionService:getLatestClusters()
+    LoggerService:debug("CHAT", string.format("Found %d clusters", #clusters))
+    
+    -- Find which cluster the player is in
+    local playerCluster = nil
+    for _, cluster in ipairs(clusters) do
+        if table.find(cluster.members, player.Name) then
+            playerCluster = cluster
+            LoggerService:debug("CHAT", string.format("Found player in cluster with %d members", #cluster.members))
+            break
+        end
+    end
+
+    -- If player isn't in a cluster, they can't interact
+    if not playerCluster then 
+        LoggerService:warn("CHAT", "Player not in any cluster")
+        return 
+    end
+
+    -- Find closest NPC that's in the same cluster
+    local closestNPC, closestDistance = nil, math.huge
+    for _, npc in pairs(npcManagerV3.npcs) do
+        if npc.model and npc.model.PrimaryPart then
+            -- Check if NPC is in same cluster as player
+            if table.find(playerCluster.members, npc.displayName) then
+                local distance = (playerPosition.Position - npc.model.PrimaryPart.Position).Magnitude
+                LoggerService:debug("CHAT", string.format("Found NPC %s at distance %.1f", npc.displayName, distance))
+                if distance < closestDistance and not npc.isInteracting then
+                    closestNPC, closestDistance = npc, distance
+                end
+            end
+        end
+    end
+
+    if not closestNPC then
+        LoggerService:warn("CHAT", "No eligible NPC found in cluster")
+    end
+
+    return closestNPC, closestDistance
+end
+
+-- Add this helper function near the top
+local function createPlayerParticipant(player)
+    return {
+        GetParticipantType = function()
+            return "Player"
+        end,
+        GetUserId = function()
+            return player.UserId
+        end,
+        GetName = function()
+            return player.Name
+        end,
+        GetParticipantId = function()
+            return tostring(player.UserId)
+        end,
+        GetInteractionHistory = function()
+            return {}
+        end,
+        Name = player.Name,
+        _player = player
+    }
+end
+
+-- Then modify onPlayerChatted to wrap the player
+local function onPlayerChatted(player, message)
+    LoggerService:info("CHAT", string.format("[onPlayerChatted] Called with player: %s, message: %s", 
+        player.Name, message))
+        
+    -- Find closest NPC to handle the chat
+    local closestNPC, closestDistance = handleChatRequest(player)
+    if closestNPC then
+        LoggerService:info("CHAT", string.format("Found closest NPC %s at distance %0.1f", 
+            closestNPC.displayName, closestDistance))
+            
+        -- Debug NPC methods
+        LoggerService:debug("CHAT", string.format("NPC methods: %s",
+            HttpService:JSONEncode({
+                hasGetInteractionHistory = type(closestNPC.getInteractionHistory) == "function",
+                hasGetInteractionHistoryCaps = type(closestNPC.GetInteractionHistory) == "function"
+            })
+        ))
+            
+        -- Create participant wrapper for the player
+        local playerParticipant = createPlayerParticipant(player)
+            
+        -- Have the NPC handle the chat message with wrapped player
+        npcManagerV3:handleChat(closestNPC, playerParticipant, message)
+    end
+end
+
+-- Debug chat system status immediately
+LoggerService:info("CHAT", string.format(
+    "Chat System Status:\nTextChat Enabled: %s\nLegacy Chat Enabled: %s",
+    tostring(TextChatService.ChatVersion == Enum.ChatVersion.TextChatService),
+    tostring(ChatService.LoadDefaultChat)
+))
+
+-- Set up chat before anything else
+local function setupChatConnections()
+    LoggerService:info("CHAT", "Setting up chat connections")
+    
+    if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+        LoggerService:info("CHAT", string.format("Chat version: %s", tostring(TextChatService.ChatVersion)))
+        
+        -- Wait for and connect to the general channel
+        local success, result = pcall(function()
+            local channels = TextChatService:WaitForChild("TextChannels", 10)
+            if not channels then
+                LoggerService:error("CHAT", "Failed to find TextChannels after 10 seconds")
+                return
+            end
+            
+            local generalChannel = channels:WaitForChild("RBXGeneral", 10)
+            if not generalChannel then
+                LoggerService:error("CHAT", "Failed to find RBXGeneral channel after 10 seconds")
+                return
+            end
+            
+            LoggerService:info("CHAT", "Found general chat channel")
+            
+            -- Set up the ShouldDeliverCallback
+            generalChannel.ShouldDeliverCallback = function(message, userId)
+                LoggerService:info("CHAT", "ShouldDeliverCallback fired")
+                
+                -- Debug the raw message
+                LoggerService:info("CHAT", string.format("Raw message data: %s", 
+                    HttpService:JSONEncode({
+                        Text = message.Text,
+                        TextSource = message.TextSource and {
+                            UserId = message.TextSource.UserId,
+                            Name = message.TextSource.Name
+                        },
+                        TargetUserId = userId
+                    })
+                ))
+                
+                -- First check if this is an NPC message
+                if message.TextSource and message.TextSource.Name then
+                    for _, npc in pairs(npcManagerV3.npcs) do
+                        if npc.displayName == message.TextSource.Name then
+                            LoggerService:debug("CHAT", "Ignoring message from NPC: " .. npc.displayName)
+                            return true -- Deliver but don't process
+                        end
+                    end
+                end
+                
+                local player = Players:GetPlayerByUserId(message.TextSource.UserId)
+                if player then
+                    if message.TextSource then
+                        local sourceUserId = message.TextSource.UserId
+                        -- Only process messages from real players
+                        if sourceUserId and sourceUserId > 0 then
+                            LoggerService:info("CHAT", string.format(
+                                "Received message from %s: %s",
+                                message.TextSource.Name,
+                                message.Text
+                            ))
+                            
+                            onPlayerChatted(player, message.Text)
+                        end
+                    end
+                else
+                    LoggerService:warn("CHAT", "Could not find player for UserId: " .. tostring(message.TextSource.UserId))
+                end
+                
+                return true -- Always deliver the message
+            end
+            
+            LoggerService:info("CHAT", "ShouldDeliverCallback handler established")
+        end)
+        
+        if not success then
+            LoggerService:error("CHAT", "Failed to set up chat connection: " .. tostring(result))
+        end
+    else
+        LoggerService:warn("CHAT", "TextChatService not enabled, using legacy chat")
+        -- Legacy chat system
+        
+        -- Connect to existing players
+        for _, player in ipairs(Players:GetPlayers()) do
+            LoggerService:info("CHAT", "Setting up legacy chat for: " .. player.Name)
+            player.Chatted:Connect(function(message)
+                LoggerService:info("CHAT", string.format("Legacy chat from %s: %s", 
+                    player.Name, message))
+                onPlayerChatted(player, message)
+            end)
+        end
+        
+        -- Connect to new players
+        Players.PlayerAdded:Connect(function(player)
+            LoggerService:info("CHAT", "Setting up legacy chat for new player: " .. player.Name)
+            player.Chatted:Connect(function(message)
+                LoggerService:info("CHAT", string.format("Legacy chat from %s: %s", 
+                    player.Name, message))
+                onPlayerChatted(player, message)
+            end)
+        end)
+    end
+end
+
+-- Call setup immediately
+setupChatConnections()
+
+function checkNPCProximity(clusters)
+    for _, cluster in ipairs(clusters) do
+        if cluster.npcs >= 2 then
+            for i, npc1Name in ipairs(cluster.members) do
+                local npc1 = nil
+                for _, npc in pairs(npcManagerV3.npcs) do
+                    if npc.displayName == npc1Name then
+                        npc1 = npc
+                        break
+                    end
+                end
+                
+                -- Remove isInteracting check
+                if npc1 then
+                    for j = i + 1, #cluster.members do
+                        local npc2Name = cluster.members[j]
+                        local npc2 = nil
+                        for _, npc in pairs(npcManagerV3.npcs) do
+                            if npc.displayName == npc2Name then
+                                npc2 = npc
+                                break
+                            end
+                        end
+                        
+                        -- Remove all conversation locks
+                        if npc2 then
+                            -- Only check cooldown
+                            local cooldownKey = npc1.id .. "_" .. npc2.id
+                            local lastGreeting = greetingCooldowns[cooldownKey]
+                            if lastGreeting then
+                                local timeSinceLastGreeting = os.time() - lastGreeting
+                                if timeSinceLastGreeting < GREETING_COOLDOWN then
+                                    continue
+                                end
+                            end
+
+                            -- Comment out NPC-NPC system messages
+                            -- local systemMessage = string.format(
+                            --     "[SYSTEM] Another NPC (%s) has entered your area. You can initiate a conversation if you'd like.",
+                            --     npc2.displayName
+                            -- )
+                            -- npcManagerV3:handleNPCInteraction(npc1, mockParticipant, systemMessage)
+                            
+                            greetingCooldowns[cooldownKey] = os.time()
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
 -- Add near the top with other variables
 local knownLocations = {
     {name = "Pete's Merch Stand", slug = "petes_merch_stand", coordinates = {-12.0, 18.9, -127.0}},
@@ -683,6 +950,25 @@ local function updateNPCStatus(npc, statusData)
     ))
 end
 
+-- Helper function to determine NPC state
+local function getNPCState(npc)
+    if npc.isInteracting then
+        return "Interacting"
+    elseif npc.isFollowing then
+        return "Following"
+    elseif npc.currentBehavior then
+        -- Map behavior states to status strings
+        local behaviorStates = {
+            Explore = "Exploring",
+            Patrol = "Patrolling",
+            Wander = "Wandering",
+            Idle = "Idle"
+        }
+        return behaviorStates[npc.currentBehavior] or "Idle"
+    end
+    return "Idle"
+end
+
 -- Modify the existing updateNPCs function
 local function updateNPCs()
     LoggerService:info("SYSTEM", "Starting NPC update loop")
@@ -721,7 +1007,7 @@ local function updateNPCs()
                                 pcall(function()
                                     updateNPCStatus(npc, {
                                         location = nearest.slug,
-                                        current_action = npc.isInteracting and "Interacting" or "Idle"
+                                        current_action = getNPCState(npc)
                                     })
                                 end)
                             end
@@ -764,26 +1050,27 @@ local function updateNPCs()
                             
                             local healthPercent = math.floor((currentHealth / maxHealth) * 100)
                             
-                            -- Always log health, flag if it changed
-                            local healthChanged = not lastKnownHealth[npc.id] or healthPercent ~= lastKnownHealth[npc.id]
-                            if healthChanged then
-                                LoggerService:debug("HEALTH", string.format(
-                                    "NPC %s health changed: %d/%d (%d%%)",
-                                    npc.displayName,
-                                    currentHealth,
-                                    maxHealth,
-                                    healthPercent
-                                ))
+                            -- Check if health changed significantly
+                            if not lastKnownHealth[npc.id] or 
+                               math.abs(lastKnownHealth[npc.id] - healthPercent) >= HEALTH_CHANGE_THRESHOLD then
                                 
-                                -- Add status update
+                                -- Get current state
+                                local currentState = getNPCState(npc)
+                                
+                                -- Update status with both health and state
                                 pcall(function()
                                     updateNPCStatus(npc, {
                                         health = healthPercent,
-                                        current_action = npc.isInteracting and "Interacting" or "Idle"
+                                        current_action = currentState,
+                                        -- Add additional state details if available
+                                        location = npc.currentLocation,
+                                        target_position = npc.targetPosition,
+                                        path_progress = npc.pathProgress
                                     })
                                 end)
+                                
+                                lastKnownHealth[npc.id] = healthPercent
                             end
-                            lastKnownHealth[npc.id] = healthPercent
                         end
                     end)
                 end
