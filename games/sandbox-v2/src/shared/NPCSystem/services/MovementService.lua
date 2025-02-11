@@ -86,11 +86,32 @@ function MovementService:moveNPCToPosition(npc, targetPosition)
     local currentPosition = npc.model:GetPrimaryPartCFrame().Position
     local distance = (targetPosition - currentPosition).Magnitude
     
+    -- Debug log
+    LoggerService:debug("MOVEMENT", string.format(
+        "Moving NPC %s from (%.1f, %.1f, %.1f) to (%.1f, %.1f, %.1f) - Distance: %.1f",
+        npc.displayName,
+        currentPosition.X, currentPosition.Y, currentPosition.Z,
+        targetPosition.X, targetPosition.Y, targetPosition.Z,
+        distance
+    ))
+    
     -- Set appropriate walk speed
     if distance > 20 then
         humanoid.WalkSpeed = 16  -- Run speed
     else
         humanoid.WalkSpeed = 8   -- Walk speed
+    end
+    
+    -- Check if anchored
+    local rootPart = npc.model:FindFirstChild("HumanoidRootPart")
+    if rootPart and rootPart:IsA("BasePart") then
+        if rootPart.Anchored then
+            LoggerService:warn("MOVEMENT", string.format(
+                "NPC %s is anchored - cannot move",
+                npc.displayName
+            ))
+            rootPart.Anchored = false
+        end
     end
     
     -- Move to position

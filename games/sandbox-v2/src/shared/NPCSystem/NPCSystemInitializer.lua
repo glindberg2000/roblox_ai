@@ -1,0 +1,1 @@
+local npcManager = require(NPCSystem.NPCManagerV3).getInstance() 

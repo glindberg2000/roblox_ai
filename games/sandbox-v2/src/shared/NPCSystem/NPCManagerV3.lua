@@ -14,7 +14,6 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local NPCSystem = Shared:WaitForChild("NPCSystem")
 local services = NPCSystem:WaitForChild("services")
 local chat = NPCSystem:WaitForChild("chat")
-local config = NPCSystem:WaitForChild("config")
 
 -- Update requires to use correct paths
 local InteractionController = require(ServerScriptService:WaitForChild("InteractionController"))
@@ -302,6 +301,95 @@ function NPCManagerV3:loadNPCDatabase()
     LoggerService:debug("DATABASE", "NPC Database loaded successfully")
 end
 
+-- Add debug logging for config loading
+local config
+do
+    local success, result = pcall(function()
+        -- Try to get the config ModuleScript specifically
+        local configModule = NPCSystem:FindFirstChild("config", true)
+        if configModule and configModule:IsA("ModuleScript") then
+            LoggerService:debug("SYSTEM", "Found config ModuleScript, attempting to require")
+            return require(configModule)
+        else
+            LoggerService:error("SYSTEM", "Could not find config ModuleScript")
+            return {
+                Behaviors = {
+                    EnableWander = true,
+                    WanderRadius = 40,
+                    MaxMovementThreads = 5
+                }
+            }
+        end
+    end)
+
+    if success then
+        config = result
+        LoggerService:debug("SYSTEM", string.format(
+            "Loaded config successfully: %s",
+            HttpService:JSONEncode(config)
+        ))
+    else
+        LoggerService:error("SYSTEM", string.format("Failed to load config: %s", tostring(result)))
+        -- Use default config
+        config = {
+            Behaviors = {
+                EnableWander = true,
+                WanderRadius = 40,
+                MaxMovementThreads = 5
+            }
+        }
+    end
+end
+
+function NPCManagerV3:initializeBehaviors(npc)
+    -- Log the config state
+    LoggerService:debug("BEHAVIOR", string.format(
+        "Config state: %s",
+        HttpService:JSONEncode(config)
+    ))
+
+    -- First check if behaviors are enabled at all
+    if not config or not config.Behaviors then
+        LoggerService:debug("BEHAVIOR", string.format(
+            "Skipping behavior initialization for %s - no behavior config found",
+            npc.displayName
+        ))
+        return
+    end
+
+    if not config.Behaviors.EnableWander then
+        LoggerService:debug("BEHAVIOR", string.format(
+            "Skipping behavior initialization for %s - wandering disabled in config",
+            npc.displayName
+        ))
+        return
+    end
+
+    LoggerService:debug("BEHAVIOR", string.format(
+        "Initializing behaviors for NPC %s",
+        npc.displayName
+    ))
+
+    local success, err = pcall(function()
+        local WanderAndPanic = require(script.Parent.behaviors.WanderAndPanic)
+        WanderAndPanic.init(npc.model)
+    end)
+    
+    if not success then
+        LoggerService:error("BEHAVIOR", string.format(
+            "Failed to initialize behavior for %s: %s",
+            npc.displayName,
+            tostring(err)
+        ))
+        return
+    end
+
+    LoggerService:debug("BEHAVIOR", string.format(
+        "Successfully initialized behaviors for %s",
+        npc.displayName
+    ))
+end
+
 function NPCManagerV3:createNPC(npcData)
     LoggerService:debug("NPC", string.format("Creating NPC: %s", npcData.displayName))
     
@@ -469,7 +557,14 @@ function NPCManagerV3:createNPC(npcData)
     -- Store NPC reference
     self.npcs[npc.id] = npc
     
-    LoggerService:debug("NPC", string.format("NPC added: %s (Total NPCs: %d)", npc.displayName, self:getNPCCount()))
+    -- Initialize behaviors
+    self:initializeBehaviors(npc)
+    
+    LoggerService:debug("NPC", string.format(
+        "NPC added: %s (Total NPCs: %d)", 
+        npc.displayName, 
+        self:getNPCCount()
+    ))
     
     return npc
 end
