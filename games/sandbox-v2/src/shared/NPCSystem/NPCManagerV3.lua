@@ -141,6 +141,7 @@ function NPCManagerV3.getInstance()
         instance.movementService = MovementService.new()
         instance.interactionController = require(game.ServerScriptService.InteractionController).new()
         instance.interactionService = InteractionService.new(instance)
+        instance.actionService = require(script.Parent.services.ActionService).new()
         
         -- Start update loop
         game:GetService("RunService").Heartbeat:Connect(function()
@@ -714,27 +715,8 @@ function NPCManagerV3:processAIResponse(npc, participant, response)
         NPCChatDisplay:displayMessage(npc, messageData, participant)
     end
 
-    if response.action and response.action.actions then
-        for _, action in ipairs(response.action.actions) do
-            if action.type ~= "none" then
-                -- Debug log the action structure
-                LoggerService:debug("ACTION", string.format(
-                    "Processing action: %s",
-                    HttpService:JSONEncode(action)
-                ))
-                
-                -- Debug log the data structure
-                if action.data then
-                    LoggerService:debug("ACTION", string.format(
-                        "Action data types - data: %s, target: %s",
-                        typeof(action.data),
-                        action.data.target and typeof(action.data.target) or "nil"
-                    ))
-                end
-                
-                self:executeAction(npc, participant, action)
-            end
-        end
+    if response.action then
+        self.actionService:handleAction(npc, response.action)
     end
 end
 

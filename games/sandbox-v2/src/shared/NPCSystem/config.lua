@@ -26,8 +26,8 @@ local Config = {
             
             Wander = {
                 Enabled = true,
-                Radius = 40,
-                MinRadius = 10,
+                Radius = 10,
+                MinRadius = 5,
                 JumpProbability = 0.15,
                 UpdateInterval = 10,
             },

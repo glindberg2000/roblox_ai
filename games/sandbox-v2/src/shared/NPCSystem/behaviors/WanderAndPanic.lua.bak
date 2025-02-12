@@ -1,0 +1,103 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local PathfindingService = game:GetService("PathfindingService")
+
+-- Fix requires
+local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
+local MovementService = require(ReplicatedStorage.Shared.NPCSystem.services.MovementService).new()
+
+local WanderAndPanic = {}
+
+-- Add state priorities
+local STATE_PRIORITIES = {
+    CHATTING = 80,    -- During conversations
+    NAVIGATING = 70,  -- When navigating to location
+    FOLLOWING = 60,   -- When following a player
+    WANDERING = 10    -- Lowest priority state
+}
+
+function WanderAndPanic.init(model)
+    if not model then return end
+    
+    local humanoid = model:FindFirstChild("Humanoid")
+    local rootPart = model:FindFirstChild("HumanoidRootPart")
+    
+    if not humanoid or not rootPart then
+        LoggerService:error("BEHAVIOR", "Missing humanoid or rootPart for wander behavior")
+        return
+    end
+    
+    -- Add state tracking
+    model:SetAttribute("currentState", "WANDERING")
+    
+    -- Function to check if we can wander
+    local function canWander()
+        local currentState = model:GetAttribute("currentState")
+        local currentPriority = STATE_PRIORITIES[currentState] or 0
+        return currentPriority <= STATE_PRIORITIES.WANDERING
+    end
+    
+    -- Start wander coroutine
+    task.spawn(function()
+        while true do
+            if model:GetAttribute("currentState") == "WANDERING" then
+                local targetPosition = MovementService:getRandomPosition(
+                    rootPart.Position,
+                    40  -- Default radius
+                )
+                
+                -- Create path
+                local path = PathfindingService:CreatePath({
+                    AgentRadius = 2,
+                    AgentHeight = 5,
+                    AgentCanJump = true
+                })
+                
+                local success, errorMessage = pcall(function()
+                    path:ComputeAsync(rootPart.Position, targetPosition)
+                end)
+                
+                if success and path.Status == Enum.PathStatus.Success then
+                    local waypoints = path:GetWaypoints()
+                    for i, waypoint in ipairs(waypoints) do
+                        if model:GetAttribute("currentState") ~= "WANDERING" then
+                            break -- Stop if state changed
+                        end
+                        MovementService:moveNPCToPosition({model = model}, waypoint.Position)
+                        task.wait(0.5)
+                    end
+                end
+            end
+            
+            task.wait(5)
+        end
+    end)
+end
+
+-- Add state management functions
+function WanderAndPanic.setState(model, newState)
+    if not STATE_PRIORITIES[newState] then
+        LoggerService:warn("BEHAVIOR", string.format(
+            "Invalid state %s requested for %s",
+            newState,
+            model.Name
+        ))
+        return
+    end
+    
+    local currentState = model:GetAttribute("currentState")
+    local currentPriority = STATE_PRIORITIES[currentState] or 0
+    local newPriority = STATE_PRIORITIES[newState]
+    
+    -- Only update if new state has higher priority
+    if newPriority >= currentPriority then
+        model:SetAttribute("currentState", newState)
+        LoggerService:debug("BEHAVIOR", string.format(
+            "NPC %s state changed: %s -> %s",
+            model.Name,
+            currentState,
+            newState
+        ))
+    end
+end
+
+return WanderAndPanic 

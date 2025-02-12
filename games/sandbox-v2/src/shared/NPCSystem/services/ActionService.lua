@@ -6,8 +6,196 @@ local movementServiceInstance = NPCManagerV3.getInstance().movementService
 local AnimationService = require(ReplicatedStorage.Shared.NPCSystem.services.AnimationService)
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
+local BehaviorService = require(ReplicatedStorage.Shared.NPCSystem.services.BehaviorService).new()
 
 local ActionService = {}
+ActionService.__index = ActionService
+
+-- Priority levels for behaviors
+local BEHAVIOR_PRIORITIES = {
+    EMERGENCY = 100,  -- hide, flee
+    NAVIGATION = 80,  -- navigate_to
+    FOLLOWING = 60,   -- follow commands
+    PATROL = 40,      -- patrol routes
+    WANDER = 20,      -- casual wandering
+    IDLE = 0         -- default state
+}
+
+function ActionService.new()
+    return setmetatable({}, ActionService)
+end
+
+function ActionService:handleAction(npc, actionData)
+    if not npc or not actionData then return false end
+    
+    -- Handle both direct action and wrapped actions array format
+    local actions = actionData.actions or {actionData}
+    
+    for _, action in ipairs(actions) do
+        -- Skip "none" actions
+        if action.type == "none" then continue end
+        
+        LoggerService:debug("ACTION", string.format(
+            "Handling action for %s: %s",
+            npc.displayName,
+            HttpService:JSONEncode(action)
+        ))
+
+        -- Map API actions to behaviors
+        if action.action == "idle" then
+            return BehaviorService:setBehavior(npc, "idle", {
+                allowWander = false,  -- Don't wander when specifically idle
+                target = action.target
+            })
+            
+        elseif action.action == "wander" then
+            return BehaviorService:setBehavior(npc, "idle", {
+                allowWander = true,
+                wanderRadius = 40,
+                wanderArea = action.target -- Optional area constraint
+            })
+            
+        elseif action.action == "patrol" then
+            return BehaviorService:setBehavior(npc, "patrol", {
+                area = action.target,
+                patrolPoints = self:getPatrolPoints(action.target)
+            })
+            
+        elseif action.action == "follow" then
+            local target = Players:FindFirstChild(action.target)
+            if not target then return false end
+            
+            return BehaviorService:setBehavior(npc, "follow", {
+                target = target
+            })
+            
+        elseif action.action == "unfollow" then
+            return BehaviorService:setBehavior(npc, "idle", {
+                allowWander = false
+            })
+            
+        elseif action.action == "hide" then
+            return BehaviorService:setBehavior(npc, "hide", {
+                coverLocation = action.target
+            })
+            
+        elseif action.action == "flee" then
+            return BehaviorService:setBehavior(npc, "flee", {
+                threat = action.target
+            })
+            
+        elseif action.action == "emote" then
+            -- Handle emotes through AnimationService
+            local AnimationService = require(ReplicatedStorage.Shared.NPCSystem.services.AnimationService)
+            local emoteTarget = Players:FindFirstChild(action.target)
+            
+            -- Play emote and face target if specified
+            if emoteTarget then
+                BehaviorService:setBehavior(npc, "idle", {
+                    target = action.target,
+                    allowWander = false
+                })
+            end
+            
+            return AnimationService:playEmote(npc.model.Humanoid, action.type)
+        end
+    end
+    
+    -- Only log warning if we got an unknown action (not "none")
+    if actionData.action and actionData.action ~= "none" then
+        LoggerService:warn("ACTION", string.format(
+            "Unknown action type: %s",
+            actionData.action
+        ))
+    end
+    return false
+end
+
+-- Helper function to get patrol points for an area
+function ActionService:getPatrolPoints(areaName)
+    -- TODO: Implement area-specific patrol points
+    -- For now return some default points around current position
+    return {}
+end
+
+function ActionService:setBehavior(npc, behaviorType, params)
+    if not npc then return end
+    
+    -- Get current behavior priority
+    local currentPriority = 0
+    if self.currentBehaviors[npc] then
+        currentPriority = BEHAVIOR_PRIORITIES[self.currentBehaviors[npc].type] or 0
+    end
+    
+    -- Get new behavior priority
+    local newPriority = BEHAVIOR_PRIORITIES[behaviorType] or 0
+    
+    -- Only change behavior if new priority is higher or current behavior is done
+    if newPriority >= currentPriority then
+        -- Clean up current behavior if it exists
+        if self.currentBehaviors[npc] and self.currentBehaviors[npc].cleanup then
+            self.currentBehaviors[npc].cleanup()
+        end
+        
+        -- Set up new behavior
+        local behavior = {
+            type = behaviorType,
+            params = params,
+            startTime = os.time()
+        }
+        
+        -- Initialize behavior-specific logic
+        if behaviorType == "patrol" then
+            behavior.cleanup = self:initializePatrol(npc, params)
+        elseif behaviorType == "wander" then
+            behavior.cleanup = self:initializeWander(npc, params)
+        elseif behaviorType == "hide" then
+            behavior.cleanup = self:initializeHide(npc, params)
+        elseif behaviorType == "flee" then
+            behavior.cleanup = self:initializeFlee(npc, params)
+        elseif behaviorType == "follow" then
+            behavior.cleanup = self:initializeFollow(npc, params)
+        end
+        
+        self.currentBehaviors[npc] = behavior
+        
+        -- Update NPC status
+        npc:updateStatus({
+            current_action = behaviorType,
+            target = params and params.target,
+            style = params and params.style
+        })
+        
+        return true
+    end
+    
+    return false
+end
+
+-- Behavior initialization functions
+function ActionService:initializePatrol(npc, params)
+    -- Set up patrol route and movement
+    local MovementService = require(script.Parent.MovementService)
+    local movement = MovementService.new()
+    
+    -- Start patrol loop
+    local patrolThread = task.spawn(function()
+        while true do
+            if params.target then
+                movement:moveNPCToPosition(npc, params.target)
+            end
+            task.wait(1)
+        end
+    end)
+    
+    -- Return cleanup function
+    return function()
+        task.cancel(patrolThread)
+    end
+end
+
+-- Add other behavior initializations (wander, hide, flee, follow)
+-- Similar structure to patrol but with behavior-specific logic
 
 function ActionService.follow(npc, action)
     -- Debug log the entire action
