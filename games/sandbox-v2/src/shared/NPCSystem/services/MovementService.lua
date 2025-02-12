@@ -77,55 +77,56 @@ function MovementService:stopFollowing(npc)
 end
 
 function MovementService:moveNPCToPosition(npc, targetPosition)
-    if not npc or not npc.model then return end
-    
+    -- Validate input
+    if not npc or not npc.model then
+        LoggerService:warn("MOVEMENT", "Invalid NPC passed to moveNPCToPosition")
+        return false
+    end
+
     local humanoid = npc.model:FindFirstChild("Humanoid")
-    if not humanoid then return end
+    local rootPart = npc.model:FindFirstChild("HumanoidRootPart")
     
-    -- Get current position
-    local currentPosition = npc.model:GetPrimaryPartCFrame().Position
-    local distance = (targetPosition - currentPosition).Magnitude
+    if not humanoid or not rootPart then
+        LoggerService:warn("MOVEMENT", string.format(
+            "Missing humanoid or rootPart for NPC %s",
+            npc.model.Name
+        ))
+        return false
+    end
+
+    -- Calculate distance
+    local distance = (targetPosition - rootPart.Position).Magnitude
     
-    -- Debug log
     LoggerService:debug("MOVEMENT", string.format(
-        "Moving NPC %s from (%.1f, %.1f, %.1f) to (%.1f, %.1f, %.1f) - Distance: %.1f",
-        npc.displayName,
-        currentPosition.X, currentPosition.Y, currentPosition.Z,
+        "Moving NPC %s from (%0.1f, %0.1f, %0.1f) to (%0.1f, %0.1f, %0.1f) - Distance: %0.1f",
+        npc.model.Name,
+        rootPart.Position.X, rootPart.Position.Y, rootPart.Position.Z,
         targetPosition.X, targetPosition.Y, targetPosition.Z,
         distance
     ))
-    
-    -- Set appropriate walk speed
-    if distance > 20 then
-        humanoid.WalkSpeed = 16  -- Run speed
-    else
-        humanoid.WalkSpeed = 8   -- Walk speed
-    end
-    
-    -- Check if anchored
-    local rootPart = npc.model:FindFirstChild("HumanoidRootPart")
-    if rootPart and rootPart:IsA("BasePart") then
-        if rootPart.Anchored then
-            LoggerService:warn("MOVEMENT", string.format(
-                "NPC %s is anchored - cannot move",
-                npc.displayName
-            ))
-            rootPart.Anchored = false
-        end
-    end
-    
+
     -- Move to position
     humanoid:MoveTo(targetPosition)
+    
+    return true
 end
 
-function MovementService:getRandomPosition(center, radius)
+function MovementService:getRandomPosition(origin, radius)
+    -- Generate random angle
     local angle = math.random() * math.pi * 2
+    
+    -- Generate random distance within radius
     local distance = math.sqrt(math.random()) * radius
     
+    -- Calculate offset
+    local xOffset = math.cos(angle) * distance
+    local zOffset = math.sin(angle) * distance
+    
+    -- Return new position
     return Vector3.new(
-        center.X + math.cos(angle) * distance,
-        center.Y,
-        center.Z + math.sin(angle) * distance
+        origin.X + xOffset,
+        origin.Y,
+        origin.Z + zOffset
     )
 end
 

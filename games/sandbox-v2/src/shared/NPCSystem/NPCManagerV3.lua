@@ -396,56 +396,21 @@ do
 end
 
 function NPCManagerV3:initializeBehaviors(npc)
-    -- Log the config state
-    LoggerService:debug("BEHAVIOR", string.format(
-        "Config state: %s",
-        HttpService:JSONEncode(config)
-    ))
-
-    -- First check if behaviors are enabled at all
-    if not config or not config.Behaviors then
-        LoggerService:debug("BEHAVIOR", string.format(
-            "Skipping behavior initialization for %s - no behavior config found",
-            npc.displayName
-        ))
-        return
-    end
-
-    if not config.Behaviors.EnableBehaviors then
-        LoggerService:debug("BEHAVIOR", string.format(
-            "Skipping behavior initialization for %s - behaviors disabled in config",
-            npc.displayName
-        ))
-        return
-    end
-
     LoggerService:debug("BEHAVIOR", string.format(
         "Initializing behaviors for NPC %s",
         npc.displayName
     ))
 
-    -- Set default behavior state
-    npc.currentBehavior = (config.Behaviors.NPCDefaults and config.Behaviors.NPCDefaults.DefaultState) or "Wander"
-    
-    -- Update when behavior changes
-    function npc:setBehavior(newBehavior)
-        self.currentBehavior = newBehavior
-        -- This will trigger the status update on next cycle
+    -- Initialize behavior system
+    if not self.behaviorService then
+        self.behaviorService = require(script.Parent.services.BehaviorService).new()
     end
 
-    local success, err = pcall(function()
-        local WanderAndPanic = require(script.Parent.behaviors.WanderAndPanic)
-        WanderAndPanic.init(npc.model)
-    end)
-    
-    if not success then
-        LoggerService:error("BEHAVIOR", string.format(
-            "Failed to initialize behavior for %s: %s",
-            npc.displayName,
-            tostring(err)
-        ))
-        return
-    end
+    -- Set default idle behavior
+    self.behaviorService:setBehavior(npc, "idle", {
+        allowWander = true,
+        wanderRadius = 40
+    })
 
     LoggerService:debug("BEHAVIOR", string.format(
         "Successfully initialized behaviors for %s",
@@ -612,15 +577,20 @@ function NPCManagerV3:createNPC(npcData)
     -- Initialize components
     npcModel.PrimaryPart = humanoidRootPart
     humanoidRootPart.CFrame = CFrame.new(npcData.spawnPosition)
-    -- Temporarily disable animations
+    
+    -- Initialize animations
     AnimationService:applyAnimations(humanoid)
+    
+    -- Initialize chat speaker
     self:initializeNPCChatSpeaker(npc)
+    
+    -- Set up click detector
     self:setupClickDetector(npc)
 
     -- Store NPC reference
     self.npcs[npc.id] = npc
     
-    -- Initialize behaviors
+    -- Initialize behaviors (this now uses the new behavior system only)
     self:initializeBehaviors(npc)
     
     LoggerService:debug("NPC", string.format(
@@ -857,16 +827,26 @@ function NPCManagerV3:executeAction(npc, participant, action)
         HttpService:JSONEncode(action)
     ))
     
+    -- Initialize ActionService if needed
+    if not self.actionService then
+        self.actionService = require(script.Parent.services.ActionService).new()
+    end
+    
+    -- Try new behavior system first
+    if action.action == "set_behavior" then
+        return self.actionService:handleAction(npc, action)
+    end
+    
+    -- Fall back to existing action handling
     local ActionService = require(ReplicatedStorage.Shared.NPCSystem.services.ActionService)
     
     if action.type == "follow" then
         if USE_ACTION_SERVICE then
-            -- Pass the action as-is, don't reconstruct it
             LoggerService:debug("ACTION", string.format(
                 "Using ActionService to handle 'follow' with data: %s",
                 HttpService:JSONEncode(action)
             ))
-            ActionService.follow(npc, action)  -- Pass original action
+            ActionService.follow(npc, action)
         else
             self:startFollowing(npc, participant)
         end
@@ -884,7 +864,6 @@ function NPCManagerV3:executeAction(npc, participant, action)
             LoggerService:debug("ACTION", "Using ActionService to handle 'unfollow'")
             ActionService.unfollow(npc)
         else
-            LoggerService:debug("ACTION", "Using LEGACY 'stopFollowing' method for 'unfollow'")
             self:stopFollowing(npc)
         end
     elseif action.type == "emote" then
@@ -1503,6 +1482,19 @@ end
 function NPCManagerV3:setIdle(npc)
     npc:setBehavior("Idle")
     -- ... idle logic ...
+end
+
+-- Add chat state handling
+function NPCManagerV3:handleChatStart(npc)
+    if npc and npc.model then
+        -- Placeholder for new behavior system
+    end
+end
+
+function NPCManagerV3:handleChatEnd(npc)
+    if npc and npc.model then
+        -- Placeholder for new behavior system
+    end
 end
 
 return NPCManagerV3
