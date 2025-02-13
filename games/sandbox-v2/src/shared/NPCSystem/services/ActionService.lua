@@ -313,18 +313,37 @@ function ActionService.navigate(npc, destination)
     end
 
     -- Check if we have coordinates in the destination
-    if type(destination) == "table" and destination.coordinates then
-        LoggerService:debug("ACTION_SERVICE", string.format(
-            "NPC %s navigating to coordinates: %d, %d, %d",
-            npc.displayName,
-            destination.coordinates.x,
-            destination.coordinates.y,
-            destination.coordinates.z
-        ))
-        return NavigationService:Navigate(npc, nil, destination.coordinates)
+    if type(destination) == "table" then
+        if destination.coordinates then
+            local coords = destination.coordinates
+            LoggerService:debug("ACTION_SERVICE", string.format(
+                "NPC %s navigating to coordinates: %.0f, %.0f, %.0f",
+                npc.displayName,
+                coords.x,
+                coords.y,
+                coords.z
+            ))
+            
+            -- Convert coordinates table to Vector3
+            local targetPosition = Vector3.new(
+                coords.x,
+                coords.y,
+                coords.z
+            )
+            
+            return NavigationService:Navigate(npc, targetPosition)
+        elseif destination.destination_slug then
+            LoggerService:debug("ACTION_SERVICE", string.format(
+                "NPC %s navigating to location: %s",
+                npc.displayName,
+                destination.destination_slug
+            ))
+            
+            return NavigationService:Navigate(npc, destination.destination_slug)
+        end
     end
 
-    LoggerService:warn("ACTION_SERVICE", "No coordinates provided for navigation")
+    LoggerService:warn("ACTION_SERVICE", "Invalid navigation data format")
     return false
 end
 
