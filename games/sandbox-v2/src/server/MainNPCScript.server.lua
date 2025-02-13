@@ -7,11 +7,10 @@ local TextChatService = game:GetService("TextChatService")
 local ChatService = game:GetService("Chat")
 local HttpService = game:GetService("HttpService")
 local LoggerService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LoggerService)
+local LocationService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LocationService)
 
 -- 2. All state variables together at the top
-local lastKnownLocations = {}
 local lastKnownHealth = {}
-local LOCATION_RADIUS = 20
 local HEALTH_CHANGE_THRESHOLD = 10
 
 -- 3. Health-related functions
@@ -856,47 +855,21 @@ function checkNPCProximity(clusters)
 end
 
 -- Add near the top with other variables
-local knownLocations = {
-    {name = "Pete's Merch Stand", slug = "petes_merch_stand", coordinates = {-12.0, 18.9, -127.0}},
-    {name = "The Crematorium", slug = "the_crematorium", coordinates = {-44.0, 21.0, -167.7}},
-    {name = "Calvin's Calzone Restaurant", slug = "calvins_calzone_restaurant", coordinates = {-21.9, 21.5, -103.0}},
-    {name = "Chipotle", slug = "chipotle", coordinates = {-19.0, 21.3, -8.2}},
-    {name = "The Barber Boys", slug = "the_barber_boys", coordinates = {-80.0, 21.3, -11.2}},
-    {name = "Grocery Spelunking", slug = "grocery_spelunking", coordinates = {-193.619, 27.775, 6.667}},
-    {name = "Egg Cafe", slug = "egg_cafe", coordinates = {-235.452, 26.0, -80.319}},
-    {name = "Bluesteel Hotel", slug = "bluesteel_hotel", coordinates = {-242.612, 32.15, -4.157}},
-    {name = "Yellow House", slug = "yellow_house", coordinates = {71.474, 26.65, -138.574}},
-    {name = "Red House", slug = "red_house", coordinates = {69.75, 24.42, -93.0}},
-    {name = "Blue House", slug = "blue_house", coordinates = {70.68, 26.65, -43.41}},
-    {name = "Green House", slug = "green_house", coordinates = {69.76, 24.89, 15.33}},
-    {name = "DVDs", slug = "dvds", coordinates = {-221.83, 26.0, -112.0}}
-}
-
--- Add near other helper functions
-local function getNearestLocation(position)
-    local nearestDistance = math.huge
-    local nearest = nil
-    
-    for _, loc in ipairs(knownLocations) do
-        local distance = math.sqrt(
-            (loc.coordinates[1] - position.X)^2 + 
-            (loc.coordinates[2] - position.Y)^2 + 
-            (loc.coordinates[3] - position.Z)^2
-        )
-        
-        if distance < nearestDistance then
-            nearestDistance = distance
-            nearest = {
-                name = loc.name,
-                slug = loc.slug,
-                distance = math.floor(distance * 10) / 10
-            }
-        end
-    end
-    
-    return nearest, nearestDistance <= LOCATION_RADIUS
-end
-
+-- local knownLocations = {
+--     {name = "Pete's Merch Stand", slug = "petes_merch_stand", coordinates = {-12.0, 18.9, -127.0}},
+--     {name = "The Crematorium", slug = "the_crematorium", coordinates = {-44.0, 21.0, -167.7}},
+--     {name = "Calvin's Calzone Restaurant", slug = "calvins_calzone_restaurant", coordinates = {-21.9, 21.5, -103.0}},
+--     {name = "Chipotle", slug = "chipotle", coordinates = {-19.0, 21.3, -8.2}},
+--     {name = "The Barber Boys", slug = "the_barber_boys", coordinates = {-80.0, 21.3, -11.2}},
+--     {name = "Grocery Spelunking", slug = "grocery_spelunking", coordinates = {-193.619, 27.775, 6.667}},
+--     {name = "Egg Cafe", slug = "egg_cafe", coordinates = {-235.452, 26.0, -80.319}},
+--     {name = "Bluesteel Hotel", slug = "bluesteel_hotel", coordinates = {-242.612, 32.15, -4.157}},
+--     {name = "Yellow House", slug = "yellow_house", coordinates = {71.474, 26.65, -138.574}},
+--     {name = "Red House", slug = "red_house", coordinates = {69.75, 24.42, -93.0}},
+--     {name = "Blue House", slug = "blue_house", coordinates = {70.68, 26.65, -43.41}},
+--     {name = "Green House", slug = "green_house", coordinates = {69.76, 24.89, 15.33}},
+--     {name = "DVDs", slug = "dvds", coordinates = {-221.83, 26.0, -112.0}}
+-- }
 
 -- Move updateNPCStatus function before it's used
 local function updateNPCStatus(npc, statusData)
@@ -988,46 +961,36 @@ local function updateNPCs()
             -- Add location check for each NPC
             for _, npc in pairs(npcManagerV3.npcs) do
                 if npc.model and npc.model.PrimaryPart then
-                    local nearest, isNear = getNearestLocation(npc.model.PrimaryPart.Position)
-                    local lastLocation = lastKnownLocations[npc.id]
+                    local locationChanged, nearest, lastLocation = LocationService:updateNPCLocation(
+                        npc.id, 
+                        npc.model.PrimaryPart.Position
+                    )
                     
-                    if nearest then
-                        if isNear then
-                            -- Only log if this is a new location
-                            if lastLocation ~= nearest.slug then
-                                LoggerService:debug("LOCATION_STATUS", string.format(
-                                    "NPC %s arrived at %s (%.1f studs away)",
-                                    npc.displayName,
-                                    nearest.name,
-                                    nearest.distance
-                                ))
-                                lastKnownLocations[npc.id] = nearest.slug
-                                
-                                -- Add status update
-                                pcall(function()
-                                    updateNPCStatus(npc, {
-                                        location = nearest.slug,
-                                        current_action = getNPCState(npc)
-                                    })
-                                end)
-                            end
-                        elseif lastLocation then
-                            -- NPC has left their previous location
-                            local locationName = ""
-                            for _, loc in ipairs(knownLocations) do
-                                if loc.slug == lastLocation then
-                                    locationName = loc.name
-                                    break
-                                end
-                            end
+                    if locationChanged then
+                        if nearest then
                             LoggerService:debug("LOCATION_STATUS", string.format(
-                                "NPC %s left %s (nearest: %s, %.1f studs away)",
+                                "NPC %s arrived at %s (%.1f studs away)",
                                 npc.displayName,
-                                locationName,
                                 nearest.name,
                                 nearest.distance
                             ))
-                            lastKnownLocations[npc.id] = nil
+                            
+                            -- Add status update
+                            pcall(function()
+                                updateNPCStatus(npc, {
+                                    location = nearest.slug,
+                                    current_action = getNPCState(npc)
+                                })
+                            end)
+                        else
+                            local lastLocationData = LocationService:getLocationBySlug(lastLocation)
+                            LoggerService:debug("LOCATION_STATUS", string.format(
+                                "NPC %s left %s (nearest: %s, %.1f studs away)",
+                                npc.displayName,
+                                lastLocationData.name,
+                                nearest.name,
+                                nearest.distance
+                            ))
                         end
                     end
 
