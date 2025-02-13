@@ -669,7 +669,16 @@ def process_tool_results(tool_results: dict) -> Tuple[str, dict]:
                 args = tool_call["arguments"]
                 
                 # Handle different action types
-                if args.get("action") == "follow":
+                if args.get("action") == "patrol":
+                    action = {
+                        "type": "patrol",
+                        "data": {
+                            "target": args.get("target", "")  # Match the follow pattern with data wrapper
+                        }
+                    }
+                    message = f"Starting patrol of {args.get('target', 'the area')}!"
+                
+                elif args.get("action") == "follow":
                     action = {
                         "type": "follow",
                         "data": {
@@ -677,7 +686,7 @@ def process_tool_results(tool_results: dict) -> Tuple[str, dict]:
                         }
                     }
                     message = "I'll follow you!"
-                    
+                
                 elif args.get("action") == "unfollow":
                     action = {
                         "type": "unfollow",

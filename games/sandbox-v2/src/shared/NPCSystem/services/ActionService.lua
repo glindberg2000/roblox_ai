@@ -7,6 +7,7 @@ local AnimationService = require(ReplicatedStorage.Shared.NPCSystem.services.Ani
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local BehaviorService = require(ReplicatedStorage.Shared.NPCSystem.services.BehaviorService).new()
+local PatrolService = require(ReplicatedStorage.Shared.NPCSystem.services.PatrolService)
 
 local ActionService = {}
 ActionService.__index = ActionService
@@ -452,6 +453,20 @@ function NPCManagerV3:executeAction(npc, player, action)
             self:startFollowing(npc, player)
         end
     end
+end
+
+function ActionService.patrol(npc, action)
+    LoggerService:debug("ACTION_SERVICE", string.format(
+        "NPC %s patrol request",
+        npc.displayName
+    ))
+    
+    -- If currently following, stop first
+    if npc.isFollowing then
+        ActionService.unfollow(npc)
+    end
+    
+    return PatrolService:startPatrol(npc, action.data)
 end
 
 return ActionService

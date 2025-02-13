@@ -132,4 +132,14 @@ function LocationService:getNPCLastLocation(npcId)
     return lastKnownLocations[npcId]
 end
 
+function LocationService:getCoordinates(slug)
+    local location = self:getLocationBySlug(slug)
+    if not location then
+        return nil
+    end
+    
+    -- Return the position Vector3 directly
+    return location.position
+end
+
 return LocationService 

@@ -175,6 +175,13 @@ def convert_tool_calls_to_action(tool_calls: List[Dict[str, Any]]) -> Dict[str, 
                     "type": "emote",
                     "data": data
                 }
+            elif action_type == "patrol":
+                action = {
+                    "type": "patrol",
+                    "data": {
+                        "target": args.get("target", "")
+                    }
+                }
             
         elif tool["tool"] == "navigate_to":
             # Get coordinates directly from cache
