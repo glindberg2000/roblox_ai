@@ -477,7 +477,24 @@ function ActionService.patrol(npc, action)
         ActionService.unfollow(npc)
     end
     
-    return PatrolService:startPatrol(npc, action.data)
+    -- Handle case where location is incorrectly in type field
+    local area = action.target ~= "" and action.target or action.type
+    local style = "normal"  -- Default patrol style
+    
+    if not area then
+        warn("Missing patrol location in action data")
+        return
+    end
+    
+    LoggerService:debug("PATROL", string.format(
+        "Starting patrol for NPC %s with area: %s, style: %s",
+        npc.displayName, tostring(area), tostring(style)
+    ))
+    
+    return PatrolService:startPatrol(npc, {
+        type = area,  -- Should be "full" here
+        target = ""   -- Empty for full patrol
+    })
 end
 
 function ActionService:hunt(npc, data)
