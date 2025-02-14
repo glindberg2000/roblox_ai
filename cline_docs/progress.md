@@ -7,12 +7,20 @@
 - ✅ Basic group membership tracking
 - ✅ Status update logging
 - ✅ Location-based updates
+- ✅ Added hunt action framework
+- ✅ Implemented combat navigation
+- ✅ Added target type support
+- ✅ Different hunt behaviors
 
 ## In Progress
 - 🔄 Group member format improvements
 - 🔄 Status update narrative style
 - 🔄 System message handling
 - 🔄 Spawn initialization process
+- 🔄 Testing hunt system
+- 🔄 Combat animations
+- 🔄 Attack range implementation
+- 🔄 Cooldown system
 
 ## To Do
 - ⏳ Fix group member display names

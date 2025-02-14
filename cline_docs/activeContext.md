@@ -1,43 +1,50 @@
 # Active Development Context
 
 ## Current Task
-Adding NPC animations and actions (jump, sit)
+- Adding hunt action for NPCs to target players and other NPCs
 
 ## Recent Changes
-1. Fixed chat system
-   - Fixed message routing loop
-   - Added conditional heartbeat reminder
-   - Improved system message handling
-   - Fixed TextChatService integration
+1. Added hunt action system
+   - Implemented CombatNavigate in NavigationService
+   - Added hunt action to ActionService
+   - Support for both player and NPC targets
+   - Different hunt types (destroy/track)
+
+2. Combat Navigation Parameters
+   - Aggressive pathfinding for destroy mode
+   - Continuous target tracking
+   - Optimized update intervals
+   - Jump-enabled pursuit
 
 ## Current State
 ### Working
-- Chat system fully functional
-- Message routing fixed
-- System message handling improved
-- TextChatService integration complete
+- Basic hunt command structure
+- Combat navigation pathfinding
+- Target type detection (Player/NPC)
+- Hunt type differentiation
 
 ### Next Implementation
-- Jump action and animation
-- Sit state tracking
-- Status updates for animations
-- Prompt updates for actions
+- Test hunt behaviors
+- Add combat animations
+- Implement attack range
+- Add cooldown system
 
 ## Implementation Plan
-1. Animation System
-   - Add jump animation
-   - Track sitting state
-   - Update status system
+1. Combat System
+   - Test hunt command flow
+   - Verify target acquisition
+   - Check pathfinding behavior
+   - Add combat animations
 
-2. Action Commands
-   - Implement jump command
-   - Add sit state handling
-   - Update prompt for actions
+2. Hunt Types
+   - Destroy: Aggressive pursuit
+   - Track: Casual following
+   - Add more behaviors later
 
 3. Status Updates
-   - Track animation states
-   - Add sitting status
-   - Update status format
+   - Track combat state
+   - Show current target
+   - Update hunt status
 
 ## Technical Requirements
 1. Animation

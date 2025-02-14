@@ -291,4 +291,17 @@
 2. Text Box:
    - Using TextChatService
    - Not displaying messages
-   - Client-side handling needs review 
+   - Client-side handling needs review
+
+## Action Patterns
+- Hunt System
+  - Uses NavigationService with combat parameters
+  - Supports both player and NPC targets
+  - Different hunt types (destroy/track)
+  - Continuous target tracking
+
+- Combat Navigation
+  - Aggressive pathfinding
+  - Jump-enabled pursuit
+  - Frequent path updates
+  - Close-range direct movement 

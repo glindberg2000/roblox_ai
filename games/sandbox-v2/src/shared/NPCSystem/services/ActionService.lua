@@ -27,42 +27,60 @@ function ActionService.new()
 end
 
 function ActionService:handleAction(npc, actionData)
-    if not npc or not actionData then return false end
+    if not npc or not actionData then 
+        LoggerService:warn("ACTION", "Invalid action data or NPC")
+        return false 
+    end
+    
+    LoggerService:debug("ACTION", string.format(
+        "Received action data: %s",
+        HttpService:JSONEncode(actionData)
+    ))
     
     -- Handle both direct action and wrapped actions array format
     local actions = actionData.actions or {actionData}
     
     for _, action in ipairs(actions) do
-        -- Skip "none" actions
-        if action.type == "none" then continue end
+        -- Validate standardized format
+        if not action.type or not action.data then
+            LoggerService:warn("ACTION", "Invalid action format - missing type or data")
+            continue
+        end
         
         LoggerService:debug("ACTION", string.format(
-            "Handling action for %s: %s",
+            "Processing action for %s: %s",
             npc.displayName,
             HttpService:JSONEncode(action)
         ))
+        
+        -- Update NPC status with action message if provided
+        if action.message then
+            npc.currentAction = action.message
+        end
 
         -- Map API actions to behaviors
-        if action.action == "idle" then
+        if action.type == "hunt" then
+            return self:hunt(npc, action.data)
+        elseif action.type == "patrol" then
+            return self:patrol(npc, action.data)
+        elseif action.type == "run" then
+            return self:run(npc, action.data)
+        elseif action.type == "jump" then
+            return self:jump(npc)
+        elseif action.type == "idle" then
             return BehaviorService:setBehavior(npc, "idle", {
                 allowWander = false,  -- Don't wander when specifically idle
                 target = action.target
             })
             
-        elseif action.action == "wander" then
+        elseif action.type == "wander" then
             return BehaviorService:setBehavior(npc, "idle", {
                 allowWander = true,
                 wanderRadius = 40,
                 wanderArea = action.target -- Optional area constraint
             })
             
-        elseif action.action == "patrol" then
-            return BehaviorService:setBehavior(npc, "patrol", {
-                area = action.target,
-                patrolPoints = self:getPatrolPoints(action.target)
-            })
-            
-        elseif action.action == "follow" then
+        elseif action.type == "follow" then
             local target = Players:FindFirstChild(action.target)
             if not target then return false end
             
@@ -70,22 +88,22 @@ function ActionService:handleAction(npc, actionData)
                 target = target
             })
             
-        elseif action.action == "unfollow" then
+        elseif action.type == "unfollow" then
             return BehaviorService:setBehavior(npc, "idle", {
                 allowWander = false
             })
             
-        elseif action.action == "hide" then
+        elseif action.type == "hide" then
             return BehaviorService:setBehavior(npc, "hide", {
                 coverLocation = action.target
             })
             
-        elseif action.action == "flee" then
+        elseif action.type == "flee" then
             return BehaviorService:setBehavior(npc, "flee", {
                 threat = action.target
             })
             
-        elseif action.action == "emote" then
+        elseif action.type == "emote" then
             -- Handle emotes through AnimationService
             local AnimationService = require(ReplicatedStorage.Shared.NPCSystem.services.AnimationService)
             local emoteTarget = Players:FindFirstChild(action.target)
@@ -102,13 +120,6 @@ function ActionService:handleAction(npc, actionData)
         end
     end
     
-    -- Only log warning if we got an unknown action (not "none")
-    if actionData.action and actionData.action ~= "none" then
-        LoggerService:warn("ACTION", string.format(
-            "Unknown action type: %s",
-            actionData.action
-        ))
-    end
     return false
 end
 
@@ -467,6 +478,85 @@ function ActionService.patrol(npc, action)
     end
     
     return PatrolService:startPatrol(npc, action.data)
+end
+
+function ActionService:hunt(npc, data)
+    if not data then
+        LoggerService:warn("ACTION", "No data provided for hunt action")
+        return false
+    end
+
+    LoggerService:debug("ACTION", string.format(
+        "Hunt called with data: %s",
+        HttpService:JSONEncode(data)
+    ))
+
+    -- Extract target from data, handling both formats
+    local targetName = data.target or (data.data and data.data.target)
+    
+    if not targetName then
+        LoggerService:warn("ACTION", "No target specified for hunt action")
+        return false
+    end
+    
+    LoggerService:debug("ACTION", string.format(
+        "Looking for target: %s",
+        targetName
+    ))
+    
+    -- Try to find target (player or NPC)
+    local target
+    
+    -- First check if target is a player
+    target = Players:FindFirstChild(targetName)
+    if target then
+        LoggerService:debug("ACTION", string.format(
+            "Found player target: %s",
+            target.Name
+        ))
+    end
+    
+    -- If not a player, check if it's an NPC
+    if not target then
+        local npcManager = NPCManagerV3.getInstance()
+        LoggerService:debug("ACTION", "Searching NPCs for target")
+        for _, npcInstance in pairs(npcManager.npcs) do
+            LoggerService:debug("ACTION", string.format(
+                "Checking NPC: %s",
+                npcInstance.displayName
+            ))
+            if npcInstance.displayName == targetName then
+                target = npcInstance
+                LoggerService:debug("ACTION", "Found NPC target")
+                break
+            end
+        end
+    end
+    
+    if not target then
+        LoggerService:warn("ACTION", string.format(
+            "Could not find target (player or NPC): %s",
+            targetName
+        ))
+        return false
+    end
+    
+    -- Update NPC status to show they're hunting
+    npc.currentAction = string.format("Hunting %s", targetName)
+    
+    -- Start the hunt behavior
+    local huntType = (data.type or data.data and data.data.type) or "track"
+    local success = NavigationService:CombatNavigate(npc, target, huntType)
+    if not success then
+        LoggerService:warn("ACTION", string.format(
+            "Hunt navigation failed for NPC %s targeting %s",
+            npc.displayName,
+            targetName
+        ))
+        npc.currentAction = "Idle"
+    end
+    
+    return success
 end
 
 return ActionService

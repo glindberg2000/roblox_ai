@@ -72,7 +72,7 @@ from .models import (
     HumanContextData,
     GroupUpdate
 )
-from .letta_utils import extract_tool_results, convert_tool_calls_to_action
+from .letta_utils import extract_tool_results
 from pathlib import Path
 from .queue_system import queue_system, ChatQueueItem, SnapshotQueueItem
 from .snapshot_processor import enrich_snapshot_with_context
@@ -657,98 +657,87 @@ def extract_tool_results(response):
 #     return agent
 
 def process_tool_results(tool_results: dict) -> Tuple[str, dict]:
-    """Process tool results and extract message/action"""
+    """Process tool results into Roblox action format"""
+    actions = []
     message = None
-    action = {"type": "none"}
 
     try:
+        logger.debug("=== Tool Results Structure ===")
+        if "tool_results" in tool_results:
+            for result in tool_results["tool_results"]:
+                logger.debug(f"Tool result: {json.dumps(result, indent=2)}")
+                if "tool_return" in result:
+                    parsed = json.loads(result["tool_return"])
+                    logger.debug(f"Found roblox_format: {parsed.get('roblox_format')}")
+
         for tool_call in tool_results.get("tool_calls", []):
-            logger.info(f"Processing tool call: {tool_call}")
-            
-            if tool_call["name"] == "perform_action":
-                args = tool_call["arguments"]
+            if tool_call["tool"] == "perform_action":
+                # Try to get result from either tool_return or tool_results
+                tool_return = tool_call.get("tool_return")
                 
-                # Handle different action types
-                if args.get("action") == "patrol":
-                    action = {
-                        "type": "patrol",
+                # If no tool_return, look in tool_results array
+                if not tool_return:
+                    tool_results_array = tool_results.get("tool_results", [])
+                    for result in tool_results_array:
+                        if result["tool_call"]["id"] == tool_call["id"]:
+                            tool_return = result["result"]
+                            break
+                
+                if not tool_return:
+                    logger.debug(f"No tool_return found in tool call or results")
+                    continue
+                    
+                result = json.loads(tool_return)
+                logger.debug(f"Parsed result: {json.dumps(result, indent=2)}")
+                
+                # Look for roblox_format in the tool return
+                roblox_format = result.get("roblox_format")
+                logger.debug(f"Roblox format: {roblox_format}")
+                
+                if roblox_format:
+                    actions.append({
+                        "type": roblox_format["type"],
+                        "data": roblox_format["data"],
+                        "message": roblox_format["message"]
+                    })
+                    if not message:
+                        message = roblox_format["message"]
+
+            elif tool_call["tool"] == "navigate_to":
+                args = tool_call.get("args", {})
+                destination = args.get("destination_slug")
+                logger.debug(f"Processing navigate_to for destination: {destination}")
+                
+                coordinates = get_coordinates_for_slug(destination)
+                if coordinates:
+                    actions.append({
+                        "type": "navigate",
                         "data": {
-                            "target": args.get("target", "")  # Match the follow pattern with data wrapper
-                        }
-                    }
-                    message = f"Starting patrol of {args.get('target', 'the area')}!"
-                
-                elif args.get("action") == "follow":
-                    action = {
-                        "type": "follow",
-                        "data": {
-                            "target": args.get("target")
-                        }
-                    }
-                    message = "I'll follow you!"
-                
-                elif args.get("action") == "unfollow":
-                    action = {
-                        "type": "unfollow",
-                        "data": {}
-                    }
-                    message = "I'll stop following!"
-                    
-                elif args.get("action") == "emote":
-                    action = {
-                        "type": "emote",
-                        "data": {
-                            "emote_type": args.get("type"),
-                            "target": args.get("target")
-                        }
-                    }
-                    message = f"*{args.get('type')}s*"
-                    
-            elif tool_call["name"] == "navigate_to":
-                result = json.loads(tool_call["result"])
-                logger.info(f"Parsed navigation result: {result}")
-                
-                if result["status"] == "success":
-                    # Try to get coordinates from database
-                    logger.info(f"Looking up coordinates for slug: {result['slug']}")
-                    coordinates = get_location_coordinates(result["slug"])
-                    
-                    if coordinates:
-                        logger.info(f"Found coordinates in database: {coordinates}")
-                        action = {
-                            "type": "navigate",
-                            "data": {
-                                "coordinates": coordinates
-                            }
-                        }
-                    else:
-                        logger.warning(f"No coordinates found for slug {result['slug']}, using fallback")
-                        action = {
-                            "type": "navigate",
-                            "data": {
-                                "coordinates": {
-                                    "x": 100,
-                                    "y": 0,
-                                    "z": 100
-                                }
-                            }
-                        }
-                    message = result.get("message", "Moving to new location...")
-                    logger.info(f"Navigation action created: {action}")
-                    
-            elif tool_call["name"] == "send_message":
-                message = tool_call["arguments"].get("message", "...")
-                
+                            "coordinates": coordinates
+                        },
+                        "message": f"Moving to {destination}..."
+                    })
+
+        return message, {"actions": actions} if actions else {"type": "none"}
+
     except Exception as e:
         logger.error(f"Error processing tool results: {str(e)}", exc_info=True)
-        message = "I'm having trouble right now."
-        action = {"type": "none"}
-
-    return message, action
+        return "I'm having trouble right now.", {"type": "none"}
 
 def get_coordinates_for_slug(slug: str) -> Optional[Dict]:
-    """Look up coordinates directly from database - synchronous version"""
+    """Look up coordinates from cache first, then database"""
     try:
+        # First check the cache
+        if slug in LOCATION_CACHE:
+            location_data = LOCATION_CACHE[slug]
+            coords = location_data['coordinates']
+            logger.info(f"Found coordinates for slug {slug} in cache: {coords}")
+            # Convert array format to dict if needed
+            if isinstance(coords, list):
+                return {"x": coords[0], "y": coords[1], "z": coords[2]}
+            return coords
+
+        # Fallback to database
         with get_db() as db:
             location = db.execute(
                 "SELECT coordinates FROM locations WHERE slug = ? AND game_id = ?",
@@ -905,35 +894,17 @@ async def chat_with_npc_v3(request: ChatRequest):
                 logger.info("Adding default greeting for proximity message")
                 result['message'] = "Hi there! Default greeting!"
             
-            # Handle None message during tool calls
-            if result['message'] is None and result['tool_calls']:
-                logger.info("Got None message during tool call, waiting for completion")
-                return ChatResponse(
-                    message="",  # Empty string instead of None
-                    action=convert_tool_calls_to_action(result["tool_calls"]),
-                    metadata={
-                        "tool_calls": result["tool_calls"],
-                        "reasoning": result.get("reasoning", "")
-                    }
-                )
+            # Process all actions consistently
+            message, action = process_tool_results(result)
             
-            # Convert tool calls to proper Roblox action format
-            action = convert_tool_calls_to_action(result["tool_calls"])
-            logger.debug(f"Converted action: {action}")
-            
-            # Log what we send back
-            logger.info("=== Sending to Client ===")
-            response = ChatResponse(
+            return ChatResponse(
                 message=result["message"],
-                action=action,  # Now using our converted action
+                action=action,  # Using processed actions
                 metadata={
                     "tool_calls": result["tool_calls"],
                     "reasoning": result.get("reasoning", "")
                 }
             )
-            logger.info(f"Final Response: {json.dumps(response.dict(), indent=2)}")
-            
-            return response
 
         except Exception as e:
             logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)

@@ -1,6 +1,17 @@
 local NavigationService = {}
+local PathfindingService = game:GetService("PathfindingService")
 local LoggerService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LoggerService)
 local LocationService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LocationService)
+
+-- Combat navigation parameters
+local COMBAT_PARAMS = {
+    AgentRadius = 2.0,        -- Smaller radius for tighter paths
+    AgentHeight = 5.0,
+    AgentCanJump = true,      -- Allow jumping in combat
+    WaypointSpacing = 4.0,    -- Closer waypoints for precise tracking
+    RECALCULATE_THRESHOLD = 8, -- Distance before recalculating path
+    UPDATE_INTERVAL = 0.5      -- More frequent updates for combat
+}
 
 function NavigationService:NavigateToPosition(npc, targetPosition)
     -- Validate inputs
@@ -105,6 +116,64 @@ function NavigationService:Navigate(npc, destination)
     
     -- Otherwise treat it as a location slug
     return self:NavigateToLocation(npc, destination)
+end
+
+function NavigationService:CombatNavigate(npc, target, huntType)
+    if not npc or not npc.model or not target then
+        LoggerService:warn("NAVIGATION", "Missing required parameters for combat navigation")
+        return false
+    end
+    
+    -- Get target character/model based on type
+    local targetChar
+    if typeof(target) == "Instance" then
+        -- Target is a Player
+        targetChar = target.Character
+    elseif typeof(target) == "table" and target.model then
+        -- Target is an NPC
+        targetChar = target.model
+    else
+        targetChar = target
+    end
+    
+    if not targetChar or not targetChar:FindFirstChild("HumanoidRootPart") then
+        LoggerService:warn("NAVIGATION", "Invalid target for combat navigation")
+        return false
+    end
+    
+    -- Configure behavior based on hunt type
+    local params = COMBAT_PARAMS
+    if huntType == "destroy" then
+        params = {
+            AgentRadius = 2.0,
+            AgentHeight = 5.0,
+            AgentCanJump = true,
+            WaypointSpacing = 2.0,  -- Closer spacing for aggressive pursuit
+            RECALCULATE_THRESHOLD = 4, -- More frequent recalculation
+            UPDATE_INTERVAL = 0.25  -- Faster updates
+        }
+    end
+    
+    -- Start combat navigation loop
+    task.spawn(function()
+        while npc.Active do
+            local rootPart = npc.model:FindFirstChild("HumanoidRootPart")
+            local humanoid = npc.model:FindFirstChild("Humanoid")
+            if not rootPart or not humanoid then break end
+            
+            local targetPos = targetChar.HumanoidRootPart.Position
+            local distance = (rootPart.Position - targetPos).Magnitude
+            
+            -- Navigate to target
+            if distance > 5 then
+                humanoid:MoveTo(targetPos)
+            end
+            
+            task.wait(params.UPDATE_INTERVAL)
+        end
+    end)
+    
+    return true
 end
 
 return NavigationService 
