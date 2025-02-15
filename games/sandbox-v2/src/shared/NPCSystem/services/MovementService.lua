@@ -31,6 +31,11 @@ function MovementService:startFollowing(npc, target, options)
     -- Clean up existing thread if any
     self:stopFollowing(npc)
 
+    -- Skip if NPC is being controlled by another system
+    if npc.overrideMovement then
+        return
+    end
+
     -- Create new follow thread
     local thread = task.spawn(function()
         while true do
@@ -104,6 +109,11 @@ function MovementService:moveNPCToPosition(npc, targetPosition)
         targetPosition.X, targetPosition.Y, targetPosition.Z,
         distance
     ))
+
+    -- Skip if NPC is being controlled by another system
+    if npc.overrideMovement then
+        return
+    end
 
     -- Move to position
     humanoid:MoveTo(targetPosition)

@@ -14,6 +14,14 @@ local COMBAT_PARAMS = {
 }
 
 function NavigationService:NavigateToPosition(npc, targetPosition)
+    LoggerService:debug("NAVIGATION", string.format(
+        "NavigateToPosition called for %s to position (%.1f, %.1f, %.1f)",
+        npc.displayName,
+        targetPosition.X,
+        targetPosition.Y,
+        targetPosition.Z
+    ))
+
     -- Validate inputs
     if not npc or not targetPosition then
         LoggerService:warn("NAVIGATION", "Missing required parameters for navigation")
@@ -124,62 +132,71 @@ function NavigationService:CombatNavigate(npc, target, huntType)
         return false
     end
 
+    -- Debug log the target type and properties
     LoggerService:debug("NAVIGATION", string.format(
-        "Starting %s hunt for NPC %s targeting %s",
-        huntType,
-        npc.displayName,
-        target.Name
+        "Target details:\nType: %s\nProperties: %s",
+        typeof(target),
+        table.concat({
+            "Name=" .. (target.Name or "nil"),
+            "DisplayName=" .. (target.displayName or "nil"),
+            "Model=" .. (target.model and "exists" or "nil"),
+            "Character=" .. (target.Character and "exists" or "nil")
+        }, ", ")
     ))
 
     -- Get target character/model based on type
     local targetChar
     if typeof(target) == "Instance" then
-        -- Target is a Player
         targetChar = target.Character
+        LoggerService:debug("NAVIGATION", "Target is Instance, Character: " .. tostring(targetChar))
     elseif typeof(target) == "table" and target.model then
-        -- Target is an NPC
         targetChar = target.model
+        LoggerService:debug("NAVIGATION", "Target is table with model: " .. tostring(targetChar))
     else
         targetChar = target
+        LoggerService:debug("NAVIGATION", "Target is direct: " .. tostring(targetChar))
     end
-    
+
+    -- Validate target has required parts
     if not targetChar or not targetChar:FindFirstChild("HumanoidRootPart") then
-        LoggerService:warn("NAVIGATION", "Invalid target for combat navigation")
+        LoggerService:warn("NAVIGATION", string.format(
+            "Invalid target for combat navigation:\nTarget: %s\nCharacter: %s\nHas HumanoidRootPart: %s",
+            tostring(target),
+            tostring(targetChar),
+            tostring(targetChar and targetChar:FindFirstChild("HumanoidRootPart"))
+        ))
         return false
     end
-    
-    -- Configure behavior based on hunt type
-    local params = COMBAT_PARAMS
-    if huntType == "destroy" then
-        params = {
-            AgentRadius = 2.0,
-            AgentHeight = 5.0,
-            AgentCanJump = true,
-            WaypointSpacing = 2.0,  -- Closer spacing for aggressive pursuit
-            RECALCULATE_THRESHOLD = 4, -- More frequent recalculation
-            UPDATE_INTERVAL = 0.25  -- Faster updates
-        }
-    end
-    
-    -- Start combat navigation loop
+
+    -- Set hunting state
+    npc.isHunting = true
+    npc.huntTarget = targetChar
+    npc.overrideMovement = true  -- Tell MovementService to skip this NPC
+
+    -- Start hunt loop
     task.spawn(function()
-        while npc.Active do
-            local rootPart = npc.model:FindFirstChild("HumanoidRootPart")
-            local humanoid = npc.model:FindFirstChild("Humanoid")
-            if not rootPart or not humanoid then break end
-            
+        while npc.Active and npc.isHunting do
             local targetPos = targetChar.HumanoidRootPart.Position
-            local distance = (rootPart.Position - targetPos).Magnitude
-            
-            -- Navigate to target
+            local npcPos = npc.model.HumanoidRootPart.Position
+            local distance = (targetPos - npcPos).Magnitude
+
+            -- If we're too far, navigate to target
             if distance > 5 then
-                humanoid:MoveTo(targetPos)
+                local humanoid = npc.model:FindFirstChild("Humanoid")
+                if humanoid then
+                    humanoid:MoveTo(targetPos)
+                end
             end
-            
-            task.wait(params.UPDATE_INTERVAL)
+
+            task.wait(0.5) -- Update every half second
         end
+
+        -- Clean up hunting state
+        npc.isHunting = false
+        npc.huntTarget = nil
+        npc.overrideMovement = false  -- Restore MovementService control
     end)
-    
+
     return true
 end
 

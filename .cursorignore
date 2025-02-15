@@ -1,0 +1,7 @@
+# Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
+_templates/
+666/
+game1/
+sandobox-v1/
+venv/
+backups/

@@ -111,14 +111,33 @@ local function handleLettaChat(data)
         local ActionService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.ActionService)
         local NPCManagerV3 = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.NPCManagerV3)
         
+        -- Log the full data object
+        LoggerService:debug("ACTION", string.format(
+            "Processing action with data: %s", 
+            HttpService:JSONEncode(data)
+        ))
+        
         for _, action in ipairs(decoded.action.actions) do
             if action.type and action.data then
                 -- Get the manager instance
                 local manager = NPCManagerV3.getInstance()
                 -- Get NPC using the manager's method for getting NPCs
+                LoggerService:debug("ACTION", string.format(
+                    "Looking for NPC with id: %s", 
+                    data.npc_id or "nil"
+                ))
                 local npc = manager.npcs[data.npc_id]
                 
                 if npc then
+                    -- Log all variables for debugging purposes
+                    LoggerService:debug("ACTION DEBUG", string.format(
+                        "NPC Details: %s; Action Object: %s; Action Type: %s; Action Data: %s", 
+                        npc.displayName or "N/A", 
+                        tostring(action), 
+                        tostring(action.type), 
+                        HttpService:JSONEncode(action.data)
+                    ))
+                    
                     -- Call existing ActionService methods
                     if ActionService[action.type] then
                         LoggerService:debug("ACTION", string.format("Executing action: %s for NPC %s", action.type, npc.displayName))

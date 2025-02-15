@@ -60,10 +60,7 @@ function ActionService:handleAction(npc, actionData)
 
         -- Process the action
         if action.type == "hunt" then
-            if not self:hunt(npc, action.data) then
-                LoggerService:warn("ACTION", "Hunt action failed")
-                continue
-            end
+            return self:hunt(npc, action.data)
         elseif action.type == "patrol" then
             if not self:patrol(npc, action.data) then
                 LoggerService:warn("ACTION", "Patrol action failed")
@@ -503,71 +500,66 @@ function ActionService.patrol(npc, action)
     })
 end
 
-function ActionService:hunt(npc, data)
-    if not npc then
-        LoggerService:warn("ACTION", "No data provided for hunt action")
+function ActionService.hunt(npc, data)
+    -- Create safe string values for logging
+    local npcName = (npc and (npc.displayName or tostring(npc))) or "nil"
+    local dataStr = (data and tostring(data)) or "nil"
+
+    LoggerService:debug("ACTION", string.format(
+        "ActionService:hunt called with npc: %s (type: %s), data: %s",
+        npcName,
+        typeof(npc),
+        dataStr
+    ))
+
+    if not npc or not data then
+        LoggerService:warn("ACTION", "Missing required parameters for hunt action")
         return false
     end
 
-    LoggerService:debug("ACTION", string.format(
-        "NPC %s hunting with data: %s",
-        npc.displayName,
-        HttpService:JSONEncode(data)
-    ))
+    LoggerService:debug("ACTION", string.format("NPC %s hunting with data: %s", npc.displayName, dataStr))
 
-    -- Get target name from action data
-    local targetName = data and data.target
-    
-    if not targetName then
+    -- Validate target
+    if not data.target then
         LoggerService:warn("ACTION", "No target specified for hunt action")
         return false
     end
 
-    -- If currently following, stop first
-    if npc.isFollowing then
-        self:unfollow(npc)
-    end
+    LoggerService:debug("ACTION", "Searching NPCs for target")
 
-    -- Try to find target (player or NPC)
-    local target = Players:FindFirstChild(targetName)
-    if target then
-        LoggerService:debug("ACTION", string.format(
-            "Found player target: %s",
-            target.Name
-        ))
-    end
-    
-    -- If not a player, check if it's an NPC
-    if not target then
-        local npcManager = NPCManagerV3.getInstance()
-        LoggerService:debug("ACTION", "Searching NPCs for target")
-        for _, npcInstance in pairs(npcManager.npcs) do
-            LoggerService:debug("ACTION", string.format(
-                "Checking NPC: %s",
-                npcInstance.displayName
-            ))
-            if npcInstance.displayName == targetName then
-                target = npcInstance
-                LoggerService:debug("ACTION", "Found NPC target")
-                break
-            end
+    -- Find target NPC
+    local targetNPC
+    for _, otherNPC in pairs(NPCService:getAllNPCs()) do
+        LoggerService:debug("ACTION", string.format("Checking NPC: %s", otherNPC.displayName))
+        if otherNPC.displayName == data.target then
+            targetNPC = otherNPC
+            break
         end
     end
-    
-    if not target then
-        LoggerService:warn("ACTION", string.format(
-            "Could not find target (player or NPC): %s",
-            targetName
-        ))
+
+    if not targetNPC then
+        LoggerService:warn("ACTION", string.format("Could not find NPC target: %s", data.target))
         return false
     end
-    
-    -- Update NPC status to show they're hunting
-    npc.currentAction = string.format("Hunting %s", targetName)
-    
-    -- Start the hunt behavior
-    local huntType = data.type or "track"
-    return NavigationService:CombatNavigate(npc, target, huntType)
+
+    LoggerService:debug("ACTION", "Found NPC target")
+
+    -- Start hunt behavior
+    local success = NavigationService:CombatNavigate(npc, targetNPC, data.type)
+    if not success then
+        LoggerService:warn("ACTION", string.format(
+            "Failed to start hunt behavior for %s targeting %s",
+            npc.displayName,
+            targetNPC.displayName
+        ))
+    else
+        LoggerService:debug("ACTION", string.format(
+            "Started hunt behavior for %s targeting %s",
+            npc.displayName,
+            targetNPC.displayName
+        ))
+    end
+    return success
 end
 
 return ActionService
