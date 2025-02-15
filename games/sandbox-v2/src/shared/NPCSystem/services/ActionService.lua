@@ -58,11 +58,17 @@ function ActionService:handleAction(npc, actionData)
             npc.currentAction = action.message
         end
 
-        -- Map API actions to behaviors
+        -- Process the action
         if action.type == "hunt" then
-            return self:hunt(npc, action.data)
+            if not self:hunt(npc, action.data) then
+                LoggerService:warn("ACTION", "Hunt action failed")
+                continue
+            end
         elseif action.type == "patrol" then
-            return self:patrol(npc, action.data)
+            if not self:patrol(npc, action.data) then
+                LoggerService:warn("ACTION", "Patrol action failed")
+                continue
+            end
         elseif action.type == "run" then
             return self:run(npc, action.data)
         elseif action.type == "jump" then
@@ -106,21 +112,21 @@ function ActionService:handleAction(npc, actionData)
         elseif action.type == "emote" then
             -- Handle emotes through AnimationService
             local AnimationService = require(ReplicatedStorage.Shared.NPCSystem.services.AnimationService)
-            local emoteTarget = Players:FindFirstChild(action.target)
+            local emoteTarget = action.data and Players:FindFirstChild(action.data.target)
             
             -- Play emote and face target if specified
             if emoteTarget then
                 BehaviorService:setBehavior(npc, "idle", {
-                    target = action.target,
+                    target = action.data.target,
                     allowWander = false
                 })
             end
             
-            return AnimationService:playEmote(npc.model.Humanoid, action.type)
+            return AnimationService:playEmote(npc.model.Humanoid, action.data.type)
         end
     end
     
-    return false
+    return true
 end
 
 -- Helper function to get patrol points for an area
@@ -382,7 +388,7 @@ function ActionService.emote(npc, action)
 
     -- Extract emote data from action
     local emoteData = action.data or action  -- Try both formats
-    if not emoteData or not emoteData.emote_type then
+    if not emoteData or not emoteData.type then
         LoggerService:warn("ACTION_SERVICE", string.format(
             "Invalid emote data for NPC %s: %s",
             npc.displayName,
@@ -394,7 +400,7 @@ function ActionService.emote(npc, action)
     LoggerService:debug("ACTION_SERVICE", string.format(
         "NPC %s performing emote: %s", 
         npc.displayName,
-        emoteData.emote_type
+        emoteData.type
     ))
 
     -- Debug NPC model structure
@@ -428,9 +434,9 @@ function ActionService.emote(npc, action)
     }
 
     -- Choose animation based on rig type
-    local animationId = isR15 and EMOTE_ANIMATIONS[emoteData.emote_type] or R6_EMOTES[emoteData.emote_type]
+    local animationId = isR15 and EMOTE_ANIMATIONS[emoteData.type] or R6_EMOTES[emoteData.type]
     if not animationId then
-        LoggerService:error("ACTION_SERVICE", "No animation found for emote type: " .. emoteData.emote_type)
+        LoggerService:error("ACTION_SERVICE", "No animation found for emote type: " .. emoteData.type)
         return false
     end
 
@@ -498,34 +504,32 @@ function ActionService.patrol(npc, action)
 end
 
 function ActionService:hunt(npc, data)
-    if not data then
+    if not npc then
         LoggerService:warn("ACTION", "No data provided for hunt action")
         return false
     end
 
     LoggerService:debug("ACTION", string.format(
-        "Hunt called with data: %s",
+        "NPC %s hunting with data: %s",
+        npc.displayName,
         HttpService:JSONEncode(data)
     ))
 
-    -- Extract target from data, handling both formats
-    local targetName = data.target or (data.data and data.data.target)
+    -- Get target name from action data
+    local targetName = data and data.target
     
     if not targetName then
         LoggerService:warn("ACTION", "No target specified for hunt action")
         return false
     end
-    
-    LoggerService:debug("ACTION", string.format(
-        "Looking for target: %s",
-        targetName
-    ))
-    
+
+    -- If currently following, stop first
+    if npc.isFollowing then
+        self:unfollow(npc)
+    end
+
     -- Try to find target (player or NPC)
-    local target
-    
-    -- First check if target is a player
-    target = Players:FindFirstChild(targetName)
+    local target = Players:FindFirstChild(targetName)
     if target then
         LoggerService:debug("ACTION", string.format(
             "Found player target: %s",
@@ -562,18 +566,8 @@ function ActionService:hunt(npc, data)
     npc.currentAction = string.format("Hunting %s", targetName)
     
     -- Start the hunt behavior
-    local huntType = (data.type or data.data and data.data.type) or "track"
-    local success = NavigationService:CombatNavigate(npc, target, huntType)
-    if not success then
-        LoggerService:warn("ACTION", string.format(
-            "Hunt navigation failed for NPC %s targeting %s",
-            npc.displayName,
-            targetName
-        ))
-        npc.currentAction = "Idle"
-    end
-    
-    return success
+    local huntType = data.type or "track"
+    return NavigationService:CombatNavigate(npc, target, huntType)
 end
 
 return ActionService

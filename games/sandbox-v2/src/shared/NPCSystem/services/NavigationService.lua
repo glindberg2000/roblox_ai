@@ -119,11 +119,18 @@ function NavigationService:Navigate(npc, destination)
 end
 
 function NavigationService:CombatNavigate(npc, target, huntType)
-    if not npc or not npc.model or not target then
-        LoggerService:warn("NAVIGATION", "Missing required parameters for combat navigation")
+    if not npc or not target then
+        LoggerService:warn("NAVIGATION", "Invalid NPC or target for combat navigation")
         return false
     end
-    
+
+    LoggerService:debug("NAVIGATION", string.format(
+        "Starting %s hunt for NPC %s targeting %s",
+        huntType,
+        npc.displayName,
+        target.Name
+    ))
+
     -- Get target character/model based on type
     local targetChar
     if typeof(target) == "Instance" then
