@@ -428,6 +428,8 @@ end
 function ActionService.hunt(npc, data)
     LoggerService:debug("ACTION_SERVICE", string.format("NPC %s hunt request", npc.displayName))
     
+    ActionService.debugNPCScripts(npc)
+
     if not npc or not data then
         LoggerService:warn("ACTION", "Missing required parameters for hunt action")
         return false
@@ -437,6 +439,20 @@ function ActionService.hunt(npc, data)
     if not data.target then
         LoggerService:warn("ACTION", "No target specified for hunt action")
         return false
+    end
+
+    -- Stop other behaviors more safely
+    if npc.currentBehavior then
+        BehaviorService:setBehavior(npc, "idle", {
+            allowWander = false
+        })
+    end
+
+    if npc.isFollowing then
+        ActionService.unfollow(npc)
+    end
+    if npc.isPatrolling then
+        PatrolService:stopPatrol(npc)
     end
 
     local targetEntity = nil
@@ -491,7 +507,7 @@ function ActionService.hunt(npc, data)
         return false
     end
 
-    -- Use KillBotService for hunt behavior
+    -- Use KillBotService for hunt behavior (let it handle its own navigation)
     local deactivateKillBot = KillBotService:ActivateKillBot(npc, targetCharacter)
     if not deactivateKillBot then
         LoggerService:warn("ACTION", string.format(
@@ -507,6 +523,7 @@ function ActionService.hunt(npc, data)
             targetCharacter.displayName or targetCharacter.Name
         ))
         npc.deactivateKillBot = deactivateKillBot
+        npc.currentBehavior = "hunt"  -- Mark as hunting
         return true
     end
 end
@@ -519,6 +536,56 @@ function ActionService.stop_hunt(npc)
         LoggerService:debug("ACTION", string.format("Stopped hunt for NPC %s", npc.displayName))
     end
     return true
+end
+
+function ActionService.debugNPCScripts(npc)
+    if not npc or not npc.model then
+        LoggerService:warn("ACTION_SERVICE", "No NPC or model to debug")
+        return
+    end
+
+    LoggerService:info("ACTION_SERVICE", string.format("=== Debugging scripts for NPC: %s ===", npc.displayName))
+    
+    -- Log all scripts in the model
+    for _, item in ipairs(npc.model:GetDescendants()) do
+        if item:IsA("Script") or item:IsA("LocalScript") then
+            LoggerService:info("ACTION_SERVICE", string.format(
+                "Found script: %s (Type: %s, Parent: %s, Enabled: %s)",
+                item.Name,
+                item.ClassName,
+                item.Parent.Name,
+                tostring(item.Enabled)
+            ))
+            
+            -- Try to get script source if possible
+            pcall(function()
+                LoggerService:debug("ACTION_SERVICE", string.format(
+                    "Script %s contents:\n%s",
+                    item.Name,
+                    item.Source
+                ))
+            end)
+        end
+    end
+
+    -- Log current behaviors
+    LoggerService:info("ACTION_SERVICE", string.format(
+        "Current behavior state: %s",
+        npc.currentBehavior or "None"
+    ))
+
+    -- Log active services
+    LoggerService:info("ACTION_SERVICE", "Active services:")
+    for _, service in ipairs({
+        "MovementService",
+        "BehaviorService",
+        "PatrolService",
+        "KillBotService"
+    }) do
+        if npc[service:lower()] then
+            LoggerService:info("ACTION_SERVICE", string.format("- %s: Active", service))
+        end
+    end
 end
 
 return ActionService
