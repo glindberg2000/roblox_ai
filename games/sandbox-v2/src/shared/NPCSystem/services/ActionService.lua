@@ -8,6 +8,7 @@ local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local BehaviorService = require(ReplicatedStorage.Shared.NPCSystem.services.BehaviorService).new()
 local PatrolService = require(ReplicatedStorage.Shared.NPCSystem.services.PatrolService)
+local KillBotService = require(ReplicatedStorage.Shared.NPCSystem.services.KillBotService)
 
 local ActionService = {}
 ActionService.__index = ActionService
@@ -501,65 +502,99 @@ function ActionService.patrol(npc, action)
 end
 
 function ActionService.hunt(npc, data)
-    -- Create safe string values for logging
-    local npcName = (npc and (npc.displayName or tostring(npc))) or "nil"
-    local dataStr = (data and tostring(data)) or "nil"
-
-    LoggerService:debug("ACTION", string.format(
-        "ActionService:hunt called with npc: %s (type: %s), data: %s",
-        npcName,
-        typeof(npc),
-        dataStr
-    ))
-
+    LoggerService:debug("ACTION_SERVICE", string.format("NPC %s hunt request", npc.displayName))
+    
     if not npc or not data then
         LoggerService:warn("ACTION", "Missing required parameters for hunt action")
         return false
     end
 
-    LoggerService:debug("ACTION", string.format("NPC %s hunting with data: %s", npc.displayName, dataStr))
-
-    -- Validate target
+    -- Validate that a target was provided
     if not data.target then
         LoggerService:warn("ACTION", "No target specified for hunt action")
         return false
     end
 
-    LoggerService:debug("ACTION", "Searching NPCs for target")
+    local targetEntity = nil
+    local npcManager = NPCManagerV3.getInstance()
 
-    -- Find target NPC
-    local targetNPC
-    for _, otherNPC in pairs(NPCService:getAllNPCs()) do
+    -- First, search through NPCs managed by the NPC Manager
+    for _, otherNPC in pairs(npcManager.npcs) do
         LoggerService:debug("ACTION", string.format("Checking NPC: %s", otherNPC.displayName))
         if otherNPC.displayName == data.target then
-            targetNPC = otherNPC
+            targetEntity = otherNPC
             break
         end
     end
 
-    if not targetNPC then
-        LoggerService:warn("ACTION", string.format("Could not find NPC target: %s", data.target))
+    -- If not found among NPCs, try locating the target as a player.
+    if not targetEntity then
+        targetEntity = Players:FindFirstChild(data.target)
+        if not targetEntity then
+            for _, player in ipairs(Players:GetPlayers()) do
+                LoggerService:debug("ACTION", string.format(
+                    "Checking player: %s (DisplayName: %s)", 
+                    player.Name, 
+                    player.DisplayName or ""
+                ))
+                if player.Name == data.target or (player.DisplayName and player.DisplayName == data.target) then
+                    targetEntity = player
+                    break
+                end
+            end
+        end
+    end
+
+    if not targetEntity then
+        LoggerService:warn("ACTION", string.format("Could not find target (NPC or player): %s", data.target))
         return false
     end
 
-    LoggerService:debug("ACTION", "Found NPC target")
+    LoggerService:debug("ACTION", string.format("Found target: %s", targetEntity.displayName or targetEntity.Name))
 
-    -- Start hunt behavior
-    local success = NavigationService:CombatNavigate(npc, targetNPC, data.type)
-    if not success then
+    -- Convert the target to a character model if needed.
+    local targetCharacter = nil
+    if typeof(targetEntity) == "Instance" and targetEntity:IsA("Player") then
+        targetCharacter = targetEntity.Character
+    elseif type(targetEntity) == "table" then
+        targetCharacter = targetEntity.model or targetEntity
+    else
+        targetCharacter = targetEntity
+    end
+
+    if not targetCharacter or not targetCharacter:FindFirstChild("HumanoidRootPart") then
+        LoggerService:warn("ACTION", "Invalid target for hunt action")
+        return false
+    end
+
+    -- Use KillBotService for hunt behavior
+    local deactivateKillBot = KillBotService:ActivateKillBot(npc, targetCharacter)
+    if not deactivateKillBot then
         LoggerService:warn("ACTION", string.format(
-            "Failed to start hunt behavior for %s targeting %s",
+            "Failed to start kill bot behavior for %s targeting %s",
             npc.displayName,
-            targetNPC.displayName
+            targetCharacter.displayName or targetCharacter.Name
         ))
+        return false
     else
         LoggerService:debug("ACTION", string.format(
-            "Started hunt behavior for %s targeting %s",
+            "Started kill bot behavior for %s targeting %s",
             npc.displayName,
-            targetNPC.displayName
+            targetCharacter.displayName or targetCharacter.Name
         ))
+        npc.deactivateKillBot = deactivateKillBot
+        return true
     end
-    return success
+end
+
+-- Add stop_hunt action to clean up
+function ActionService.stop_hunt(npc)
+    if npc.deactivateKillBot then
+        npc.deactivateKillBot()
+        npc.deactivateKillBot = nil
+        LoggerService:debug("ACTION", string.format("Stopped hunt for NPC %s", npc.displayName))
+    end
+    return true
 end
 
 return ActionService
