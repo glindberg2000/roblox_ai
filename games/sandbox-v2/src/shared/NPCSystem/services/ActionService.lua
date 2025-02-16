@@ -365,93 +365,17 @@ end
 
 -- Add emote handling
 function ActionService.emote(npc, action)
-    -- Debug log the entire action
-    LoggerService:debug("ACTION_SERVICE", string.format(
-        "Emote action data: %s",
-        typeof(action) == "string" and action or HttpService:JSONEncode(action)
-    ))
-
-    -- If action is a string (JSON), decode it
-    if typeof(action) == "string" then
-        local success, decoded = pcall(function()
-            return HttpService:JSONDecode(action)
-        end)
-        if success then
-            action = decoded
-        else
-            LoggerService:warn("ACTION_SERVICE", "Failed to decode emote action JSON")
-            return false
-        end
-    end
-
-    -- Extract emote data from action
-    local emoteData = action.data or action  -- Try both formats
-    if not emoteData or not emoteData.type then
-        LoggerService:warn("ACTION_SERVICE", string.format(
-            "Invalid emote data for NPC %s: %s",
-            npc.displayName,
-            HttpService:JSONEncode(action)
-        ))
-        return false
-    end
-
-    LoggerService:debug("ACTION_SERVICE", string.format(
-        "NPC %s performing emote: %s", 
-        npc.displayName,
-        emoteData.type
-    ))
-
-    -- Debug NPC model structure
-    if not npc.model then
-        LoggerService:error("ACTION_SERVICE", "No model found for NPC")
-        return false
-    end
-
-    local humanoid = npc.model:FindFirstChild("Humanoid")
-    if not humanoid then
-        LoggerService:error("ACTION_SERVICE", "No humanoid found in NPC model")
-        return false
-    end
-
-    -- Check if model is R6 or R15
-    local isR15 = npc.model:FindFirstChild("UpperTorso") ~= nil
-    LoggerService:debug("ACTION_SERVICE", string.format(
-        "NPC %s is using %s rig",
-        npc.displayName,
-        isR15 and "R15" or "R6"
-    ))
-
-    -- Use simpler R6 animations if needed
-    local R6_EMOTES = {
-        wave = "rbxassetid://128777973",  -- Basic R6 wave
-        laugh = "rbxassetid://129423131", -- Basic R6 laugh
-        dance = "rbxassetid://182435998", -- Basic R6 dance
-        cheer = "rbxassetid://129423030", -- Basic R6 cheer
-        point = "rbxassetid://128853357", -- Basic R6 point
-        sit = "rbxassetid://178130996"    -- Basic R6 sit
-    }
-
-    -- Choose animation based on rig type
-    local animationId = isR15 and EMOTE_ANIMATIONS[emoteData.type] or R6_EMOTES[emoteData.type]
-    if not animationId then
-        LoggerService:error("ACTION_SERVICE", "No animation found for emote type: " .. emoteData.type)
-        return false
-    end
-
-    -- Create and play animation
-    local animation = Instance.new("Animation")
-    animation.AnimationId = animationId
+    local AnimationService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.AnimationService)
     
-    local animator = humanoid:FindFirstChild("Animator")
-    if not animator then
-        animator = Instance.new("Animator")
-        animator.Parent = humanoid
+    -- Extract emote data
+    local emoteData = action.data or action
+    if not emoteData or not emoteData.type then
+        LoggerService:warn("ACTION_SERVICE", "Invalid emote data")
+        return false
     end
-
-    local track = animator:LoadAnimation(animation)
-    track:Play()
-
-    return true
+    
+    -- Let AnimationService handle the emote
+    return AnimationService:playEmote(npc.model.Humanoid, emoteData.type)
 end
 
 function NPCManagerV3:executeAction(npc, player, action)

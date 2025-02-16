@@ -4,12 +4,22 @@ local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.Logger
 
 -- Add EMOTE_ANIMATIONS at the top level
 local EMOTE_ANIMATIONS = {
-    wave = "rbxassetid://507770239",
-    laugh = "rbxassetid://507770818",
-    dance = "rbxassetid://507771019",
-    cheer = "rbxassetid://507770677",
-    point = "rbxassetid://507770453",
-    sit = "rbxassetid://507770840"
+    R15 = {
+        wave = "rbxassetid://507770239",
+        laugh = "rbxassetid://507770818",
+        dance = "rbxassetid://507771019",
+        cheer = "rbxassetid://507770677",
+        point = "rbxassetid://507770453",
+        sit = "rbxassetid://507770840"
+    },
+    R6 = {
+        wave = "rbxassetid://128777973",
+        laugh = "rbxassetid://129423131",
+        dance = "rbxassetid://182435998",
+        cheer = "rbxassetid://129423030",
+        point = "rbxassetid://128853357",
+        sit = "rbxassetid://178130996"
+    }
 }
 
 -- Different animation IDs for R6 and R15
@@ -172,22 +182,20 @@ function AnimationManager:stopAnimations(humanoid)
 end
 
 function AnimationManager:playEmote(humanoid, emoteType)
-    -- Debug humanoid state
-    LoggerService:debug("ANIMATION", string.format(
-        "Humanoid state: RigType=%s, Animator=%s",
-        humanoid.RigType.Name,
-        humanoid:FindFirstChild("Animator") and "Found" or "Missing"
-    ))
-
-    -- Check if emote exists
-    if not EMOTE_ANIMATIONS[emoteType] then
-        LoggerService:error("ANIMATION", "Unknown emote type: " .. tostring(emoteType))
+    local rigType = humanoid.RigType == Enum.HumanoidRigType.R15 and "R15" or "R6"
+    local animations = EMOTE_ANIMATIONS[rigType]
+    
+    if not animations or not animations[emoteType] then
+        LoggerService:error("ANIMATION", string.format(
+            "No %s animation found for %s rig", 
+            emoteType, 
+            rigType
+        ))
         return false
     end
-
-    -- Create and load animation
+    
     local animation = Instance.new("Animation")
-    animation.AnimationId = EMOTE_ANIMATIONS[emoteType]
+    animation.AnimationId = animations[emoteType]
     
     -- Get or create Animator
     local animator = humanoid:FindFirstChild("Animator")
