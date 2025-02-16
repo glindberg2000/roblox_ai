@@ -25,65 +25,83 @@ function ModelLoader.init()
     end
 end
 
+function ModelLoader.sanitizeModel(model)
+    -- Remove unwanted scripts
+    for _, item in ipairs(model:GetDescendants()) do
+        if item:IsA("Script") or item:IsA("LocalScript") then
+            if item.Name:match("hunt") or item.Name:match("feed") or item.Name:match("unstuck") then
+                LoggerService:info("MODEL", string.format("Removing script: %s from model", item.Name))
+                item:Destroy()
+            end
+        end
+    end
+    return model
+end
+
 function ModelLoader.loadModel(modelId, modelType)
     LoggerService:info("MODEL", string.format("ModelLoader v%s - Loading model: %s", ModelLoader.Version, modelId))
     
-    -- Find all Assets folders
-    local assetsFolders = {}
-    for _, child in ipairs(ServerStorage:GetChildren()) do
-        if child.Name == "Assets" then
-            table.insert(assetsFolders, child)
+    -- Try local file first
+    local model = nil
+    local assetsFolders = ServerStorage:FindFirstChild("Assets")
+    if assetsFolders then
+        local npcsFolder = assetsFolders:FindFirstChild("npcs")
+        if npcsFolder then
+            model = npcsFolder:FindFirstChild(modelId)
         end
     end
     
-    LoggerService:info("MODEL", string.format("Found %d Assets folders", #assetsFolders))
-    
-    -- Use only the first Assets folder and warn about duplicates
-    if #assetsFolders > 1 then
-        LoggerService:warn("MODEL", "Multiple Assets folders found - using only the first one")
-        -- Remove extra Assets folders
-        for i = 2, #assetsFolders do
-            LoggerService:warn("MODEL", string.format("Removing duplicate Assets folder %d", i))
-            assetsFolders[i]:Destroy()
-        end
-    end
-    
-    local assetsFolder = assetsFolders[1]
-    if not assetsFolder then
-        LoggerService:error("MODEL", "No Assets folder found")
-        return nil
-    end
-    
-    local npcsFolder = assetsFolder:FindFirstChild("npcs")
-    if not npcsFolder then
-        LoggerService:error("MODEL", "No npcs folder found in Assets")
-        return nil
-    end
-    
-    local model = npcsFolder:FindFirstChild(modelId)
+    -- If local file not found, try Toolbox loading
     if not model then
-        -- Try loading from RBXM file
+        LoggerService:info("MODEL", string.format("Local model not found, trying Toolbox for ID: %s", modelId))
+        
+        -- Try multiple Toolbox loading methods with proper permissions
         local success, result = pcall(function()
-            return game:GetService("InsertService"):LoadLocalAsset(string.format("%s/src/assets/npcs/%s.rbxm", game:GetService("ServerScriptService").Parent.Parent.Name, modelId))
+            -- Try with game creator ID first
+            local insertService = game:GetService("InsertService")
+            insertService.AllowInsertFreeModels = true
+            
+            -- Try direct asset loading
+            local asset = insertService:LoadAsset(tonumber(modelId))
+            if asset then
+                -- Save to ServerStorage for future use
+                local model = asset:GetChildren()[1]
+                if model then
+                    local npcsFolder = ServerStorage:FindFirstChild("Assets") 
+                        and ServerStorage.Assets:FindFirstChild("npcs")
+                    
+                    if npcsFolder then
+                        local savedModel = model:Clone()
+                        savedModel.Name = modelId
+                        savedModel.Parent = npcsFolder
+                        LoggerService:info("MODEL", string.format("Saved model %s to ServerStorage for future use", modelId))
+                    end
+                    
+                    return model
+                end
+            end
+            
+            -- Try marketplace if direct loading fails
+            return insertService:LoadAssetVersion(tonumber(modelId))
         end)
+        
         if success and result then
             model = result
+            LoggerService:info("MODEL", string.format("Successfully loaded model from Toolbox: %s", modelId))
+        else
+            LoggerService:error("MODEL", string.format("Failed to load model from Toolbox: %s. Error: %s", modelId, tostring(result)))
+            LoggerService:warn("MODEL", string.format("Please pre-load model %s in Studio and save to ServerStorage/Assets/npcs", modelId))
         end
     end
     
     if model and model:IsA("Model") then
+        model = ModelLoader.sanitizeModel(model:Clone())
         LoggerService:info("MODEL", string.format("Found model: Type=%s, Name=%s, Children=%d", 
             model.ClassName, model.Name, #model:GetChildren()))
-        
-        -- Log all model parts
-        for _, child in ipairs(model:GetChildren()) do
-            LoggerService:debug("MODEL", string.format("  - %s (%s)", child.Name, child.ClassName))
-        end
-        
-        return model:Clone()
+        return model
     end
     
-    LoggerService:error("MODEL", string.format("Model %s not found", modelId))
+    LoggerService:error("MODEL", string.format("Model %s not found locally or in Toolbox", modelId))
     return nil
 end
 
