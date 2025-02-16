@@ -726,7 +726,13 @@ async def create_asset(
     file: UploadFile = File(...)
 ):
     try:
-        logger.info(f"Creating asset for game {game_id}")
+        # Add logging to see what we're receiving
+        logger.info(f"Received asset creation request:")
+        logger.info(f"game_id: {game_id}")
+        logger.info(f"asset_id: {asset_id}")
+        logger.info(f"name: {name}")
+        logger.info(f"type: {type}")
+        logger.info(f"file: {file.filename}")
         
         # Get game info
         with get_db() as db:
@@ -742,12 +748,28 @@ async def create_asset(
                 WHERE asset_id = ? AND game_id = ?
             """, (asset_id, game_id))
             
-            # Save file
+            # Get and validate game paths
             game_paths = get_game_paths(game_slug)
+            logger.info(f"Game paths received: {game_paths}")
+            
+            if game_slug not in game_paths:
+                logger.error(f"Game slug {game_slug} not found in paths: {game_paths}")
+                raise HTTPException(status_code=500, detail="Game path not found")
+                
+            game_path_data = game_paths[game_slug]
+            root_path = game_path_data['root']
+            
+            # Construct the correct assets path
+            assets_path = root_path / 'src' / 'assets'
+            logger.info(f"Using assets path: {assets_path}")
+            
+            # Save file
             asset_type_dir = type.lower() + 's'
-            asset_dir = game_paths['assets'] / asset_type_dir
+            asset_dir = assets_path / asset_type_dir
+            logger.info(f"Creating asset directory: {asset_dir}")
             asset_dir.mkdir(parents=True, exist_ok=True)
             file_path = asset_dir / f"{asset_id}.rbxm"
+            logger.info(f"Saving file to: {file_path}")
 
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
@@ -768,7 +790,6 @@ async def create_asset(
                 description = None
                 image_url = None
             
-            # Create new database entry
             cursor.execute("""
                 INSERT INTO assets (
                     game_id, 
@@ -790,7 +811,6 @@ async def create_asset(
             db_id = cursor.fetchone()['id']
             db.commit()
             
-            # Update Lua files
             save_lua_database(game_slug, db)
             
             return JSONResponse({
@@ -805,6 +825,8 @@ async def create_asset(
                 
     except Exception as e:
         logger.error(f"Error creating asset: {str(e)}")
+        logger.error(f"Error class: {e.__class__.__name__}")
+        logger.error(f"Error details: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/api/npcs")
