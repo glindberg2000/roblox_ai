@@ -62,7 +62,6 @@ def format_npc_as_lua(npc: dict, db=None) -> str:
                 f"            assetId = \"{model}\", \n"
                 f"            model = \"{model}\", \n"
                 f"            modelName = \"{display_name}\", \n"
-                f"            system_prompt = \"{npc.get('system_prompt', '')}\", \n"
                 f"            responseRadius = {npc.get('response_radius', 20)}, \n"
                 f"            spawnPosition = {vector3}, \n"
                 f"            abilities = {abilities_lua}, \n"
