@@ -322,12 +322,43 @@ export async function createAsset(event) {
         const formData = new FormData(event.target);
         formData.set('game_id', state.currentGame.id);
 
+        // Validate that either asset_id or file is provided
+        const assetId = formData.get('asset_id');
+        const file = formData.get('file');
+
+        console.log('Asset creation validation:', {
+            hasAssetId: !!assetId,
+            assetId,
+            hasFile: !!file,
+            fileSize: file?.size,
+            formDataEntries: Array.from(formData.entries())
+        });
+
+        if (!assetId && (!file || file.size === 0)) {
+            throw new Error('Either Asset ID or File is required');
+        }
+
+        // Remove empty file from FormData if no file was selected
+        if (!file || file.size === 0) {
+            formData.delete('file');
+            // Make sure we're sending the asset_id in the correct format
+            formData.set('asset_id', assetId.trim());
+        }
+
         debugLog('Submitting asset form with data:', {
             game_id: formData.get('game_id'),
             asset_id: formData.get('asset_id'),
             name: formData.get('name'),
             type: formData.get('type'),
-            file: formData.get('file').name
+            file: formData.get('file')?.name || 'No file',
+            allFields: Object.fromEntries(formData.entries())
+        });
+
+        // Log the actual request being sent
+        console.log('Request details:', {
+            url: '/api/assets/create',
+            method: 'POST',
+            formData: Object.fromEntries(formData.entries())
         });
 
         const response = await fetch('/api/assets/create', {
@@ -335,12 +366,22 @@ export async function createAsset(event) {
             body: formData
         });
 
+        // Log the response details
+        console.log('Response status:', response.status);
+        const responseText = await response.text();
+        console.log('Response text:', responseText);
+
         if (!response.ok) {
-            const error = await response.json();
+            let error;
+            try {
+                error = JSON.parse(responseText);
+            } catch (e) {
+                error = { detail: responseText };
+            }
             throw new Error(error.detail || 'Failed to create asset');
         }
 
-        const result = await response.json();
+        const result = responseText ? JSON.parse(responseText) : {};
         console.log('Asset created:', result);
 
         showNotification('Asset created successfully', 'success');

@@ -128,7 +128,7 @@ return {
             model = "4613203451", 
             modelName = "Rogue Cop", 
             responseRadius = 20, 
-            spawnPosition = Vector3.new(25.0, 18.0, -130.0), 
+            spawnPosition = Vector3.new(20.0, 18.0, -150.0), 
             abilities = {
             "move", 
             "chat", 

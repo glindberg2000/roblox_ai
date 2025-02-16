@@ -95,7 +95,7 @@ return {
             assetId = "4613203451",
             name = "Officer",
             slug = "",
-            description = "The Roblox asset features a blocky character designed as a police officer. Dressed in a bright blue uniform with black pants, the character wears a matching police cap. Notable features include a badge on the chest and a serious expression. The character holds a gray sidearm, emphasizing its law enforcement role.",
+            description = "The Roblox asset features a blocky character dressed as a police officer. The uniform consists of a blue shirt with black accents and a badge on the chest, complemented by dark pants. The character wears a matching blue police cap. In one hand, they hold a silver gun, adding to the authoritative appearance.",
             type = "Model",
         },
         {

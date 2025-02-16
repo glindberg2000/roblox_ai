@@ -723,16 +723,15 @@ async def create_asset(
     asset_id: str = Form(...),
     name: str = Form(...),
     type: AssetType = Form(...),
-    file: UploadFile = File(...)
+    file: Optional[UploadFile] = File(None)
 ):
     try:
-        # Add logging to see what we're receiving
         logger.info(f"Received asset creation request:")
         logger.info(f"game_id: {game_id}")
         logger.info(f"asset_id: {asset_id}")
         logger.info(f"name: {name}")
         logger.info(f"type: {type}")
-        logger.info(f"file: {file.filename}")
+        logger.info(f"file: {file.filename if file else 'No file'}")
         
         # Get game info
         with get_db() as db:
@@ -763,16 +762,17 @@ async def create_asset(
             assets_path = root_path / 'src' / 'assets'
             logger.info(f"Using assets path: {assets_path}")
             
-            # Save file
-            asset_type_dir = type.lower() + 's'
-            asset_dir = assets_path / asset_type_dir
-            logger.info(f"Creating asset directory: {asset_dir}")
-            asset_dir.mkdir(parents=True, exist_ok=True)
-            file_path = asset_dir / f"{asset_id}.rbxm"
-            logger.info(f"Saving file to: {file_path}")
+            # Only save file if one was provided
+            if file:
+                asset_type_dir = type.lower() + 's'
+                asset_dir = assets_path / asset_type_dir
+                logger.info(f"Creating asset directory: {asset_dir}")
+                asset_dir.mkdir(parents=True, exist_ok=True)
+                file_path = asset_dir / f"{asset_id}.rbxm"
+                logger.info(f"Saving file to: {file_path}")
 
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+                with open(file_path, "wb") as buffer:
+                    shutil.copyfileobj(file.file, buffer)
 
             # Get description using utility
             description_data = await get_asset_description(
