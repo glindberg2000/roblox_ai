@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Request, Depends, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Request, Depends, Query, Body
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
@@ -413,6 +413,7 @@ async def list_npcs(game_id: Optional[int] = None):
                         n.spawn_y,
                         n.spawn_z,
                         n.abilities,
+                        n.enabled,
                         a.name as asset_name,
                         a.image_url
                     FROM npcs n
@@ -420,9 +421,6 @@ async def list_npcs(game_id: Optional[int] = None):
                     WHERE n.game_id = ?
                     ORDER BY n.display_name
                 """, (game_id,))
-            else:
-                # Similar query for all NPCs...
-                pass
             
             npcs = [dict(row) for row in cursor.fetchall()]
             
@@ -438,13 +436,14 @@ async def list_npcs(game_id: Optional[int] = None):
                     "model": npc["model"],
                     "systemPrompt": npc["system_prompt"],
                     "responseRadius": npc["response_radius"],
-                    "spawnPosition": {  # Format coordinates for frontend
+                    "spawnPosition": {
                         "x": npc["spawn_x"],
                         "y": npc["spawn_y"],
                         "z": npc["spawn_z"]
                     },
                     "abilities": json.loads(npc["abilities"]) if npc["abilities"] else [],
-                    "imageUrl": npc["image_url"]
+                    "imageUrl": npc["image_url"],
+                    "enabled": bool(npc["enabled"])  # Convert to boolean
                 }
                 formatted_npcs.append(npc_data)
             
@@ -1330,6 +1329,50 @@ async def chat_with_npc_v2(
         return response
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/npcs/{npc_id}/toggle")
+async def toggle_npc(npc_id: str, request: Request):
+    try:
+        body = await request.json()
+        enabled = bool(body.get('enabled'))
+        logger.debug(f"Toggling NPC {npc_id} to {enabled}")
+        
+        with get_db() as db:
+            # First get game info for Lua update
+            cursor = db.execute("""
+                SELECT g.slug 
+                FROM games g 
+                JOIN npcs n ON n.game_id = g.id 
+                WHERE n.npc_id = ?
+            """, (npc_id,))
+            game = cursor.fetchone()
+            if not game:
+                raise HTTPException(status_code=404, detail="NPC not found")
+            
+            game_slug = game['slug']
+            
+            db.execute(
+                "UPDATE npcs SET enabled = ? WHERE npc_id = ?",
+                (enabled, npc_id)
+            )
+            db.commit()
+            
+            # Verify the update
+            cursor = db.execute(
+                "SELECT enabled FROM npcs WHERE npc_id = ?",
+                (npc_id,)
+            )
+            result = cursor.fetchone()
+            logger.debug(f"Updated NPC {npc_id}, new enabled state: {result['enabled']}")
+            
+            # Update Lua files
+            save_lua_database(game_slug, db)
+            logger.info(f"Updated Lua database for game {game_slug}")
+            
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Failed to toggle NPC: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ... rest of your existing routes ...

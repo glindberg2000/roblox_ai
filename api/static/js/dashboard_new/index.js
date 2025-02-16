@@ -38,7 +38,7 @@ async function populateAssetSelector() {
         // Fetch assets for the current game
         const url = `/api/assets?game_id=${state.currentGame.id}`;
         console.log('Fetching assets from:', url);
-        
+
         const response = await fetch(url);
         const data = await response.json();
         console.log('Received assets:', data);
@@ -68,7 +68,7 @@ async function populateAssetSelector() {
 }
 
 // Enhanced tab management with unique logging
-window.showTab = function(tabName) {
+window.showTab = function (tabName) {
     console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Tab Change:', {
         from: state.currentTab,
         to: tabName,
@@ -99,7 +99,7 @@ window.showTab = function(tabName) {
 
 // Make functions globally available
 window.populateAssetSelector = populateAssetSelector;
-window.loadNPCs = async function() {
+window.loadNPCs = async function () {
     console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Loading NPCs');
     try {
         const response = await fetch(`/api/npcs?game_id=${state.currentGame.id}`);
@@ -118,12 +118,12 @@ window.loadNPCs = async function() {
                     console.log('DASHBOARD-NEW-INDEX-2023-11-22-A: Creating NPC card:', npc);
                     const npcCard = document.createElement('div');
                     npcCard.className = 'bg-dark-800 p-6 rounded-xl shadow-xl border border-dark-700 hover:border-blue-500 transition-colors duration-200';
-                    
+
                     // Parse spawn position
                     let spawnPos;
                     try {
-                        spawnPos = typeof npc.spawnPosition === 'string' ? 
-                            JSON.parse(npc.spawnPosition) : 
+                        spawnPos = typeof npc.spawnPosition === 'string' ?
+                            JSON.parse(npc.spawnPosition) :
                             npc.spawnPosition || { x: 0, y: 5, z: 0 };
                     } catch (e) {
                         console.error('Error parsing spawn position:', e);
@@ -135,7 +135,7 @@ window.loadNPCs = async function() {
                         const ability = window.ABILITY_CONFIG.find(a => a.id === abilityId);
                         return ability ? `<i class="${ability.icon}" title="${ability.name}"></i>` : '';
                     }).join(' ');
-                    
+
                     npcCard.innerHTML = `
                         <div class="aspect-w-16 aspect-h-9 mb-4">
                             <img src="${npc.imageUrl || ''}" 
@@ -143,7 +143,17 @@ window.loadNPCs = async function() {
                                  class="w-full h-32 object-contain rounded-lg bg-dark-700 p-2">
                         </div>
                         <h3 class="font-bold text-lg truncate text-gray-100">${npc.displayName}</h3>
-                        <p class="text-sm text-gray-400 mb-2">Asset ID: ${npc.assetId}</p>
+                        <div class="flex justify-between items-center mb-2">
+                            <p class="text-sm text-gray-400">Asset ID: ${npc.assetId}</p>
+                            <label class="inline-flex items-center cursor-pointer">
+                                <input type="checkbox" 
+                                    class="form-checkbox h-5 w-5 text-blue-600 bg-dark-700 border-dark-600 rounded"
+                                    onchange="toggleNPC(event, '${npc.npcId}')"
+                                    ${npc.enabled ? 'checked' : ''}
+                                >
+                                <span class="ml-2 text-sm text-gray-400">Enabled</span>
+                            </label>
+                        </div>
                         <p class="text-sm text-gray-400 mb-2">Model: ${npc.model || 'Default'}</p>
                         <p class="text-sm mb-4 h-20 overflow-y-auto text-gray-300">${npc.systemPrompt || 'No personality defined'}</p>
                         <div class="text-sm text-gray-400 mb-4">
@@ -224,13 +234,13 @@ function switchTab(tabName) {
     document.querySelectorAll('.tab-content').forEach(tab => {
         tab.classList.add('hidden');
     });
-    
+
     // Show selected tab
     const selectedTab = document.getElementById(`${tabName}Tab`);
     if (selectedTab) {
         selectedTab.classList.remove('hidden');
     }
-    
+
     // Update state
     state.currentSection = tabName;
     updateCurrentTab(tabName);
@@ -242,7 +252,7 @@ function switchTab(tabName) {
         window.loadAssets();
     } else if (tabName === 'npcs' && state.currentGame) {
         console.log('Loading NPCs tab content...');
-        
+
         // First load NPCs
         window.loadNPCs()
             .then(() => {
@@ -266,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'nav-npcs': 'npcs',
         'nav-players': 'players'
     };
-    
+
     Object.entries(navButtons).forEach(([buttonId, tabName]) => {
         const button = document.getElementById(buttonId);
         if (button) {
@@ -277,7 +287,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     });
-    
+
     // Start with games tab
     switchTab('games');
 });

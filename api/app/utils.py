@@ -155,16 +155,18 @@ def save_lua_database(game_slug: str, db: sqlite3.Connection) -> None:
                 npc_id,
                 display_name,
                 asset_id,
+                model,
                 system_prompt,
                 response_radius,
                 spawn_x,
                 spawn_y,
                 spawn_z,
-                abilities
-            FROM npcs 
-            WHERE game_id = ?
-            ORDER BY display_name
-        """, (game_id,))
+                abilities,
+                enabled
+            FROM npcs n
+            WHERE game_id = (SELECT id FROM games WHERE slug = ?)
+            AND enabled = 1
+        """, (game_slug,))
         npcs = cursor.fetchall()
         
         # Format and save NPCs

@@ -358,6 +358,7 @@ async function createNPC(event) {
 
 // Make function globally available
 window.createNPC = createNPC;
+window.toggleNPC = toggleNPC;
 
 // Make sure we call this when the game is selected
 function setCurrentGame(game) {
@@ -374,4 +375,128 @@ function setCurrentGame(game) {
 
     // Load assets for the game
     populateCreateFormAssets();
+}
+
+async function toggleNPC(event, npcId) {
+    try {
+        const enabled = event.target.checked;
+
+        const response = await fetch(`/api/npcs/${npcId}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ enabled: enabled })
+        });
+
+        const data = await response.json();
+        console.log('Toggle response:', data);
+
+        if (!response.ok) {
+            console.error('Toggle failed:', await response.text());
+            throw new Error('Failed to toggle NPC');
+        }
+
+        showNotification(
+            `NPC ${enabled ? 'enabled' : 'disabled'} successfully`,
+            'success'
+        );
+
+        // Refresh the NPC list to show current state
+        await loadNPCs();
+
+    } catch (error) {
+        console.error('Error toggling NPC:', error);
+        showNotification('Failed to toggle NPC', 'error');
+        // Revert checkbox state
+        event.target.checked = !event.target.checked;
+    }
+}
+
+async function loadNPCs() {
+    try {
+        if (!state.currentGame) {
+            console.log('No game selected');
+            return;
+        }
+
+        const response = await fetch(`/api/npcs?game_id=${state.currentGame.id}`);
+        const data = await response.json();
+        console.log('NPC data received:', data);
+
+        const npcs = data.npcs || [];
+
+        const npcList = document.getElementById('npcList');
+        npcList.innerHTML = npcs.map(npc => {
+            // Parse spawn position
+            let spawnPos;
+            try {
+                spawnPos = typeof npc.spawnPosition === 'string' ?
+                    JSON.parse(npc.spawnPosition) :
+                    npc.spawnPosition || { x: 0, y: 5, z: 0 };
+            } catch (e) {
+                console.error('Error parsing spawn position:', e);
+                spawnPos = { x: 0, y: 5, z: 0 };
+            }
+
+            // Format abilities with icons
+            const abilityIcons = (npc.abilities || []).map(abilityId => {
+                const ability = window.ABILITY_CONFIG.find(a => a.id === abilityId);
+                return ability ? `<i class="${ability.icon}" title="${ability.name}"></i>` : '';
+            }).join(' ');
+
+            return `
+                <div class="bg-dark-800 p-6 rounded-xl shadow-xl border border-dark-700 hover:border-blue-500 transition-colors duration-200">
+                    <div class="aspect-w-16 aspect-h-9 mb-4">
+                        <img src="${npc.imageUrl || ''}" 
+                             alt="${npc.displayName}" 
+                             class="w-full h-32 object-contain rounded-lg bg-dark-700 p-2">
+                    </div>
+                    <h3 class="font-bold text-lg truncate text-gray-100">${npc.displayName}</h3>
+                    <div class="flex justify-between items-center mb-2">
+                        <p class="text-sm text-gray-400">Asset ID: ${npc.assetId}</p>
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" 
+                                class="form-checkbox h-5 w-5 text-blue-600 bg-dark-700 border-dark-600 rounded"
+                                onchange="toggleNPC(event, '${npc.npcId}')"
+                                ${npc.enabled ? 'checked' : ''}
+                            >
+                            <span class="ml-2 text-sm text-gray-400">Enabled</span>
+                        </label>
+                    </div>
+                    <p class="text-sm text-gray-400 mb-2">Model: ${npc.model || 'Default'}</p>
+                    <p class="text-sm mb-4 h-20 overflow-y-auto text-gray-300">${npc.systemPrompt || 'No personality defined'}</p>
+                    <div class="text-sm text-gray-400 mb-4">
+                        <div>Response Radius: ${npc.responseRadius}m</div>
+                        <div class="grid grid-cols-3 gap-1 mb-2">
+                            <div>X: ${spawnPos.x.toFixed(2)}</div>
+                            <div>Y: ${spawnPos.y.toFixed(2)}</div>
+                            <div>Z: ${spawnPos.z.toFixed(2)}</div>
+                        </div>
+                        <div class="text-xl space-x-2">${abilityIcons}</div>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button class="edit-npc-btn flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                            Edit
+                        </button>
+                        <button class="delete-npc-btn flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Add event listeners for edit/delete buttons
+        npcList.querySelectorAll('.edit-npc-btn').forEach((btn, index) => {
+            btn.addEventListener('click', () => editNPC(npcs[index].npcId));
+        });
+        npcList.querySelectorAll('.delete-npc-btn').forEach((btn, index) => {
+            btn.addEventListener('click', () => deleteNPC(npcs[index].npcId));
+        });
+
+    } catch (error) {
+        console.error('Error loading NPCs:', error);
+        showNotification('Failed to load NPCs', 'error');
+    }
 }
