@@ -132,5 +132,15 @@ def check_migration_status(db_path=None):
             else:
                 print(f"! {migration} (pending)")
 
+def ensure_migrations_table(db):
+    """Create migrations table if it doesn't exist"""
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS migrations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
 if __name__ == "__main__":
     run_migrations()

@@ -1,16 +1,17 @@
 # Active Development Context
 
 ## Current Task
-- Adding hunt action for NPCs to target players and other NPCs
+- Testing new NPCs from the toolbox: Validate spawning, behavior, and integration with existing systems.
 
 ## Recent Changes
-1. Added hunt action system
+1. Fixed memory block limit issue by uninstalling and reinstalling components  
+   - Ensured the "persona" block now uses a limit of 5000
+2. Added hunt action system
    - Implemented CombatNavigate in NavigationService
    - Added hunt action to ActionService
    - Support for both player and NPC targets
    - Different hunt types (destroy/track)
-
-2. Combat Navigation Parameters
+3. Combat Navigation Parameters
    - Aggressive pathfinding for destroy mode
    - Continuous target tracking
    - Optimized update intervals
@@ -24,7 +25,7 @@
 - Hunt type differentiation
 
 ### Next Implementation
-- Test hunt behaviors
+- Test hunt behaviors and new NPCs from the toolbox
 - Add combat animations
 - Implement attack range
 - Add cooldown system

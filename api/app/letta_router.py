@@ -843,7 +843,9 @@ async def chat_with_npc_v3(request: ChatRequest):
             npc_details = get_npc_context(request.npc_id)
             
             # Create new agent
+            #logger.info("Creating memory blocks for NPC")
             blocks = create_memory_blocks(npc_details)
+            #logger.info(f"Created memory blocks to pass into create_personalized_agent_v3: {blocks}") -- Validated as correct
             agent = create_personalized_agent_v3(
                 name=npc_details['display_name'],
                 memory_blocks=blocks,

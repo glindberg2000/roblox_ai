@@ -216,48 +216,6 @@
 - Verify before updates
 - Maintain status consistency
 
-## Message Routing
-- Player -> NPC: Working
-- NPC -> Player: Working
-- NPC -> NPC: Implemented but disabled
-- Group Broadcasting: Not implemented
-
-## Cluster System
-- Working as designed
-- Forms basis for group detection
-- Handles proximity calculations
-- Supports multiple entities
-
-## Status Updates
-- String format: "key: value | key: value"
-- Triggers:
-  - Health changes
-  - Location changes
-  - Group changes
-  - Spawn (to be implemented)
-
-## Group Management
-- Uses cluster system for detection
-- Needs display name standardization
-- Quick updates on departure needed
-- Broadcasting to be implemented
-
-## Location Handling
-- Tracks nearest location
-- Uses slugs (should use names)
-- Handles transitions
-- Coordinate alerts need work
-
-## Message Handling
-- System message cleanup needed
-- First interaction needs echo fix
-- Broadcasting system needed
-
-## Agent Lifecycle
-- Create on spawn
-- Verify before updates
-- Maintain status consistency
-
 ## Message Flow
 1. Server generates message (NPC/System)
 2. NPCChatHandler processes message

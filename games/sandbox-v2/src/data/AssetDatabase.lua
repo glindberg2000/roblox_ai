@@ -99,10 +99,10 @@ return {
             type = "Model",
         },
         {
-            assetId = "105992215192073",
-            name = "Officer AI",
+            assetId = "2066354991",
+            name = "Officer with headset",
             slug = "",
-            description = "The Roblox asset features a blocky character styled as a police officer. He wears a blue uniform with a badge and an emblem on his chest, along with a matching blue cap. The officer is holding a silver handgun, and his pants are black. The character has a serious expression, emphasizing a law enforcement theme.",
+            description = "The Roblox asset features a character styled as a police officer. It wears a bright blue uniform with a badge and several pockets. The character has a headset, emphasizing a communication role, and sports a matching blue cap. The facial expression is neutral, and the overall design is blocky and colorful, typical of Roblox aesthetics.",
             type = "Model",
         },
         {
@@ -152,6 +152,13 @@ return {
             name = "Roblox Visor",
             slug = "",
             description = "The image features a white visor with a wide brim and a simple yet distinctive design. Prominently displayed on the front is the red \"ROBLOX\" logo, giving it a playful and recognizable appearance. The visor has a smooth texture and a curved shape, ideal for trendy Roblox avatars. Its minimalist style enhances its appeal.",
+            type = "Model",
+        },
+        {
+            assetId = "8073454971",
+            name = "Roughed up Officer",
+            slug = "",
+            description = "The Roblox asset features a character dressed as a police officer. The uniform is primarily blue with a badge and pocket details on the shirt. The character has short, dark hair and holds a radio in one hand. There’s a holster on the belt displaying a small yellow object, emphasizing its law enforcement theme.",
             type = "Model",
         },
         {

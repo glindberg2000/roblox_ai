@@ -18,6 +18,7 @@
 - 🔄 System message handling
 - 🔄 Spawn initialization process
 - 🔄 Testing hunt system
+- 🔄 Testing new NPCs from the toolbox
 - 🔄 Combat animations
 - 🔄 Attack range implementation
 - 🔄 Cooldown system

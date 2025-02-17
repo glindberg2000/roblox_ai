@@ -1,16 +1,19 @@
 import sqlite3
 import json
 from pathlib import Path
-from ..config import DB_DIR, SQLITE_DB_PATH
-from ..utils import get_database_paths, load_json_database
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+from api.config import DB_DIR, SQLITE_DB_PATH
+from api.utils import get_database_paths, load_json_database
+from api.db.migrations import run_migrations
 
 def init_db():
     """Initialize the database with schema"""
     DB_DIR.mkdir(parents=True, exist_ok=True)
     
-    with sqlite3.connect(SQLITE_DB_PATH) as db:
-        with open(Path(__file__).parent / 'schema.sql') as f:
-            db.executescript(f.read())
+    # Run all migrations
+    run_migrations()
 
 def migrate_existing_data():
     """Migrate existing JSON data to SQLite"""
