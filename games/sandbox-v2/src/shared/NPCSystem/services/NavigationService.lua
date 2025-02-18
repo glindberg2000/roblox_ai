@@ -1,19 +1,69 @@
 local NavigationService = {}
-local PathfindingService = game:GetService("PathfindingService")
-local LoggerService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LoggerService)
-local LocationService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LocationService)
+NavigationService.__index = NavigationService
 
--- Combat navigation parameters
-local COMBAT_PARAMS = {
-    AgentRadius = 2.0,        -- Smaller radius for tighter paths
-    AgentHeight = 5.0,
-    AgentCanJump = true,      -- Allow jumping in combat
-    WaypointSpacing = 4.0,    -- Closer waypoints for precise tracking
-    RECALCULATE_THRESHOLD = 8, -- Distance before recalculating path
-    UPDATE_INTERVAL = 0.5      -- More frequent updates for combat
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local PathfindingService = game:GetService("PathfindingService")
+local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
+local LocationService = require(ReplicatedStorage.Shared.NPCSystem.services.LocationService)
+
+-- Update the combat parameters to be more lenient
+local NAVIGATION_PARAMS = {
+    DEFAULT = {
+        AgentRadius = 2.0,
+        AgentHeight = 6.0,        -- Increased height
+        AgentCanJump = true,
+        AgentCanClimb = true,     -- Allow climbing
+        WaypointSpacing = 8.0,    -- Increased spacing for faster movement
+        Costs = {
+            Water = 50,
+            Grass = 5,
+            Ground = 1
+        }
+    },
+    FALLBACK = {
+        AgentRadius = 1.5,        -- Slightly reduced for better pathing
+        AgentHeight = 8.0,        -- Even higher height
+        AgentCanJump = true,
+        AgentCanClimb = true,
+        WaypointSpacing = 12.0,   -- Even larger spacing
+        Costs = {
+            Water = 20,           -- More accepting of water
+            Grass = 2,
+            Ground = 1
+        }
+    }
 }
 
-function NavigationService:NavigateToPosition(npc, targetPosition)
+function NavigationService:Navigate(npc, destination)
+    if not npc or not npc.model then
+        LoggerService:warn("NAVIGATION", "Invalid NPC or model for navigation")
+        return false
+    end
+
+    local targetPosition
+    if typeof(destination) == "Vector3" then
+        targetPosition = destination
+    elseif typeof(destination) == "CFrame" then
+        targetPosition = destination.Position
+    elseif type(destination) == "string" then
+        -- Handle location slug lookup
+        local locationPoint = self:getLocationPoint(destination)
+        if not locationPoint then
+            LoggerService:warn("NAVIGATION", string.format(
+                "Could not find location point for %s",
+                destination
+            ))
+            return false
+        end
+        targetPosition = locationPoint
+    else
+        LoggerService:warn("NAVIGATION", string.format(
+            "Invalid destination type: %s",
+            typeof(destination)
+        ))
+        return false
+    end
+
     LoggerService:debug("NAVIGATION", string.format(
         "NavigateToPosition called for %s to position (%.1f, %.1f, %.1f)",
         npc.displayName,
@@ -22,72 +72,130 @@ function NavigationService:NavigateToPosition(npc, targetPosition)
         targetPosition.Z
     ))
 
-    -- Validate inputs
-    if not npc or not targetPosition then
-        LoggerService:warn("NAVIGATION", "Missing required parameters for navigation")
-        return false
-    end
-
-    if typeof(targetPosition) ~= "Vector3" then
-        LoggerService:warn("NAVIGATION", string.format(
-            "Invalid position type for %s: expected Vector3, got %s",
-            npc.displayName,
-            typeof(targetPosition)
-        ))
-        return false
-    end
-
-    -- Safe logging with number validation
-    local logMessage = "Attempting to navigate %s to position: %.1f, %.1f, %.1f"
-    local success, _ = pcall(function()
-        LoggerService:debug("NAVIGATION", string.format(
-            logMessage,
-            npc.displayName or "Unknown NPC",
-            targetPosition.X,
-            targetPosition.Y,
-            targetPosition.Z
-        ))
-    end)
-
+    -- Try navigation with default parameters first
+    local success = self:TryNavigateWithParams(npc, targetPosition, NAVIGATION_PARAMS.DEFAULT)
+    
+    -- If default navigation fails, try with fallback parameters
     if not success then
-        LoggerService:warn("NAVIGATION", string.format(
-            "Navigation started for %s to position (log failed)",
-            npc.displayName or "Unknown NPC"
+        LoggerService:debug("NAVIGATION", string.format(
+            "Retrying navigation for %s with fallback parameters",
+            npc.displayName
         ))
+        success = self:TryNavigateWithParams(npc, targetPosition, NAVIGATION_PARAMS.FALLBACK)
     end
-
-    local humanoid = npc.model and npc.model:FindFirstChild("Humanoid")
-    if not humanoid then
-        LoggerService:warn("NAVIGATION", "No humanoid found for NPC")
-        return false
+    
+    -- If both attempts fail, try direct movement as last resort
+    if not success then
+        LoggerService:debug("NAVIGATION", string.format(
+            "Attempting direct movement for %s as fallback",
+            npc.displayName
+        ))
+        return self:DirectMove(npc, targetPosition)
     end
+    
+    return success
+end
 
-    -- Create and compute path
-    local path = game:GetService("PathfindingService"):CreatePath({
-        AgentRadius = 2,
-        AgentHeight = 5,
-        AgentCanJump = true
-    })
-
-    local pathSuccess, pathError = pcall(function()
-        path:ComputeAsync(npc.model.PrimaryPart.Position, targetPosition)
+function NavigationService:TryNavigateWithParams(npc, targetPosition, params)
+    local path = PathfindingService:CreatePath(params)
+    
+    local success, errorMessage = pcall(function()
+        path:ComputeAsync(npc.model.HumanoidRootPart.Position, targetPosition)
     end)
-
-    if pathSuccess and path.Status == Enum.PathStatus.Success then
+    
+    if success and path.Status == Enum.PathStatus.Success then
         local waypoints = path:GetWaypoints()
-        for _, waypoint in ipairs(waypoints) do
-            humanoid:MoveTo(waypoint.Position)
-            humanoid.MoveToFinished:Wait()
+        local currentWaypointIndex = 1
+        
+        -- Set initial movement speed
+        npc.model.Humanoid.WalkSpeed = 20  -- Default to faster speed
+        
+        -- Connect to MoveToFinished event
+        local moveConnection
+        moveConnection = npc.model.Humanoid.MoveToFinished:Connect(function(reached)
+            if reached and currentWaypointIndex < #waypoints then
+                currentWaypointIndex += 1
+                
+                -- Move to next waypoint immediately
+                if currentWaypointIndex <= #waypoints then
+                    local nextWaypoint = waypoints[currentWaypointIndex]
+                    
+                    -- Handle jumping
+                    if nextWaypoint.Action == Enum.PathWaypointAction.Jump then
+                        npc.model.Humanoid.Jump = true
+                    end
+                    
+                    npc.model.Humanoid:MoveTo(nextWaypoint.Position)
+                else
+                    moveConnection:Disconnect()
+                end
+            end
+        end)
+        
+        -- Start initial movement
+        if #waypoints > 0 then
+            npc.model.Humanoid:MoveTo(waypoints[1].Position)
         end
+        
+        -- Monitor overall progress
+        task.spawn(function()
+            local startTime = tick()
+            local timeout = math.max(20, #waypoints * 2) -- Scale timeout with path length
+            
+            repeat
+                task.wait(0.1)
+                if not npc.model or not npc.model:FindFirstChild("Humanoid") then
+                    moveConnection:Disconnect()
+                    return false
+                end
+                
+                -- Check if we've reached the final destination
+                if currentWaypointIndex == #waypoints and 
+                   (npc.model.HumanoidRootPart.Position - targetPosition).Magnitude < 2 then
+                    break
+                end
+            until tick() - startTime > timeout
+            
+            moveConnection:Disconnect()
+        end)
+        
         return true
     end
     
-    LoggerService:warn("NAVIGATION", string.format(
-        "Path computation failed for %s: %s",
-        npc.displayName,
-        tostring(pathError)
-    ))
     return false
+end
+
+function NavigationService:DirectMove(npc, targetPosition)
+    if not npc.model or not npc.model:FindFirstChild("Humanoid") then
+        return false
+    end
+    
+    LoggerService:debug("NAVIGATION", string.format(
+        "Attempting direct movement for %s to position (%.1f, %.1f, %.1f)",
+        npc.displayName,
+        targetPosition.X,
+        targetPosition.Y,
+        targetPosition.Z
+    ))
+    
+    -- Start direct movement
+    task.spawn(function()
+        npc.model.Humanoid:MoveTo(targetPosition)
+        
+        -- Wait for movement to complete or timeout
+        local startTime = tick()
+        local timeout = 10  -- 10 seconds timeout for direct movement
+        
+        repeat
+            task.wait(0.1)
+            if not npc.model or not npc.model:FindFirstChild("Humanoid") then
+                return
+            end
+        until (npc.model.HumanoidRootPart.Position - targetPosition).Magnitude < 2
+            or tick() - startTime > timeout
+    end)
+    
+    return true
 end
 
 function NavigationService:NavigateToLocation(npc, locationSlug)
@@ -108,22 +216,7 @@ function NavigationService:NavigateToLocation(npc, locationSlug)
         location.name
     ))
     
-    return self:NavigateToPosition(npc, location.position)
-end
-
-function NavigationService:Navigate(npc, destination)
-    if not npc or not destination then
-        LoggerService:warn("NAVIGATION", "Missing required parameters for navigation")
-        return false
-    end
-
-    -- If destination is a Vector3, use it directly
-    if typeof(destination) == "Vector3" then
-        return self:NavigateToPosition(npc, destination)
-    end
-    
-    -- Otherwise treat it as a location slug
-    return self:NavigateToLocation(npc, destination)
+    return self:Navigate(npc, location.position)
 end
 
 function NavigationService:CombatNavigate(npc, target, huntType)
@@ -204,6 +297,18 @@ function NavigationService:CombatNavigate(npc, target, huntType)
     end)
 
     return true
+end
+
+-- Helper function to get location points
+function NavigationService:getLocationPoint(locationSlug)
+    -- TODO: Implement proper location point lookup
+    -- For now, return hardcoded points for testing
+    local locationPoints = {
+        ["petes_merch_stand"] = Vector3.new(-12, 18.9, -127),
+        -- Add more location points as needed
+    }
+    
+    return locationPoints[locationSlug]
 end
 
 return NavigationService 

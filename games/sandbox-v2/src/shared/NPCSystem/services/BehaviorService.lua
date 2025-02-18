@@ -6,13 +6,19 @@ local HttpService = game:GetService("HttpService")  -- Changed to use built-in s
 local LoggerService = require(ReplicatedStorage.Shared.NPCSystem.services.LoggerService)
 local MovementService = require(ReplicatedStorage.Shared.NPCSystem.services.MovementService).new()
 
--- Priority levels for behaviors
+-- Updated Priority levels for behaviors
+-- The hierarchy is as follows:
+-- HUNT: Highest priority; all lower behaviors are disabled during a hunt.
+-- NAVIGATE: Active when moving to a target and not hunting.
+-- PATROL: For routine movements when no higher-priority action is active.
+-- IDLE: Default fallback state.
+-- FACE: Lowest priority; used for facing the participant during interactions.
 local BEHAVIOR_PRIORITIES = {
-    EMERGENCY = 100,  -- hide, flee
-    CHAT = 90,       -- during conversations
-    NAVIGATE = 80,   -- navigate_to
-    FOLLOW = 60,     -- follow commands
-    IDLE = 20       -- default state
+    HUNT = 100,      -- Highest priority; all lower behaviors are disabled during a hunt.
+    NAVIGATE = 80,   -- When not hunting, use navigation actions
+    PATROL = 60,     -- Patrol behavior is active in routine scenarios
+    IDLE = 40,       -- Default state when no other actions are active
+    FACE = 20       -- Used during interactions; lowest priority
 }
 
 function BehaviorService.new()
@@ -21,8 +27,55 @@ function BehaviorService.new()
     return self
 end
 
+function BehaviorService:clearBehavior(npc)
+    if not npc then return end
+    
+    LoggerService:debug("BEHAVIOR", string.format(
+        "Clearing current behavior for NPC %s",
+        npc.displayName
+    ))
+    
+    -- Clean up current behavior if it exists
+    if self.currentBehaviors[npc] and self.currentBehaviors[npc].cleanup then
+        self.currentBehaviors[npc].cleanup()
+    end
+    
+    self.currentBehaviors[npc] = nil
+end
+
+function BehaviorService:getCurrentBehavior(npc)
+    if not npc then return nil end
+    return self.currentBehaviors[npc] and self.currentBehaviors[npc].type
+end
+
 function BehaviorService:setBehavior(npc, behaviorType, params)
     if not npc or not npc.model then return end
+    
+    -- Convert behavior type to uppercase for consistency
+    behaviorType = string.upper(behaviorType)
+    
+    -- Get current behavior priority
+    local currentBehavior = self.currentBehaviors[npc]
+    local currentPriority = currentBehavior and BEHAVIOR_PRIORITIES[currentBehavior.type] or 0
+    
+    -- Get new behavior priority
+    local newPriority = BEHAVIOR_PRIORITIES[behaviorType] or 0
+    
+    -- Only change behavior if new priority is higher
+    if newPriority < currentPriority then
+        LoggerService:debug("BEHAVIOR", string.format(
+            "Skipping behavior change for NPC %s: %s (priority %d) -> %s (priority %d)",
+            npc.displayName,
+            currentBehavior and currentBehavior.type or "NONE",
+            currentPriority,
+            behaviorType,
+            newPriority
+        ))
+        return false
+    end
+    
+    -- Clear any existing behavior
+    self:clearBehavior(npc)
     
     -- Safely encode params for logging
     local paramsString = ""
@@ -37,14 +90,9 @@ function BehaviorService:setBehavior(npc, behaviorType, params)
         paramsString
     ))
     
-    -- Clean up current behavior if it exists
-    if self.currentBehaviors[npc] and self.currentBehaviors[npc].cleanup then
-        self.currentBehaviors[npc].cleanup()
-    end
-    
     -- Initialize new behavior
     local behavior = {
-        type = string.upper(behaviorType),
+        type = behaviorType,
         params = params,
         startTime = os.time()
     }
@@ -101,14 +149,9 @@ function BehaviorService:initializeIdle(npc, params)
                 task.wait(0.1)
             end
         end)
-        table.insert(cleanup, faceThread)
         
-        -- Don't allow wandering when targeting
-        return function()
-            for _, thread in ipairs(cleanup) do
-                task.cancel(thread)
-            end
-        end
+        -- Store the thread for cleanup
+        table.insert(cleanup, faceThread)
     end
     
     -- Only set up wandering if no target
@@ -128,9 +171,17 @@ function BehaviorService:initializeIdle(npc, params)
         table.insert(cleanup, wanderThread)
     end
     
+    -- Return a cleanup function that cancels all threads
     return function()
         for _, thread in ipairs(cleanup) do
             task.cancel(thread)
+        end
+        -- Reset orientation to forward
+        if npc.model and npc.model:FindFirstChild("HumanoidRootPart") then
+            npc.model.HumanoidRootPart.CFrame = CFrame.new(
+                npc.model.HumanoidRootPart.Position,
+                npc.model.HumanoidRootPart.Position + npc.model.HumanoidRootPart.CFrame.LookVector
+            )
         end
     end
 end
@@ -177,6 +228,73 @@ function BehaviorService:initializeChat(npc, params)
     end
     
     return function() end
+end
+
+-- Add a new function to handle concurrent behaviors
+function BehaviorService:executeSecondaryBehavior(npc, behaviorType, params)
+    if not npc or not npc.model then return end
+    
+    -- Convert behavior type to uppercase for consistency
+    behaviorType = string.upper(behaviorType)
+    
+    -- Get current behavior
+    local currentBehavior = self.currentBehaviors[npc]
+    if not currentBehavior then return false end
+    
+    -- List of behaviors that can run concurrently with others
+    local CONCURRENT_BEHAVIORS = {
+        EMOTE = true,
+        FACE = true
+    }
+    
+    if not CONCURRENT_BEHAVIORS[behaviorType] then
+        LoggerService:debug("BEHAVIOR", string.format(
+            "Cannot run non-concurrent behavior %s while %s is active",
+            behaviorType,
+            currentBehavior.type
+        ))
+        return false
+    end
+    
+    -- Execute the concurrent behavior
+    if behaviorType == "EMOTE" then
+        local AnimationService = require(ReplicatedStorage.Shared.NPCSystem.services.AnimationService)
+        
+        -- If we need to face a target while emoting
+        if params.target then
+            local targetPlayer = game.Players:FindFirstChild(params.target)
+            if targetPlayer and targetPlayer.Character then
+                local targetPos = targetPlayer.Character.HumanoidRootPart.Position
+                local npcPos = npc.model.HumanoidRootPart.Position
+                
+                -- Keep Y position the same to avoid tilting
+                targetPos = Vector3.new(targetPos.X, npcPos.Y, targetPos.Z)
+                
+                -- Face target temporarily
+                npc.model.HumanoidRootPart.CFrame = CFrame.lookAt(
+                    npcPos,
+                    targetPos
+                )
+                
+                -- Return to original orientation after emote
+                task.delay(2, function()
+                    if currentBehavior.type == "PATROL" then
+                        -- Reset to patrol orientation
+                        local lookVector = npc.model.HumanoidRootPart.CFrame.LookVector
+                        npc.model.HumanoidRootPart.CFrame = CFrame.new(
+                            npc.model.HumanoidRootPart.Position,
+                            npc.model.HumanoidRootPart.Position + lookVector
+                        )
+                    end
+                end)
+            end
+        end
+        
+        -- Play the emote animation
+        return AnimationService:playEmote(npc.model.Humanoid, params.type)
+    end
+    
+    return true
 end
 
 return BehaviorService 

@@ -108,19 +108,11 @@ function ActionService:handleAction(npc, actionData)
             })
             
         elseif action.type == "emote" then
-            -- Handle emotes through AnimationService
-            local AnimationService = require(ReplicatedStorage.Shared.NPCSystem.services.AnimationService)
-            local emoteTarget = action.data and Players:FindFirstChild(action.data.target)
-            
-            -- Play emote and face target if specified
-            if emoteTarget then
-                BehaviorService:setBehavior(npc, "idle", {
-                    target = action.data.target,
-                    allowWander = false
-                })
-            end
-            
-            return AnimationService:playEmote(npc.model.Humanoid, action.data.type)
+            -- Handle emotes through BehaviorService's concurrent behavior system
+            return BehaviorService:executeSecondaryBehavior(npc, "EMOTE", {
+                type = action.data.type,
+                target = action.data.target
+            })
         end
     end
     
@@ -400,6 +392,9 @@ function ActionService.patrol(npc, action)
         npc.displayName
     ))
     
+    -- Force clear any existing behaviors before starting patrol
+    BehaviorService:clearBehavior(npc)
+    
     -- If currently following, stop first
     if npc.isFollowing then
         ActionService.unfollow(npc)
@@ -410,19 +405,42 @@ function ActionService.patrol(npc, action)
     local style = "normal"  -- Default patrol style
     
     if not area then
-        warn("Missing patrol location in action data")
-        return
+        LoggerService:warn("ACTION_SERVICE", "Missing patrol location in action data")
+        return false
     end
     
-    LoggerService:debug("PATROL", string.format(
-        "Starting patrol for NPC %s with area: %s, style: %s",
-        npc.displayName, tostring(area), tostring(style)
-    ))
-    
-    return PatrolService:startPatrol(npc, {
-        type = area,  -- Should be "full" here
-        target = ""   -- Empty for full patrol
+    -- Set patrol behavior with high priority first
+    local success = BehaviorService:setBehavior(npc, "PATROL", {
+        area = area,
+        style = style
     })
+    
+    if not success then
+        LoggerService:warn("ACTION_SERVICE", string.format(
+            "Failed to set patrol behavior for NPC %s",
+            npc.displayName
+        ))
+        return false
+    end
+    
+    -- Start the actual patrol with error handling
+    local patrolSuccess = PatrolService:startPatrol(npc, {
+        type = area,
+        target = ""
+    })
+    
+    if not patrolSuccess then
+        LoggerService:warn("ACTION_SERVICE", string.format(
+            "Failed to start patrol for NPC %s - area: %s",
+            npc.displayName,
+            tostring(area)
+        ))
+        -- Clean up the behavior since patrol failed
+        BehaviorService:clearBehavior(npc)
+        return false
+    end
+    
+    return true
 end
 
 function ActionService.hunt(npc, data)

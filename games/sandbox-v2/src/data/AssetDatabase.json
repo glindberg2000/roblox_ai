@@ -235,15 +235,15 @@
             "slug": "noob2"
         },
         {
-            "id": 286,
+            "id": 288,
             "asset_id": "4613203451",
             "name": "Officer",
-            "description": "The Roblox asset features a blocky character designed as a police officer. Dressed in a bright blue uniform with black pants, the character wears a matching police cap. Notable features include a badge on the chest and a serious expression. The character holds a gray sidearm, emphasizing its law enforcement role.",
+            "description": "The Roblox asset features a blocky character dressed as a police officer. The uniform consists of a blue shirt with black accents and a badge on the chest, complemented by dark pants. The character wears a matching blue police cap. In one hand, they hold a silver gun, adding to the authoritative appearance.",
             "image_url": "https://tr.rbxcdn.com/180DAY-d1c3e30e5700b988d252fab752ac21e5/420/420/Model/Png/noFilter",
             "type": "NPC",
             "tags": null,
             "game_id": 74,
-            "created_at": "2025-02-16 01:03:26",
+            "created_at": "2025-02-16 08:06:40",
             "location_data": "{}",
             "is_location": 0,
             "position_x": null,
@@ -253,22 +253,22 @@
             "slug": "officer"
         },
         {
-            "id": 287,
-            "asset_id": "105992215192073",
-            "name": "Officer AI",
-            "description": "The Roblox asset features a blocky character styled as a police officer. He wears a blue uniform with a badge and an emblem on his chest, along with a matching blue cap. The officer is holding a silver handgun, and his pants are black. The character has a serious expression, emphasizing a law enforcement theme.",
-            "image_url": "https://tr.rbxcdn.com/180DAY-02b4086d2e3574d7740ceed6c330cef7/420/420/Model/Png/noFilter",
+            "id": 290,
+            "asset_id": "2066354991",
+            "name": "Officer with headset",
+            "description": "The Roblox asset features a character styled as a police officer. It wears a bright blue uniform with a badge and several pockets. The character has a headset, emphasizing a communication role, and sports a matching blue cap. The facial expression is neutral, and the overall design is blocky and colorful, typical of Roblox aesthetics.",
+            "image_url": "https://tr.rbxcdn.com/180DAY-9a7e08cee6c074fb9f30c2f9e0919eea/420/420/Model/Png/noFilter",
             "type": "NPC",
             "tags": null,
             "game_id": 74,
-            "created_at": "2025-02-16 01:27:07",
+            "created_at": "2025-02-17 05:57:01",
             "location_data": "{}",
             "is_location": 0,
             "position_x": null,
             "position_y": null,
             "position_z": null,
             "aliases": "[]",
-            "slug": "officer_ai"
+            "slug": "officer_with_headset"
         },
         {
             "id": 270,
@@ -319,9 +319,9 @@
             "location_data": "{\"area\": \"town_center\", \"type\": \"shop\", \"owner\": \"pete\", \"interactable\": false, \"tags\": [\"shop\", \"retail\"]}",
             "is_location": 1,
             "position_x": -12.0,
-            "position_y": 18.9,
+            "position_y": 1.0,
             "position_z": -127.0,
-            "aliases": "[\"stand\", \"merch shop\"]",
+            "aliases": "[]",
             "slug": "petes_merch_stand"
         },
         {
@@ -395,6 +395,24 @@
             "position_z": null,
             "aliases": "[]",
             "slug": "roblox_visor"
+        },
+        {
+            "id": 289,
+            "asset_id": "8073454971",
+            "name": "Roughed up Officer",
+            "description": "The Roblox asset features a character dressed as a police officer. The uniform is primarily blue with a badge and pocket details on the shirt. The character has short, dark hair and holds a radio in one hand. There\u2019s a holster on the belt displaying a small yellow object, emphasizing its law enforcement theme.",
+            "image_url": "https://tr.rbxcdn.com/180DAY-2923c28a629c42bf0e79975af4c2f673/420/420/Model/Png/noFilter",
+            "type": "NPC",
+            "tags": null,
+            "game_id": 74,
+            "created_at": "2025-02-17 05:50:40",
+            "location_data": "{}",
+            "is_location": 0,
+            "position_x": null,
+            "position_y": null,
+            "position_z": null,
+            "aliases": "[]",
+            "slug": "roughed_up_officer"
         },
         {
             "id": 267,

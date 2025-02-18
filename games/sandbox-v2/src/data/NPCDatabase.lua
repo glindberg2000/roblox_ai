@@ -1,6 +1,26 @@
 return {
     npcs = {
         {
+            id = "108a9f76-5bee-4c24-b411-dfd94822bbd0", 
+            displayName = "Oscar", 
+            name = "Oscar", 
+            assetId = "7315192066", 
+            model = "7315192066", 
+            modelName = "Oscar", 
+            responseRadius = 5, 
+            spawnPosition = Vector3.new(30.0, 18.0, -45.0), 
+            abilities = {
+            "move", 
+            "chat", 
+            "initiate_chat", 
+            "follow", 
+            "unfollow", 
+            "run", 
+            "jump", 
+            "emote", 
+        }, 
+            shortTermMemory = {}, 
+        },        {
             id = "b39dc665-9185-4dd9-b14f-c806ccddbd3d", 
             displayName = "Pete", 
             name = "Pete", 
@@ -48,7 +68,7 @@ return {
             model = "4613203451", 
             modelName = "Officer Vic Grimes", 
             responseRadius = 20, 
-            spawnPosition = Vector3.new(20.0, 18.0, -150.0), 
+            spawnPosition = Vector3.new(28.0, 18.0, -44.0), 
             abilities = {
             "move", 
             "chat", 

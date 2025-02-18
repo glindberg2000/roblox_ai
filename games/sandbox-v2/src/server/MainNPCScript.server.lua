@@ -276,7 +276,7 @@ local function checkPlayerProximity(clusters)
 
                                 -- Create enhanced system message
                                 local systemMessage = string.format(
-                                    "[SYSTEM] %s has entered your range. You are now in speaking range with %s%s%s. Please check archival memory with request_heartbeat to properly greet them.",
+                                    "[SYSTEM] %s has entered your range. You are now in speaking range with %s%s%s. Please check context memory and group block for recent interactions.",
                                     player.Name,
                                     #npcsInRange > 0 and table.concat(npcsInRange, ", ") or "no other NPCs",
                                     #playersInRange > 0 and (#npcsInRange > 0 and " and " or "") or "",
