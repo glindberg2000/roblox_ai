@@ -1,77 +1,69 @@
 # Active Development Context
 
 ## Current Task
-- Testing new NPCs from the toolbox: Validate spawning, behavior, and integration with existing systems.
+Investigating chat system error and status update efficiency:
+
+1. Chat Error:
+```
+ReplicatedStorage.Shared.NPCSystem.chat.V4ChatClient:148: attempt to call a nil value
+```
+- Error occurs in handleLettaChat function
+- Affects chat message processing
+- May be related to processResponse being nil
+
+2. Status Update Investigation
+- Status updates not triggering for all actions (hunt, patrol)
+- Need to evaluate whether status updates should happen in API vs game
+- Current round-trip to game server may be inefficient
+
+3. Group Member Updates
+- Appearance fields not being updated when members join clusters
+- Need to investigate upsert_group_member implementation
+- May need to restore lost functionality for appearance updates
 
 ## Recent Changes
-1. Fixed memory block limit issue by uninstalling and reinstalling components  
-   - Ensured the "persona" block now uses a limit of 5000
-2. Added hunt action system
-   - Implemented CombatNavigate in NavigationService
-   - Added hunt action to ActionService
-   - Support for both player and NPC targets
-   - Different hunt types (destroy/track)
-3. Combat Navigation Parameters
-   - Aggressive pathfinding for destroy mode
-   - Continuous target tracking
-   - Optimized update intervals
-   - Jump-enabled pursuit
+1. Added hunt behavior priority
+   - Made HUNT an exclusive behavior
+   - Set high priority (90) below EMERGENCY (100)
+   - Keeps existing KillBotService implementation
 
 ## Current State
 ### Working
-- Basic hunt command structure
+- Basic hunt command structure with proper priority
 - Combat navigation pathfinding
 - Target type detection (Player/NPC)
 - Hunt type differentiation
 
-### Next Implementation
-- Test hunt behaviors and new NPCs from the toolbox
-- Add combat animations
-- Implement attack range
-- Add cooldown system
+### Issues to Address
+1. Chat System
+   - Fix nil value error in V4ChatClient
+   - Review chat message processing flow
 
-## Implementation Plan
-1. Combat System
-   - Test hunt command flow
-   - Verify target acquisition
-   - Check pathfinding behavior
-   - Add combat animations
+2. Status Updates
+   - Evaluate API vs game server updates
+   - Add missing action status updates
+   - Consider more efficient update patterns
 
-2. Hunt Types
-   - Destroy: Aggressive pursuit
-   - Track: Casual following
-   - Add more behaviors later
+3. Group Updates
+   - Investigate appearance field updates
+   - Review upsert_group_member functionality
+   - Consider API-side group member updates
 
-3. Status Updates
-   - Track combat state
-   - Show current target
-   - Update hunt status
+## Next Steps
+1. Debug V4ChatClient error
+   - Trace processResponse initialization
+   - Add nil checks where needed
+   - Review chat message flow
 
-## Technical Requirements
-1. Animation
-   ```lua
-   -- Animation format
-   local jumpAnim = Instance.new("Animation")
-   jumpAnim.AnimationId = "rbxassetid://507765644"
-   ```
+2. Status Update Optimization
+   - Review current update patterns
+   - Consider moving updates to API side
+   - Add missing action status triggers
 
-2. Status Format
-   ```lua
-   -- New status format
-   status = "health: 100 | location: Cafe | state: sitting"
-   ```
-
-3. Action Commands
-   ```lua
-   -- New action structure
-   action = {
-       type = "jump",
-       data = {
-           height = 5,
-           animation = jumpAnim
-       }
-   }
-   ```
+3. Group Member Updates
+   - Review appearance update flow
+   - Investigate lost functionality
+   - Consider API-side member updates
 
 ## Current Task Context
 

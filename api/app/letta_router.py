@@ -57,7 +57,8 @@ from .cache import (
     get_npc_id_from_name,  # Cache lookup helpers
     get_agent_id,
     get_npc_description,
-    LOCATION_CACHE    # Add this import
+    LOCATION_CACHE,   # Add this import
+    get_player_description
 )
 from .mock_player import MockPlayer
 from .config import (
@@ -380,15 +381,6 @@ async def npc_to_npc_chat(
 @router.on_event("startup")
 async def startup_event():
     pass 
-
-def get_player_description(participant_id: str) -> str:
-    """Get stored player description from database"""
-    with get_db() as db:
-        result = db.execute(
-            "SELECT description FROM player_descriptions WHERE player_id = ?",
-            (participant_id,)
-        ).fetchone()
-        return result['description'] if result else ""
 
 # @router.post("/chat/v2", response_model=ChatResponse)
 # async def chat_with_npc_v2(request: ChatRequest):
@@ -1275,12 +1267,17 @@ def get_current_action(context: HumanContextData) -> str:
 async def update_group(update: GroupUpdate):
     """Update NPC group membership when players join/leave"""
     try:
-        agent_id = get_agent_id(update.npc_id)
+        agent_id = AGENT_ID_CACHE.get(update.npc_id)
         if not agent_id:
             raise HTTPException(status_code=404, detail="No agent found for NPC")
             
-        # Get player info from cache/db
-        player_info = PLAYER_CACHE.get(update.player_id) or {}
+        # Get player info from cache with logging
+        logger.info(f"[GROUP] Updating group for NPC {update.npc_id} -> Agent {agent_id}")
+        logger.info(f"[GROUP] Looking up player {update.player_id} ({update.player_name})")
+        
+        player_info = PLAYER_CACHE.get(update.player_id, {})
+        appearance = player_info.get('description', 'Unknown')
+        logger.info(f"[GROUP] Found in cache: {json.dumps(player_info, indent=2)}")
         
         # Use upsert_group_member
         result = upsert_group_member(
@@ -1291,7 +1288,7 @@ async def update_group(update: GroupUpdate):
                 "name": update.player_name,
                 "is_present": update.is_joining,
                 "health": "healthy",
-                "appearance": player_info.get("description", "Unknown"),
+                "appearance": appearance,
                 "last_seen": datetime.now().isoformat()
             }
         )

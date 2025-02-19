@@ -1,6 +1,6 @@
 """In-memory cache for static game data"""
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from .database import (
     get_db, 
     get_all_locations, 
@@ -10,11 +10,33 @@ from .database import (
 
 logger = logging.getLogger("roblox_app")
 
-# Global caches
-NPC_CACHE: Dict[str, dict] = {}  # What fields are actually in here?
-LOCATION_CACHE: Dict[str, dict] = {}
-AGENT_ID_CACHE: Dict[str, str] = {}
-PLAYER_CACHE: Dict[str, Dict] = {}  # New player info cache
+# Standardized cache structures
+PLAYER_CACHE: Dict[str, dict] = {
+    # player_id: {
+    #     'id': str,
+    #     'display_name': str,
+    #     'description': str
+    # }
+}
+
+NPC_CACHE: Dict[str, dict] = {
+    # display_name: {
+    #     'id': str,
+    #     'system_prompt': str,
+    #     'description': str
+    # }
+}
+
+AGENT_ID_CACHE: Dict[str, str] = {
+    # npc_id: agent_id
+}
+
+LOCATION_CACHE: Dict[str, dict] = {
+    # slug: {
+    #     'name': str,
+    #     'coordinates': List[float]
+    # }
+}
 
 def init_static_cache():
     """Initialize static data caches on server boot"""
@@ -143,38 +165,32 @@ def invalidate_player_cache(player_id: str) -> None:
         del PLAYER_CACHE[player_id]
         logger.info(f"Invalidated cache for player {player_id}") 
 
-def get_player_description(player_name: str) -> str:
-    """Get appearance description for a player"""
-    logger.info(f"\nLooking up description for player: {player_name}")
+def get_player_description(player_id: str) -> str:
+    """Get player description from cache, falling back to DB"""
+    # Try cache first
+    player_info = PLAYER_CACHE.get(player_id)
+    if player_info and 'description' in player_info:
+        logger.debug(f"Cache hit for player description {player_id}")
+        return player_info['description']
+        
+    # Cache miss - get from DB
+    logger.debug(f"Cache miss for description {player_id}, fetching from DB")
+    description = db_get_player_description(player_id)
     
-    # Try getting from database first
-    try:
-        with get_db() as db:
-            # Log the query we're about to run
-            query = "SELECT description FROM player_descriptions WHERE display_name = ? OR player_id = ?"
-            params = (player_name, player_name)
-            logger.info(f"Running query: {query} with params: {params}")
-            
-            cursor = db.execute(query, params)
-            result = cursor.fetchone()
-            
-            if result:
-                desc = result["description"]
-                logger.info(f"Found description in DB: {desc}")
-                return desc
-            else:
-                # Log what we searched for but didn't find
-                cursor = db.execute("SELECT * FROM player_descriptions")
-                all_players = cursor.fetchall()
-                logger.info("Available players in DB:")
-                for player in all_players:
-                    logger.info(f"  ID: {player['player_id']}, Name: {player['display_name']}, Desc: {player['description'][:50]}...")
-                
-    except Exception as e:
-        logger.error(f"Error looking up player description: {e}")
-    
-    logger.info("No description found, using fallback")
-    return f"A player named {player_name}"
+    # Cache the result if we got one
+    if description:
+        if player_id not in PLAYER_CACHE:
+            PLAYER_CACHE[player_id] = {}
+        PLAYER_CACHE[player_id]['description'] = description
+        
+    return description or "Unknown"
+
+def update_player_cache_with_description(player_id: str, description: str):
+    """Update player cache when a new description is stored"""
+    if player_id not in PLAYER_CACHE:
+        PLAYER_CACHE[player_id] = {}
+    PLAYER_CACHE[player_id]['description'] = description
+    logger.info(f"Updated PLAYER_CACHE for {player_id} with description")
 
 # Current format needed:
 LOCATION_CACHE = {
@@ -187,3 +203,18 @@ LOCATION_CACHE = {
         'coordinates': [8.0, 3.0, -12.0]
     }
 } 
+
+# Keep existing functions as wrappers for backward compatibility
+def get_player_description(player_id: str) -> str:
+    """Legacy wrapper - prefer direct PLAYER_CACHE access"""
+    player_info = PLAYER_CACHE.get(player_id, {})
+    return player_info.get('description', 'Unknown')
+
+def get_npc_description(display_name: str) -> str:
+    """Legacy wrapper - prefer direct NPC_CACHE access"""
+    npc_info = NPC_CACHE.get(display_name, {})
+    return npc_info.get('description', '')
+
+def get_agent_id(npc_id: str) -> str:
+    """Legacy wrapper - prefer direct AGENT_ID_CACHE access"""
+    return AGENT_ID_CACHE.get(npc_id) 

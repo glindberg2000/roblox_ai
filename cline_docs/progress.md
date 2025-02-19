@@ -104,4 +104,43 @@ None critical - ready for API integration
 1. Map all system message sources
 2. Fix TextChatService integration
 3. Add message control options
-4. Test and verify fixes 
+4. Test and verify fixes
+
+## Recently Completed
+- ✅ Added hunt behavior priority system
+- ✅ Made HUNT an exclusive behavior
+- ✅ Preserved KillBotService functionality
+
+## Current Issues
+- 🔄 Chat system error in V4ChatClient
+- 🔄 Status updates not triggering for all actions
+- 🔄 Group member appearance updates missing
+- 🔄 Need more efficient status update pattern
+
+## To Investigate
+1. Chat System
+   - Trace V4ChatClient error
+   - Review processResponse initialization
+   - Add proper error handling
+
+2. Status Updates
+   - Evaluate API vs game server updates
+   - Review action status triggers
+   - Consider optimization patterns
+
+3. Group Updates
+   - Review appearance field updates
+   - Investigate upsert_group_member
+   - Consider API-side updates
+
+## Known Issues
+- V4ChatClient:148 nil value error
+- Missing status updates for some actions
+- Inefficient round-trip for status updates
+- Missing appearance fields in group updates
+
+## Next Tasks
+1. Debug and fix chat error
+2. Implement more efficient status updates
+3. Restore group member appearance updates
+4. Add missing action status triggers 

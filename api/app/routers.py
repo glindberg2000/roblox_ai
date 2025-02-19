@@ -29,6 +29,7 @@ from .image_utils import (
 )
 from .database import get_db, store_player_description
 from .storage import FileStorageManager
+from .cache import update_player_cache_with_description
 
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -134,6 +135,8 @@ async def get_player_description_endpoint(data: PlayerDescriptionRequest):
                 description=description,
                 display_name=display_name
             )
+            # Update the cache
+            update_player_cache_with_description(data.user_id, description)
             logger.info(f"Stored description for player {data.user_id}: {description[:50]}...")
         except Exception as e:
             logger.error(f"Failed to store player description for {data.user_id}: {e}")
