@@ -21,6 +21,14 @@ local BEHAVIOR_PRIORITIES = {
     FACE = 20       -- Used during interactions; lowest priority
 }
 
+-- Define exclusive behaviors that cannot run concurrently
+local EXCLUSIVE_BEHAVIORS = {
+    PATROL = true,
+    NAVIGATE = true,
+    FOLLOW = true,
+    FLEE = true
+}
+
 function BehaviorService.new()
     local self = setmetatable({}, BehaviorService)
     self.currentBehaviors = {} -- Track current behavior per NPC
@@ -51,65 +59,53 @@ end
 function BehaviorService:setBehavior(npc, behaviorType, params)
     if not npc or not npc.model then return end
     
-    -- Convert behavior type to uppercase for consistency
     behaviorType = string.upper(behaviorType)
     
-    -- Get current behavior priority
+    -- Get current behavior
     local currentBehavior = self.currentBehaviors[npc]
-    local currentPriority = currentBehavior and BEHAVIOR_PRIORITIES[currentBehavior.type] or 0
     
-    -- Get new behavior priority
-    local newPriority = BEHAVIOR_PRIORITIES[behaviorType] or 0
-    
-    -- Only change behavior if new priority is higher
-    if newPriority < currentPriority then
+    -- If trying to set an exclusive behavior
+    if EXCLUSIVE_BEHAVIORS[behaviorType] then
+        -- Clear ALL existing behaviors
+        self:clearAllBehaviors(npc)
+        
         LoggerService:debug("BEHAVIOR", string.format(
-            "Skipping behavior change for NPC %s: %s (priority %d) -> %s (priority %d)",
-            npc.displayName,
-            currentBehavior and currentBehavior.type or "NONE",
-            currentPriority,
+            "Setting exclusive behavior %s for NPC %s",
             behaviorType,
-            newPriority
+            npc.displayName
         ))
-        return false
+    else
+        -- For non-exclusive behaviors, check if we can run concurrently
+        if currentBehavior and EXCLUSIVE_BEHAVIORS[currentBehavior.type] then
+            LoggerService:debug("BEHAVIOR", string.format(
+                "Cannot set behavior %s - NPC %s has exclusive behavior %s",
+                behaviorType,
+                npc.displayName,
+                currentBehavior.type
+            ))
+            return false
+        end
     end
-    
-    -- Clear any existing behavior
-    self:clearBehavior(npc)
-    
-    -- Safely encode params for logging
-    local paramsString = ""
-    pcall(function()
-        paramsString = HttpService:JSONEncode(params or {})
-    end)
-    
-    LoggerService:debug("BEHAVIOR", string.format(
-        "Setting behavior %s for NPC %s with params: %s",
-        behaviorType,
-        npc.displayName,
-        paramsString
-    ))
-    
+
     -- Initialize new behavior
     local behavior = {
         type = behaviorType,
         params = params,
         startTime = os.time()
     }
-    
+
     -- Set up behavior-specific logic
-    if behaviorType == "idle" then
+    if behaviorType == "IDLE" then
         behavior.cleanup = self:initializeIdle(npc, params)
-    elseif behaviorType == "follow" then
+    elseif behaviorType == "FOLLOW" then
         behavior.cleanup = self:initializeFollow(npc, params)
     elseif behaviorType == "navigate" then
         behavior.cleanup = self:initializeNavigate(npc, params)
     elseif behaviorType == "chat" then
         behavior.cleanup = self:initializeChat(npc, params)
     end
-    
+
     self.currentBehaviors[npc] = behavior
-    
     return true
 end
 
@@ -295,6 +291,30 @@ function BehaviorService:executeSecondaryBehavior(npc, behaviorType, params)
     end
     
     return true
+end
+
+-- New function to clear all behaviors
+function BehaviorService:clearAllBehaviors(npc)
+    if not npc then return end
+    
+    -- Clear current behavior
+    self:clearBehavior(npc)
+    
+    -- Stop any movement
+    if npc.model and npc.model:FindFirstChild("Humanoid") then
+        npc.model.Humanoid:MoveTo(npc.model.HumanoidRootPart.Position)
+    end
+    
+    -- Clear any wandering
+    if npc.wanderThread then
+        task.cancel(npc.wanderThread)
+        npc.wanderThread = nil
+    end
+    
+    LoggerService:debug("BEHAVIOR", string.format(
+        "Cleared all behaviors for NPC %s",
+        npc.displayName
+    ))
 end
 
 return BehaviorService 

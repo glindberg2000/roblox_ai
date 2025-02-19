@@ -19,7 +19,10 @@
       "Assets": {
         "$className": "Folder",
         "npcs": {
-          "$path": "src/assets/npcs"
+          "$path": "src/assets/npcs",
+          "4613203451": {
+            "$className": "Model"
+          }
         }
       }
     },

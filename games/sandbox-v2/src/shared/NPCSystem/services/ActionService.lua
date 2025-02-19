@@ -387,60 +387,41 @@ function NPCManagerV3:executeAction(npc, player, action)
 end
 
 function ActionService.patrol(npc, action)
-    LoggerService:debug("ACTION_SERVICE", string.format(
-        "NPC %s patrol request",
-        npc.displayName
+    if not npc or not action then 
+        LoggerService:warn("ACTION", "Invalid patrol parameters")
+        return false 
+    end
+    
+    -- Default to "full" patrol if not specified
+    local area = (action.data and action.data.type) or "full"
+    local style = (action.data and action.data.target) or "random"
+    
+    LoggerService:debug("ACTION", string.format(
+        "NPC %s starting patrol (area: %s, style: %s)",
+        npc.displayName,
+        tostring(area),
+        tostring(style)
     ))
-    
-    -- Force clear any existing behaviors before starting patrol
-    BehaviorService:clearBehavior(npc)
-    
-    -- If currently following, stop first
-    if npc.isFollowing then
-        ActionService.unfollow(npc)
-    end
-    
-    -- Handle case where location is incorrectly in type field
-    local area = action.target ~= "" and action.target or action.type
-    local style = "normal"  -- Default patrol style
-    
-    if not area then
-        LoggerService:warn("ACTION_SERVICE", "Missing patrol location in action data")
-        return false
-    end
-    
-    -- Set patrol behavior with high priority first
+
+    -- Set patrol behavior
     local success = BehaviorService:setBehavior(npc, "PATROL", {
-        area = area,
-        style = style
+        type = area,
+        target = style
     })
-    
-    if not success then
-        LoggerService:warn("ACTION_SERVICE", string.format(
+
+    if success then
+        return PatrolService:startPatrol(npc, {
+            type = area,
+            target = style
+        })
+    else
+        LoggerService:warn("ACTION", string.format(
             "Failed to set patrol behavior for NPC %s",
             npc.displayName
         ))
-        return false
     end
-    
-    -- Start the actual patrol with error handling
-    local patrolSuccess = PatrolService:startPatrol(npc, {
-        type = area,
-        target = ""
-    })
-    
-    if not patrolSuccess then
-        LoggerService:warn("ACTION_SERVICE", string.format(
-            "Failed to start patrol for NPC %s - area: %s",
-            npc.displayName,
-            tostring(area)
-        ))
-        -- Clean up the behavior since patrol failed
-        BehaviorService:clearBehavior(npc)
-        return false
-    end
-    
-    return true
+
+    return false
 end
 
 function ActionService.hunt(npc, data)

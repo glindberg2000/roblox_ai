@@ -1,88 +1,152 @@
-local PatrolService = {}
-local LoggerService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LoggerService)
+local LoggerService = require(script.Parent.Parent.services.LoggerService)
 local LocationService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.LocationService)
 local NavigationService = require(game:GetService("ReplicatedStorage").Shared.NPCSystem.services.NavigationService)
 
--- Track active patrols
+local PatrolService = {}
+PatrolService.__index = PatrolService
+
 local activePatrols = {}
+
+function PatrolService.new()
+    return setmetatable({}, PatrolService)
+end
+
+function PatrolService:getPatrolRoute(npc, options)
+    if not npc or not npc.model then
+        LoggerService:warn("PATROL", "Invalid NPC for patrol route generation")
+        return nil
+    end
+
+    local patrolType = options and options.type or "full"
+    LoggerService:debug("PATROL", string.format(
+        "Generating %s patrol route for NPC %s",
+        patrolType,
+        npc.displayName
+    ))
+
+    -- Get all available locations
+    local locations = LocationService:getAllLocations()
+    if not locations or #locations == 0 then
+        LoggerService:warn("PATROL", "No locations available for patrol")
+        return nil
+    end
+
+    -- For full patrol, return all locations in a randomized order
+    if patrolType == "full" then
+        local route = {}
+        -- Copy locations to avoid modifying original
+        for _, loc in ipairs(locations) do
+            table.insert(route, {
+                name = loc.name,
+                slug = loc.slug,
+                position = loc.position
+            })
+        end
+        
+        -- Randomize order
+        for i = #route, 2, -1 do
+            local j = math.random(i)
+            route[i], route[j] = route[j], route[i]
+        end
+
+        LoggerService:debug("PATROL", string.format(
+            "Generated full patrol route with %d locations for NPC %s",
+            #route,
+            npc.displayName
+        ))
+        
+        return route
+    end
+    
+    -- For focused patrol around a target
+    if patrolType == "focused" and options.target then
+        local targetLoc = LocationService:getLocation(options.target)
+        if targetLoc then
+            -- Get nearby locations
+            local nearbyLocs = LocationService:getNearbyLocations(targetLoc.position, 100)
+            if nearbyLocs and #nearbyLocs > 0 then
+                return nearbyLocs
+            end
+        end
+    end
+
+    LoggerService:warn("PATROL", string.format(
+        "Could not generate patrol route for type: %s",
+        patrolType
+    ))
+    return nil
+end
 
 function PatrolService:startPatrol(npc, options)
     if not npc or not npc.id then
-        LoggerService:warn("PATROL", "Invalid NPC provided for patrol")
+        LoggerService:warn("PATROL", "Invalid NPC for patrol")
         return false
     end
 
     -- Stop any existing patrol
-    if activePatrols[npc.id] then
-        self:stopPatrol(npc)
-    end
+    self:stopPatrol(npc)
 
     -- Get patrol route
     local patrolRoute = self:getPatrolRoute(npc, options)
     if not patrolRoute or #patrolRoute == 0 then
         LoggerService:warn("PATROL", string.format(
-            "Could not generate patrol route for NPC %s",
+            "No valid patrol route for NPC %s",
             npc.displayName
         ))
         return false
     end
 
-    -- Start patrol coroutine
+    -- Initialize patrol state
     local patrol = {
         npc = npc,
         route = patrolRoute,
         currentIndex = 1,
-        active = true
+        active = true,
+        lastMoveTime = 0,
+        minDuration = 30 -- 30 seconds at each location
     }
     
     activePatrols[npc.id] = patrol
-    
+
+    -- Start patrol loop
     task.spawn(function()
         while patrol.active do
             local currentLocation = patrol.route[patrol.currentIndex]
-            
-            LoggerService:debug("PATROL", string.format(
-                "NPC %s patrolling to %s",
-                npc.displayName,
-                currentLocation.name
-            ))
-            
-            -- Get coordinates from LocationService
-            local coordinates = LocationService:getCoordinates(currentLocation.slug)
-            if not coordinates then
-                LoggerService:warn("PATROL", string.format(
-                    "Could not get coordinates for location %s",
+            local currentTime = os.time()
+
+            -- Only move if we've stayed long enough
+            if currentTime - patrol.lastMoveTime >= patrol.minDuration then
+                LoggerService:debug("PATROL", string.format(
+                    "NPC %s moving to %s",
+                    npc.displayName,
                     currentLocation.name
                 ))
-                task.wait(5)
-                continue
+
+                local success = NavigationService:Navigate(npc, currentLocation.position)
+                if success then
+                    patrol.lastMoveTime = currentTime
+                    patrol.currentIndex = (patrol.currentIndex % #patrol.route) + 1
+                else
+                    LoggerService:warn("PATROL", string.format(
+                        "Navigation failed for NPC %s to %s",
+                        npc.displayName,
+                        currentLocation.name
+                    ))
+                end
             end
-            
-            local success = NavigationService:Navigate(npc, coordinates)
-            
-            if success then
-                -- Move to next location
-                patrol.currentIndex = patrol.currentIndex % #patrol.route + 1
-                task.wait(2) -- Wait between locations
-            else
-                LoggerService:warn("PATROL", string.format(
-                    "Navigation failed for NPC %s during patrol",
-                    npc.displayName
-                ))
-                task.wait(5) -- Wait longer on failure
-            end
+
+            task.wait(1)
         end
     end)
-    
+
     return true
 end
 
 function PatrolService:stopPatrol(npc)
     if not npc or not npc.id then return end
     
-    local patrol = activePatrols[npc.id]
-    if patrol then
-        patrol.active = false
+    if activePatrols[npc.id] then
+        activePatrols[npc.id].active = false
         activePatrols[npc.id] = nil
         
         LoggerService:debug("PATROL", string.format(
@@ -90,75 +154,6 @@ function PatrolService:stopPatrol(npc)
             npc.displayName
         ))
     end
-end
-
-function PatrolService:getPatrolRoute(npc, options)
-    -- Get current position
-    local currentPosition = npc.model and npc.model.PrimaryPart and npc.model.PrimaryPart.Position
-    if not currentPosition then return nil end
-    
-    -- Handle different patrol types
-    local patrolType = options and options.type or "full" -- "full" or "focused"
-    local target = options and options.target
-    
-    if patrolType == "focused" and target then
-        -- Get target and nearby locations to create a patrol route
-        local targetLocation = LocationService:getLocation(target)
-        if targetLocation then
-            local route = {targetLocation}
-            
-            -- Get 2-3 nearby locations to patrol between
-            local nearbyLocations = LocationService:getNearbyLocations(targetLocation.coordinates, 50)
-            local usedSlugs = {[targetLocation.slug] = true}
-            
-            -- Add some variety to the patrol route
-            for _, location in ipairs(nearbyLocations) do
-                if not usedSlugs[location.slug] then
-                    table.insert(route, location)
-                    usedSlugs[location.slug] = true
-                    if #route >= 3 then break end
-                end
-            end
-            
-            -- Add target location again to complete the loop
-            table.insert(route, targetLocation)
-            return route
-        end
-    end
-    
-    -- Full map patrol
-    if patrolType == "full" then
-        -- Get all available locations
-        local allLocations = LocationService:getAllLocations()
-        local route = {}
-        
-        -- Start from current location
-        local startLocation = LocationService:getNearestLocation(currentPosition)
-        if startLocation then
-            table.insert(route, startLocation)
-        end
-        
-        -- Add 4-6 major locations for a full patrol
-        local locationCount = math.random(4, 6)
-        local usedSlugs = {[startLocation.slug] = true}
-        
-        for _ = 1, locationCount do
-            local randomLocation = allLocations[math.random(#allLocations)]
-            if not usedSlugs[randomLocation.slug] then
-                table.insert(route, randomLocation)
-                usedSlugs[randomLocation.slug] = true
-            end
-        end
-        
-        -- Complete the loop
-        if startLocation then
-            table.insert(route, startLocation)
-        end
-        
-        return route
-    end
-    
-    return nil
 end
 
 return PatrolService 

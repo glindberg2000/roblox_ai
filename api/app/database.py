@@ -639,8 +639,10 @@ def get_all_locations(game_id: int = 61) -> List[Dict]:
                     location_data
                 FROM assets
                 WHERE is_location = TRUE
-                AND json_extract(location_data, '$.area') IS NOT NULL
                 AND game_id = ?
+                AND position_x IS NOT NULL  -- Ensure we have coordinates
+                AND position_y IS NOT NULL
+                AND position_z IS NOT NULL
             """
             
             cursor = db.execute(query, (game_id,))
@@ -648,7 +650,7 @@ def get_all_locations(game_id: int = 61) -> List[Dict]:
             
             logger.info(f"Found {len(locations)} locations in database")
             for loc in locations:
-                logger.debug(f"Location: {loc['name']}, slug: {loc['slug']}")
+                logger.debug(f"Location: {loc['name']}, coordinates: ({loc['position_x']}, {loc['position_y']}, {loc['position_z']})")
             
             return [
                 {

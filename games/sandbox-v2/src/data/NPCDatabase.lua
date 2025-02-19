@@ -8,7 +8,7 @@ return {
             model = "7315192066", 
             modelName = "Oscar", 
             responseRadius = 5, 
-            spawnPosition = Vector3.new(30.0, 18.0, -45.0), 
+            spawnPosition = Vector3.new(5.0, 18.0, -45.0), 
             abilities = {
             "move", 
             "chat", 
