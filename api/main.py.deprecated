@@ -43,15 +43,12 @@ app.add_middleware(
 )
 
 # Import routers after FastAPI initialization
-from routers import router
-from routers.dashboard_router import router as dashboard_router
-from routers import v4, letta_router  # Add the Letta router import
+from app.dashboard_router import router as dashboard_router  # Keep dashboard
+from app.letta_router import router as letta_router  # Main API router
 
 # Include routers
-app.include_router(router)
-app.include_router(dashboard_router)
-app.include_router(v4.router)
-app.include_router(letta_router.router)  # Include the Letta router
+app.include_router(dashboard_router)  # Keep dashboard routes
+app.include_router(letta_router)  # Main API routes
 
 # Create static directory if it doesn't exist
 STATIC_DIR.mkdir(parents=True, exist_ok=True)

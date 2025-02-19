@@ -82,6 +82,11 @@ from .group_manager import GroupMembershipManager
 from letta_templates.npc_prompts import PLAYER_JOIN_MESSAGE, PLAYER_LEAVE_MESSAGE
 from .utils import get_current_action  # Import from utils instead
 from .group_processor import GroupProcessor
+from .image_utils import (
+    download_avatar_image,
+    generate_image_description,
+    get_roblox_display_name
+)
 
 # Convert config to LLMConfig objects
 # LLM_CONFIGS = {
@@ -1367,4 +1372,47 @@ def generate_status_description(location: str = None, action: str = None, health
     
     template = templates.get(action, templates["Idle"])
     return template.format(location=location)
+
+# Add model
+class PlayerDescriptionRequest(BaseModel):
+    user_id: str
+
+# Add endpoint
+@router.post("/get_player_description")
+async def get_player_description_endpoint(data: PlayerDescriptionRequest):
+    """Endpoint to get player avatar description using AI."""
+    try:
+        # Download image and get its path
+        image_path = await download_avatar_image(data.user_id)
+        
+        # Get display name from Roblox
+        display_name = await get_roblox_display_name(data.user_id)
+        
+        # Generate description using AI
+        prompt = (
+            "Please provide a detailed description of this Roblox avatar. "
+            "Include details about the avatar's clothing, accessories, colors, "
+            "unique features, and overall style or theme."
+        )
+        description = await generate_image_description(image_path, prompt)
+        
+        # Store description using database function
+        try:
+            store_player_description(
+                player_id=data.user_id,
+                description=description,
+                display_name=display_name
+            )
+            # Update the cache
+            update_player_cache_with_description(data.user_id, description)
+            logger.info(f"Stored description for player {data.user_id}: {description[:50]}...")
+        except Exception as e:
+            logger.error(f"Failed to store player description for {data.user_id}: {e}")
+        
+        return {"description": description}
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"Error processing player description request: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 

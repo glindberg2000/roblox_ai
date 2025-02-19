@@ -58,15 +58,11 @@ app.add_middleware(
 )
 
 # Import routers after FastAPI initialization
-from .routers import router
 from .dashboard_router import router as dashboard_router
-from .routers_v4 import router as router_v4
 from .letta_router import router as letta_router
 
 # Include routers
 app.include_router(dashboard_router)
-app.include_router(router)
-app.include_router(router_v4)
 app.include_router(letta_router)
 
 # Create static directory if it doesn't exist
