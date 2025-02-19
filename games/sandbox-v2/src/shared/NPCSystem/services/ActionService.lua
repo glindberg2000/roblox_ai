@@ -16,6 +16,7 @@ ActionService.__index = ActionService
 -- Priority levels for behaviors
 local BEHAVIOR_PRIORITIES = {
     EMERGENCY = 100,  -- hide, flee
+    HUNT = 90,       -- Add HUNT as very high priority, but below emergency
     NAVIGATION = 80,  -- navigate_to
     FOLLOWING = 60,   -- follow commands
     PATROL = 40,      -- patrol routes

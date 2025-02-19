@@ -23,6 +23,7 @@ local BEHAVIOR_PRIORITIES = {
 
 -- Define exclusive behaviors that cannot run concurrently
 local EXCLUSIVE_BEHAVIORS = {
+    HUNT = true,     -- Add HUNT as exclusive
     PATROL = true,
     NAVIGATE = true,
     FOLLOW = true,
