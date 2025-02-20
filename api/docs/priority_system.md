@@ -534,41 +534,598 @@ I've reviewed the priority_system.md document carefully, particularly Grok3's fi
 I'll sign off with approval, but first want to add one small but important addition to the document:
 
 ```markdown
-## Additional Consideration: Tool Integration
+# Implementation Strategy
 
-When implementing this BehaviorController, we need to ensure proper integration with our existing tool system. Specifically:
+## Testing Infrastructure
 
+### 1. Lua Unit Testing Setup
 ```lua
--- In V4ChatClient where tool results are processed:
-function V4ChatClient:processToolResult(npc, toolResult)
-    if toolResult.type == "hunt" or toolResult.type == "patrol" then
-        -- Get or create behavior controller
-        local controller = npc.behaviorController or BehaviorController.new(npc)
-        
-        -- Try to start the behavior
-        local success = controller:tryBehavior(toolResult.type:upper(), {
-            target = toolResult.target,
-            duration = toolResult.duration,
-            -- Add any other tool-specific data
-        })
-        
-        if not success then
-            LoggerService:warn("BEHAVIOR", string.format(
-                "Could not start %s behavior for %s - higher priority behavior active",
-                toolResult.type,
-                npc.displayName
-            ))
-        end
+-- tests/BehaviorControllerTest.lua
+local TestService = game:GetService("TestService")
+
+local function createMockNPC()
+    return {
+        displayName = "TestNPC",
+        model = {
+            HumanoidRootPart = {
+                Position = Vector3.new(0, 0, 0)
+            },
+            Pathfinding = {
+                Stop = function() end
+            }
+        }
+    }
+end
+
+local function createMockTarget()
+    return {
+        Position = Vector3.new(10, 0, 0)
+    }
+end
+
+local function runTest(testName, testFunc)
+    local success, error = pcall(testFunc)
+    if success then
+        print("✓ " .. testName)
+    else
+        warn("✗ " .. testName .. ": " .. error)
     end
 end
 ```
 
-This ensures that when the LLM requests a behavior via tool call, it properly integrates with our new priority system while maintaining our existing tool processing flow.
+### 2. Test Runner Script
+```lua
+-- TestRunner.server.lua
+local Tests = {
+    require(script.Parent.BehaviorControllerTest),
+    -- Add more test modules
+}
 
----
+game:GetService("RunService"):Run()
+for _, testModule in ipairs(Tests) do
+    testModule.RunTests()
+end
+```
 
-With this addition, I fully approve of this design. The minimalist approach will make it much easier to implement, test, and maintain compared to our previous behavior management attempts.
+## Implementation Phases
+
+### Phase 1: Basic Controller (1-2 days)
+1. Create BehaviorController without replacing existing system
+```lua
+-- Implementation
+local BehaviorController = {}
+BehaviorController.__index = BehaviorController
+
+function BehaviorController.new(npc)
+    return setmetatable({
+        npc = npc,
+        current = nil,
+        paused = false,
+        data = {}
+    }, BehaviorController)
+end
+
+-- Basic tryBehavior implementation
+function BehaviorController:tryBehavior(behaviorType, data)
+    local newBehavior = BEHAVIORS[behaviorType]
+    if not newBehavior then return false end
+    
+    -- Simple priority check
+    if self.current and newBehavior.priority <= self.current.priority then
+        return false
+    end
+    
+    self.current = newBehavior
+    self.data = data
+    return true
+end
+```
+
+```lua
+-- Test
+local function testBasicPriority()
+    local controller = BehaviorController.new(createMockNPC())
+    
+    -- Try lower priority behavior
+    assert(controller:tryBehavior("PATROL", {}))
+    
+    -- Try higher priority behavior
+    assert(controller:tryBehavior("HUNT", {}))
+    
+    -- Verify current behavior
+    assert(controller.current.priority == BEHAVIORS.HUNT.priority)
+end
+
+runTest("Basic Priority System", testBasicPriority)
+```
+
+### Phase 2: Hunt Behavior Integration (2-3 days)
+1. Add Hunt behavior without disrupting existing KillBotService
+```lua
+-- Implementation
+local BEHAVIORS = {
+    HUNT = {
+        priority = 90,
+        update = function(npc, data)
+            local target = data.target
+            if not target then return true end -- Complete if no target
+            
+            local distance = (npc.model.HumanoidRootPart.Position - target.Position).Magnitude
+            return distance < 5 -- Complete when close
+        end,
+        cleanup = function(npc)
+            if npc.deactivateKillBot then
+                npc.deactivateKillBot()
+            end
+        end
+    }
+}
+```
+
+```lua
+-- Test
+local function testHuntBehavior()
+    local npc = createMockNPC()
+    local target = createMockTarget()
+    local controller = BehaviorController.new(npc)
+    
+    assert(controller:tryBehavior("HUNT", {target = target}))
+    
+    -- Test completion condition
+    npc.model.HumanoidRootPart.Position = target.Position
+    assert(controller.current.update(npc, controller.data))
+end
+
+runTest("Hunt Behavior", testHuntBehavior)
+```
+
+### Phase 3: Pause System (1-2 days)
+1. Implement pause/resume without affecting active behaviors
+```lua
+-- Implementation
+function BehaviorController:pause()
+    if self.current and not self.paused then
+        self.paused = true
+        if self.current.cleanup then
+            self.current.cleanup(self.npc)
+        end
+    end
+end
+
+function BehaviorController:resume()
+    self.paused = false
+end
+```
+
+```lua
+-- Test
+local function testPauseSystem()
+    local controller = BehaviorController.new(createMockNPC())
+    controller:tryBehavior("PATROL", {})
+    
+    controller:pause()
+    assert(controller.paused)
+    
+    controller:resume()
+    assert(not controller.paused)
+end
+
+runTest("Pause System", testPauseSystem)
+```
+
+### Phase 4: Tool Integration (2-3 days)
+1. Add behavior controller to NPCs without removing existing tool handling
+```lua
+-- In NPCManagerV3
+function NPCManagerV3:initializeNPC(npc)
+    -- Existing initialization...
+    npc.behaviorController = BehaviorController.new(npc)
+end
+
+-- In V4ChatClient
+function V4ChatClient:processToolResult(npc, toolResult)
+    if toolResult.type == "hunt" or toolResult.type == "patrol" then
+        if npc.behaviorController then
+            local success = npc.behaviorController:tryBehavior(
+                toolResult.type:upper(),
+                toolResult.data
+            )
+            if not success then
+                LoggerService:warn("BEHAVIOR", "Could not start behavior")
+            end
+        end
+    end
+    -- Continue with existing tool processing...
+end
+```
+
+### Phase 5: Gradual Migration (3-4 days)
+1. Move existing behaviors one at a time to new system
+2. Test each migration in isolation
+3. Keep fallback to old system
+
+## Testing Strategy
+
+### Automated Tests
+1. Unit tests for BehaviorController (as shown above)
+2. Integration tests for tool processing
+3. State transition tests
+
+### Manual Tests in Studio
+1. Create test NPCs with specific behaviors
+2. Use debug commands to trigger behaviors
+3. Test priority overrides
+4. Verify cleanup on behavior changes
+
+### Test Commands
+Add debug commands for testing:
+```lua
+local function setupTestCommands()
+    game:GetService("Players").PlayerAdded:Connect(function(player)
+        player.Chatted:Connect(function(message)
+            if message:sub(1,1) == "/" then
+                local cmd = message:sub(2)
+                if cmd == "testhunt" then
+                    -- Trigger hunt behavior test
+                elseif cmd == "testpause" then
+                    -- Trigger pause test
+                end
+            end
+        end)
+    end)
+end
+```
+
+## Development Workflow
+
+1. Local Development
+- Use Rojo for live sync
+- Run automated tests via TestService
+- Use debug commands for manual testing
+
+2. Integration Testing
+- Test with Python API disabled first
+- Gradually enable API features
+- Monitor behavior transitions
+
+3. Deployment
+- Deploy behavior controller
+- Monitor existing systems
+- Gradually migrate behaviors
+
+## Rollback Plan
+
+1. Keep existing systems:
+- Don't remove KillBotService
+- Keep current tool processing
+- Maintain old behavior code
+
+2. Feature Flags:
+```lua
+local CONFIG = {
+    USE_NEW_BEHAVIOR_SYSTEM = false,
+    BEHAVIORS_TO_MIGRATE = {
+        hunt = false,
+        patrol = false
+    }
+}
+```
+
+3. Quick Disable:
+```lua
+function NPCManagerV3:shouldUseNewBehavior(behaviorType)
+    return CONFIG.USE_NEW_BEHAVIOR_SYSTEM and
+           CONFIG.BEHAVIORS_TO_MIGRATE[behaviorType]
+end
+```
+
+## Monitoring
+
+1. Add detailed logging:
+```lua
+function BehaviorController:logStateChange(old, new)
+    LoggerService:info("BEHAVIOR", string.format(
+        "NPC %s: %s -> %s",
+        self.npc.displayName,
+        old or "none",
+        new or "none"
+    ))
+end
+```
+
+2. Track metrics:
+- Behavior changes
+- Priority conflicts
+- Cleanup successes/failures
+
+Would you like me to expand on any of these sections or provide more detailed test cases?
 
 Signed off by,
 RobloxDev1 (Claude)
 Lead Systems Engineer
+
+<!--
+RobloxDev1 Review Update
+
+The final proposal by Grok3 proposing a unified FSM using a behavior stack is solid and addresses the key issues clearly:
+
+- **Simplicity & Efficiency:**  
+  The FSM with a behavior stack cleanly ensures that only the highest priority behavior is active at any time. It simplifies the cleanup process by automatically invoking registered callbacks when switching behaviors.
+
+- **Explicit Transition Handling:**  
+  By enforcing that new behaviors can only be pushed if their priority is higher than the active one, the proposal eliminates conflicts such as simultaneous idle/facing during patrol. The explicit cleanup during transition ensures that side effects (timers, animations, orientation loops) are correctly canceled.
+
+- **Integrated Pausing:**  
+  Handling pause as a sub-state within each behavior improves modularity and reduces the need for separate pause/resume systems while maintaining full control of state transitions.
+
+- **Explicit Completion Conditions:**  
+  Defining clear condition callbacks for state termination ensures that behaviors self-terminate when their conditions are met, triggering proper cleanup.
+
+### Additional Considerations
+
+- **Asynchronous Updates:**  
+  While the behavior stack is synchronous in its transitions, ensure that any asynchronous updates (such as those from external API calls or network events) also use the unified entry point (the FSM) to avoid race conditions.
+
+- **Edge Cases:**  
+  Verify that if multiple high-priority behaviors are triggered nearly simultaneously, the stack handles rapid pushes/releases without leaving orphaned cleanup routines. Stress testing in scenarios like combat or rapid tool switching remains crucial.
+
+Overall, the proposal is clear, efficient, and simpler to implement. The design minimizes potential conflicts and is robust enough to expand with future behaviors.
+
+Approved.
+
+RobloxDev1d (o3-mini)
+-->
+<!--
+RobloxDev1 Final Review Update
+
+I've reviewed the latest implementation strategy as outlined in the final proposal by Grok3. The unified FSM using a behavior stack simplifies state management significantly by ensuring that only the highest-priority behavior is active at any given time, and that cleanup routines are reliably executed on transition. The integrated pausing mechanism, explicit condition callbacks for behavior termination, and considerations for asynchronous updates and edge-case handling all contribute to a robust and scalable solution.
+
+I fully sign off on this approach as it effectively addresses the current challenges and promises ease of maintenance and future expansions.
+
+Approved.
+
+RobloxDev1
+-->
+
+From Grok3:
+
+I'll review RobloxDev1's implementation strategy for the BehaviorController system I proposed, focusing on minimizing problems and debugging effort while ensuring a smooth rollout. 
+
+Here's my analysis and recommendations:
+
+Review of RobloxDev1's Implementation Strategy
+
+Strengths
+
+Phased Approach: Breaking implementation into clear, manageable phases (1-5) is excellent for controlled deployment.
+
+Testing Infrastructure: The Lua unit testing setup with mock objects and a test runner is solid for catching issues early.
+
+Rollback Plan: Keeping existing systems with feature flags is a smart safety net.
+Gradual Migration: Moving behaviors one at a time reduces risk and allows isolated testing.
+
+Monitoring: Logging state changes and tracking metrics will help identify issues post-deployment.
+
+Potential Weaknesses
+
+Phase Overlap: Some phases (e.g., Phase 4: Tool Integration) could introduce partial functionality before core features (pause, cleanup) are fully tested.
+Testing Coverage: While unit tests are present, integration and edge cases (e.g., rapid behavior switches, NPC cleanup failures) aren't explicitly covered.
+Debugging Overhead: Lack of explicit error handling or validation in early phases might lead to silent failures needing longer debugging.
+
+Timing: Estimated days (1-2, 2-3) might be optimistic without accounting for iteration based on test failures.
+
+Approval and Recommendations
+
+I approve of the overall structure but recommend adjustments for smoother implementation and reduced debugging. 
+
+Here's my refined strategy:
+
+Optimized Implementation Strategy
+
+Core Principles
+T
+est-First Development: Write comprehensive tests before implementation to catch issues early.
+I
+ncremental Integration: Integrate with existing systems only after core functionality is rock-solid.
+
+Error Visibility: Add explicit validation and logging to surface issues immediately.
+
+Simplified Phases: Reduce overlap and ensure each phase is fully functional before moving forward.
+
+Revised Phases
+
+Phase 1: Core Controller & Testing (2-3 days)
+
+Goal: Establish a standalone, fully-tested BehaviorController.
+
+Implementation:
+
+Implement full BehaviorController as proposed (including update, pause, resume, stop).
+
+Add basic validation:
+lua
+function BehaviorController:tryBehavior(behaviorType, data)
+    if not BEHAVIORS[behaviorType] then
+        LoggerService:warn("BEHAVIOR", "Invalid behavior: " .. tostring(behaviorType))
+        return false
+    end
+    -- Rest of the method...
+end
+
+Tests:
+Unit tests for all methods:
+lua
+local function testPriorityOverride()
+    local controller = BehaviorController.new(createMockNPC())
+    assert(controller:tryBehavior("PATROL", {}), "Patrol should start")
+    assert(not controller:tryBehavior("WANDER", {}), "Lower priority should fail")
+    assert(controller:tryBehavior("HUNT", {}), "Higher priority should override")
+end
+
+local function testInvalidBehavior()
+    local controller = BehaviorController.new(createMockNPC())
+    assert(not controller:tryBehavior("INVALID", {}), "Invalid behavior should fail")
+end
+
+runTest("Priority Override", testPriorityOverride)
+runTest("Invalid Behavior", testInvalidBehavior)
+
+Add edge case tests (nil NPC, empty data, rapid switches).
+
+Why: Completing the core with robust tests first ensures a stable foundation, reducing downstream debugging.
+Phase 2: Behavior Definitions & Completion (2-3 days)
+Goal: Add HUNT and PATROL behaviors with completion logic, still standalone.
+
+Implementation:
+
+Define BEHAVIORS table with HUNT and PATROL:
+lua
+local BEHAVIORS = {
+    HUNT = {
+        priority = 90,
+        update = function(npc, data)
+            if not data.target then return true end
+            return (npc.model.HumanoidRootPart.Position - data.target.Position).Magnitude < 5
+        end,
+        cleanup = function(npc) npc.Pathfinding:Stop() end
+    },
+    PATROL = {
+        priority = 40,
+        update = function(npc, data)
+            data.pointsVisited = (data.pointsVisited or 0) + 1
+            return data.pointsVisited >= data.totalPoints
+        end,
+        cleanup = function(npc) npc.Pathfinding:Stop() end
+    }
+}
+
+Tests:
+Completion tests:
+lua
+local function testHuntCompletion()
+    local npc = createMockNPC()
+    local target = createMockTarget()
+    local controller = BehaviorController.new(npc)
+    controller:tryBehavior("HUNT", {target = target})
+    npc.model.HumanoidRootPart.Position = target.Position + Vector3.new(4, 0, 0)
+    assert(controller.current.update(npc, controller.data), "Hunt should complete when close")
+end
+
+runTest("Hunt Completion", testHuntCompletion)
+Why: Adding behaviors early allows testing of the update/completion cycle without system integration risks.
+Phase 3: Pause/Resume & Cleanup (1-2 days)
+Goal: Validate pausing and cleanup independently.
+
+Implementation:
+Full pause/resume as proposed, with logging:
+lua
+function BehaviorController:pause()
+    if self.current and not self.paused then
+        self.paused = true
+        if self.current.cleanup then
+            self.current.cleanup(self.npc)
+            LoggerService:info("BEHAVIOR", "Paused: " .. self.npc.displayName)
+        end
+    end
+end
+Tests:
+Pause/resume cycle:
+lua
+local function testPauseCleanup()
+    local npc = createMockNPC()
+    local controller = BehaviorController.new(npc)
+    controller:tryBehavior("PATROL", {totalPoints = 5})
+    controller:pause()
+    assert(controller.paused, "Should be paused")
+    assert(npc.Pathfinding.stopCalled, "Cleanup should be called")
+    controller:resume()
+    assert(not controller.paused, "Should resume")
+end
+Why: Isolating pause/resume ensures this critical feature works before NPC integration.
+Phase 4: NPC Integration (2-3 days)
+Goal: Hook into NPCManagerV3 with fallback to old system.
+Implementation:
+Add to NPCManagerV3:
+lua
+function NPCManagerV3:initializeNPC(npc)
+    npc.behaviorController = BehaviorController.new(npc)
+    npc.updateConnection = game:GetService("RunService").Heartbeat:Connect(function(dt)
+        if CONFIG.USE_NEW_BEHAVIOR_SYSTEM and npc.behaviorController then
+            npc.behaviorController:update(dt)
+        end
+    end)
+end
+Feature flag check in V4ChatClient:
+lua
+function V4ChatClient:processToolResult(npc, toolResult)
+    if CONFIG.USE_NEW_BEHAVIOR_SYSTEM and npc.behaviorController then
+        npc.behaviorController:tryBehavior(toolResult.type:upper(), toolResult.data)
+    else
+        -- Old system
+    end
+end
+
+Tests:
+
+Integration test with mock chat commands.
+
+Why: Delayed integration ensures the controller is battle-tested before affecting live NPCs.
+
+Phase 5: Migration & Validation (3-4 days)
+
+Goal: Gradually replace old behaviors, validate in production.
+
+Implementation:
+Migrate one behavior at a time (e.g., HUNT first).
+Update CONFIG flags per behavior.
+
+Tests:
+Manual Studio tests with debug commands (as proposed).
+Monitor logs for unexpected state changes.
+
+Why: Gradual migration with monitoring catches issues in context without full commitment.
+
+Enhanced Testing Strategy
+
+Add Edge Cases:
+
+Rapid behavior switches
+NPC destruction during behavior
+Nil/null checks for all inputs
+
+Integration Tests:
+
+Chat command -> behavior transition
+Heartbeat update loop performance
+
+Mock Enhancements:
+
+Add stopCalled flag to mock Pathfinding for cleanup verification.
+Recommendations for Least Problems/Debugging
+Complete Core First: Merge Phases 1-3 into a single "standalone controller" phase before integration. This ensures the BehaviorController is bulletproof before touching NPCs.
+
+Stronger Validation:
+
+Add assertions or logs for every state change:
+
+lua
+function BehaviorController:stop()
+    assert(self.npc, "NPC missing during stop")
+    -- Rest of stop logic
+end
+
+Simpler Timing: Allocate extra buffer (e.g., 3-4 days for Phase 1) to iterate on test failures.
+
+Early Logging: Implement logging from Phase 1 to catch silent failures immediately.
+
+Final Verdict
+
+I approve RobloxDev1's strategy with the above refinements. The original plan is thoughtful and thorough, but my adjustments:
+
+Reduce phase overlap by completing the standalone controller first.
+Enhance testing to cover edge cases proactively.
+Add validation and logging to minimize debugging time.
+
+Would you like me to provide detailed code for any revised phase or test case?
+
+--Grok3

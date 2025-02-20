@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local NPCSystem = Shared:WaitForChild("NPCSystem")
+local LettaConfig = require(NPCSystem.config.LettaConfig)
 
 -- Initialize Logger
 local Logger = require(NPCSystem.services.LoggerService)
@@ -14,33 +15,53 @@ local PlayerDescriptionsFolder = ReplicatedStorage:FindFirstChild("PlayerDescrip
 	or Instance.new("Folder", ReplicatedStorage)
 PlayerDescriptionsFolder.Name = "PlayerDescriptions"
 
-local API_URL = "https://roblox.ella-ai-care.com/get_player_description"
+-- Update API_URL construction
+local API_URL = LettaConfig.BASE_URL .. LettaConfig.ENDPOINTS.PLAYER_DESCRIPTION
 
 -- Function to send player ID to an external API and get a description
 local function getPlayerDescriptionFromAPI(userId)
 	local data = { user_id = tostring(userId) }
+	
+	Logger:debug("API", string.format(
+		"Requesting player description - URL: %s, Data: %s",
+		API_URL,
+		HttpService:JSONEncode(data)
+	))
 
-	-- API call to get the player description
 	local success, response = pcall(function()
-		return HttpService:PostAsync(API_URL, HttpService:JSONEncode(data), Enum.HttpContentType.ApplicationJson)
+		return HttpService:PostAsync(
+			API_URL, 
+			HttpService:JSONEncode(data),
+			Enum.HttpContentType.ApplicationJson,
+			false
+		)
 	end)
 
 	if success then
 		local parsedResponse = HttpService:JSONDecode(response)
+		Logger:debug("API", string.format(
+			"Raw API Response: %s",
+			response
+		))
 
-		-- Check if the API response contains a valid description
 		if parsedResponse and parsedResponse.description then
-			Logger:log("API", string.format("Received response from API for userId: %s", userId))
+			Logger:info("API", string.format("Received description for userId: %s", userId))
 			return parsedResponse.description
 		else
-			Logger:log("ERROR", string.format("API response missing 'description' for userId: %s", userId))
+			Logger:error("API", string.format(
+				"API response missing 'description' field for userId: %s. Full response: %s",
+				userId,
+				response
+			))
 			return "No description available"
 		end
 	else
-		Logger:log("ERROR", string.format("Failed to get player description from API for userId: %s. Error: %s", 
-            userId, 
-            tostring(response)
-        ))
+		Logger:error("API", string.format(
+			"API call failed for userId: %s. URL: %s, Error: %s",
+			userId,
+			API_URL,
+			tostring(response)
+		))
 		return "Error retrieving description"
 	end
 end
